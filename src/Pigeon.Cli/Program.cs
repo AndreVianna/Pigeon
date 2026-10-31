@@ -163,12 +163,16 @@ internal static class ServiceCommands {
                 var health = await LocalHttpClient.ExecuteAsync(port, principal, "service_status", new { });
                 if (!health.GetProperty("Ok").GetBoolean())
                     throw new InvalidOperationException();
+                // Services before 0.1.0 do not report a version.
+                var serviceVersion = health.GetProperty("Value").TryGetProperty("version", out var reported) ? reported.GetString() : null;
+                Console.WriteLine(serviceVersion == PigeonVersion.Current
+                    ? $"Pigeon service: running, version {serviceVersion}"
+                    : $"Pigeon service: running, version {serviceVersion ?? "unknown (older)"}; this CLI is {PigeonVersion.Current}. Restart the service after updating the CLI.");
             }
             catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) {
                 Console.Error.WriteLine($"Pigeon service: unavailable on 127.0.0.1:{port}.");
                 return 1;
             }
-            Console.WriteLine("Pigeon service: running");
             var bridges = await LocalHttpClient.ExecuteAsync(port, principal, "bridges", new { });
             if (!bridges.GetProperty("Ok").GetBoolean()) throw new InvalidOperationException();
             var active = bridges.GetProperty("Value").EnumerateArray().ToArray();
@@ -194,7 +198,9 @@ internal static class ServiceCommands {
                         // A hook waiter that expired leaves the session without a wake path until its next turn.
                         notification = last.ValueKind == JsonValueKind.Object
                             ? $" | notification: none (last {last.GetProperty("mode").GetString()} {last.GetProperty("reason").GetString()} at {DateTimeOffset.FromUnixTimeMilliseconds(last.GetProperty("atUnixMs").GetInt64()):u})"
-                            : " | notification: no active monitor";
+                            // No notifier since the service started: the plugin's hook may not be running,
+                            // or the installed CLI may not support the hook's arguments (the wrapper stays silent).
+                            : " | notification: none (no notifier seen since the service started; check the Pigeon plugin and that the CLI supports its hook)";
                     }
                 }
                 Console.WriteLine($"  {displayName} | {runtime} | session {sessionId} | topics: {string.Join(", ", topics)} | {mode} | wake: {wakeState}" + (restoration is null ? "" : $" | restore: {restoration}") + notification);

@@ -28,6 +28,8 @@ internal static class ClaudeHookWait {
         var associated = false;
         Principal? current = null;
         var reason = "expired";
+        // Whether the service's last ownership answer named this waiter as the owner.
+        var ownedAtLastCheck = false;
         try {
             while (!stop.IsCancellationRequested) {
                 if (!parent.IsAlive) { reason = "orphaned"; break; }
@@ -51,6 +53,7 @@ internal static class ClaudeHookWait {
                     if (current is not null) {
                         _ = await LocalHttpClient.ExecuteAsync(port, current, "bridge_heartbeat", new { id = holderId, mode = "claude-hook" }, stop.Token);
                         var ownership = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner", new { holderId, mode = "claude-hook" }, stop.Token);
+                        ownedAtLastCheck = ownership.GetProperty("Ok").GetBoolean() && ownership.GetProperty("Value").GetProperty("owner").GetBoolean();
                         if (ownership.GetProperty("Ok").GetBoolean() && !ownership.GetProperty("Value").GetProperty("owner").GetBoolean()) {
                             // A newer waiter replaced this one, so leave.
                             if (ownership.GetProperty("Value").GetProperty("active").GetString() == "claude-hook") {
@@ -105,20 +108,30 @@ internal static class ClaudeHookWait {
             if (stop.IsCancellationRequested) throw new OperationCanceledException(stop.Token);
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) {
-            // A renewal is a host turn, not a message wake. Only the current live owner
-            // can request one; a superseded waiter or inactive session must stay silent.
+            // A renewal is a host turn, not a message wake. Only the current live owner can
+            // request one (or the last known owner during an outage); a superseded waiter or
+            // inactive session must stay silent.
             if (renew && current is not null && parent.IsAlive) {
+                var renewal = false;
                 try {
                     using var renewalTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
                     var result = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner_check", new { holderId }, renewalTimeout.Token);
-                    if (result.GetProperty("Ok").GetBoolean() && result.GetProperty("Value").GetProperty("owner").GetBoolean() && parent.IsAlive) {
-                        await Console.Error.WriteLineAsync("Pigeon notification waiter needs renewal. This is not a message. End this turn so the Pigeon Stop hook can re-arm the waiter. Do not poll or send a reply just for this renewal.");
-                        await Console.Error.FlushAsync(CancellationToken.None);
-                        reason = "renewed";
-                        return 2;
-                    }
+                    renewal = result.GetProperty("Ok").GetBoolean() && result.GetProperty("Value").GetProperty("owner").GetBoolean();
                 }
-                catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException or JsonException or InvalidOperationException or KeyNotFoundException) { }
+                catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) {
+                    // The service is unreachable at the deadline. If this waiter was the owner when it
+                    // last reached the service, renew anyway so the next Stop hook re-arms a waiter that
+                    // waits for the service to return. Its replacement cannot do the same: it never
+                    // reaches the service, so it never becomes an owner.
+                    renewal = ownedAtLastCheck;
+                }
+                catch (Exception e) when (e is JsonException or InvalidOperationException or KeyNotFoundException) { }
+                if (renewal && parent.IsAlive) {
+                    await Console.Error.WriteLineAsync("Pigeon notification waiter needs renewal. This is not a message. End this turn so the Pigeon Stop hook can re-arm the waiter. Do not poll or send a reply just for this renewal.");
+                    await Console.Error.FlushAsync(CancellationToken.None);
+                    reason = "renewed";
+                    return 2;
+                }
             }
         }
         finally {

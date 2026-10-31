@@ -14,5 +14,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Pigeon.Adapters/Pigeon.Adapters.csproj" />
     <ProjectReference Include="../../src/Pigeon.Service/Pigeon.Service.csproj" />
+    <ProjectReference Include="../../src/Pigeon.Cli/Pigeon.Cli.csproj" />
   </ItemGroup>
 </Project>

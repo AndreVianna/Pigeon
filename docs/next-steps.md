@@ -4,21 +4,16 @@ Assessment of 2026-10-31, after Claude took over the project from Codex. Proposa
 
 ## Where the project stands
 
-- **Code.** About 3,000 lines of C# in four projects (Core, Service, Adapters, CLI), version 0.1.0-alpha.19. The build has no warnings. 12 xUnit unit tests and 146 Gherkin/Reqnroll integration scenarios pass; the integration scenarios start real service, MCP and CLI processes against disposable databases.
+- **Code.** About 3,000 lines of C# in four projects (Core, Service, Adapters, CLI), version 0.1.0-alpha.19. The build has no warnings. 22 xUnit unit tests and 151 Gherkin/Reqnroll integration scenarios pass; the integration scenarios start real service, MCP and CLI processes against disposable databases.
 - **Demonstrated on the host.** With alpha.18, one synthetic two-way exchange between a Claude Desktop conversation (hook waiter) and a Codex chat (queue adapter) completed without user intervention. A development plugin also passed 12 Desktop scenarios: idle and busy turns, bursts, service restart, notifier takeover, and selected reopen cases.
 - **Not yet demonstrated.** Alpha.19's idle renewal in a live Desktop conversation, Desktop honoring the 12-hour hook timeout, the production plugin's direct `hook-wait.sh` invocation in Desktop, Codex Desktop recovery, and reliable delivery after Desktop reopen or app restart.
 - **Installed on this machine.** CLI alpha.19, the service running on the default port, Claude plugin 0.4.0.
 
 ## Proposed next steps
 
-### 1. Close the orphaned-waiter gap (no host test needed)
+### 1. Code changes before release
 
-The four other confirmed bugs from the review were fixed on 2026-10-31 (see the end of this document). The remaining one is to make the hook waiter watch its ancestors, not just its immediate parent. Requirements carried over from the Codex review:
-
-- walk only this process's own ancestors, hold handles, and treat PID reuse and access denial as "cannot track";
-- fail closed if a Claude ancestor is found but cannot be held;
-- keep the current immediate-parent behavior when there is no Claude ancestor (CLI, tests, Monitor);
-- add an isolated test that kills only the outer shell.
+Superseded by [the release plan](release-plan.md), whose Phase 1 items 1.1 to 1.4 are done (including the ancestor-chain fix for orphaned waiters).
 
 ### 2. Verify on the host (each needs your approval)
 
@@ -39,7 +34,7 @@ The four other confirmed bugs from the review were fixed on 2026-10-31 (see the 
 2. **Continuous integration.** There is none. A GitHub Actions workflow on a Windows runner with the pinned .NET 11 SDK and Git Bash would run the build and tests on every push.
 3. **Renewal cost.** Each renewal is a turn on the conversation's own model. No supported way was found for a cheaper model to act inside an existing conversation; keeping the renewal turn minimal is the available lever.
 
-## Cleanup done in this pass (uncommitted)
+## Cleanup done in the first pass
 
 - Moved dated research, plans, reports and the overnight handoff to `docs/history/`, fixed links, and added a documentation index to the README and an index of `experiments/`.
 - Removed `tools/build-offline.ps1`, which could no longer build the solution: it referenced a deleted `LocalPipe.cs` and omitted most current sources.
@@ -48,7 +43,7 @@ The four other confirmed bugs from the review were fixed on 2026-10-31 (see the 
 - Code: the MCP bridge's channel loop no longer stops permanently after a service timeout or a malformed response; hook-waiter and monitor cleanup now release notifier ownership even if disconnect fails, and tolerate HTTP timeouts; `pigeon start` no longer kills a starting service when one readiness probe times out; the MCP server version now comes from the package version instead of a hard-coded string; removed three unused members and a duplicate port validator.
 - Docs: corrected the wake-state list, exhausted-wake behavior, and the scope of `PIGEON_MESSAGE_TTL_SECONDS` in the README.
 
-## Bugs fixed in the second pass (uncommitted)
+## Bugs fixed in the second pass
 
 - **Storage failures are reported separately.** Transient SQLite errors (busy, locked, I/O, disk full, cannot open) return `storage unavailable` instead of `operation rejected`; the client turns that into the same exception as a service outage, so hook waiters, bridge restore and the session hook retry. The SQLite lock wait is now 2 seconds, below the 3-second client timeout, so a held lock is reported rather than timing out. A transaction that SQLite already rolled back is no longer rolled back again.
 - **Exhausted wakes re-arm for new messages.** A newly stored message gives an exhausted recipient one fresh generation and attempt budget; a burst shares it.

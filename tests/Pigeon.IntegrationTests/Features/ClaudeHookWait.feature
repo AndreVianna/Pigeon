@@ -54,3 +54,23 @@ Feature: Claude hook waiter
   Scenario: A waiter keeps waiting while storage is temporarily locked
     Given an isolated service with a connected Claude session
     Then a waiter started during a held database lock keeps waiting and wakes after the lock is released
+
+  Scenario: A waiter whose outer hook shell is killed stops instead of claiming wakes
+    Given an isolated service with a connected Claude session
+    Then a waiter under two Git Bash shells exits as orphaned when only the outer shell is killed, and a later message is not claimed
+
+  Scenario: An owning waiter still renews when the service is down at its deadline
+    Given an isolated service with a connected Claude session
+    Then a short renewable waiter whose service stops before the deadline requests one renewal, and its replacement waits for the service
+
+  Scenario: Exactly one notifier owns a session after a service restart
+    Given an isolated service with a connected Claude session
+    Then a monitor and a hook waiter that both reconnect after a restart leave one stable owner and at most one wake attempt
+
+  Scenario: A monitor that dies without releasing is replaced once its ownership lapses
+    Given an isolated service with a connected Claude session
+    Then a waiting hook waiter claims exactly one wake after the silent monitor's ownership expires
+
+  Scenario: Status reports versions and a session that never had a notifier
+    Given an isolated service with a connected Claude session
+    Then status names the service and CLI versions and flags that no notifier was seen for the session

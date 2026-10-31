@@ -224,6 +224,107 @@ public sealed class ClaudeHookWaitSteps {
         Assert.StartsWith("Pigeon wake generation ", await next.Errors);
     }
 
+    [Then("a short renewable waiter whose service stops before the deadline requests one renewal, and its replacement waits for the service")]
+    public async Task RenewalDuringOutage() {
+        var waiter = await StartWaiter("reader-session", "--timeout", "10", "--renew");
+        await WaitForOwner("claude-hook");
+        await StopService();
+        Assert.Equal(2, await Exit(waiter, 25));
+        Assert.StartsWith("Pigeon notification waiter needs renewal.", await waiter.Errors);
+        // The replacement never reaches the service, so it cannot own the session or renew again.
+        var replacement = await StartWaiter("reader-session", "--timeout", "10", "--renew");
+        Assert.Equal(0, await Exit(replacement, 25));
+        Assert.Equal("", await replacement.Errors);
+        await StartService();
+        await Task.Delay(1500); // Let the stand-in MCP bridge heartbeat reach the restarted service.
+        var next = await StartWaiter("reader-session", "--timeout", "10", "--renew");
+        await WaitForOwner("claude-hook");
+        await Publish("after outage");
+        Assert.Equal(2, await Exit(next, 20));
+        Assert.StartsWith("Pigeon wake generation ", await next.Errors);
+    }
+
+    [Then("status names the service and CLI versions and flags that no notifier was seen for the session")]
+    public async Task StatusDiagnostics() {
+        var status = Pigeon("status");
+        var output = await status.StandardOutput.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(15));
+        await status.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.Equal(0, status.ExitCode);
+        // This service runs inside the test host, so its version differs from the CLI's and status says so.
+        Assert.Contains("Pigeon service: running, version ", output);
+        Assert.Contains("this CLI is ", output);
+        Assert.Contains("notification: none (no notifier seen since the service started", output);
+    }
+
+    // Stands in for a Monitor: it renews ownership every second until stopped, and never claims.
+    private (CancellationTokenSource Stop, Task Loop) SimulatedMonitor() {
+        var holderId = Guid.NewGuid().ToString("N");
+        var stopMonitor = new CancellationTokenSource();
+        var loop = Task.Run(async () => {
+            while (!stopMonitor.IsCancellationRequested) {
+                try { _ = await LocalHttpClient.ExecuteAsync(port, reader, "wake_owner", new { holderId, mode = "claude-monitor" }, stopMonitor.Token); }
+                catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) { }
+                try { await Task.Delay(1000, stopMonitor.Token); }
+                catch (OperationCanceledException) { }
+            }
+        });
+        return (stopMonitor, loop);
+    }
+
+    [Then("a monitor and a hook waiter that both reconnect after a restart leave one stable owner and at most one wake attempt")]
+    public async Task OwnershipAfterRestart() {
+        var (stopMonitor, monitor) = SimulatedMonitor();
+        try {
+            await WaitForOwner("claude-monitor");
+            var waiter = await StartWaiter("reader-session", "--timeout", "60");
+            await Task.Delay(1500);
+            await StopService();
+            await Task.Delay(1500);
+            await StartService();
+            await Task.Delay(3000); // Both notifiers and the stand-in bridge reconnect and race for ownership.
+            var owner = (await Notifier()).GetProperty("active").GetString();
+            Assert.Contains(owner, new[] { "claude-monitor", "claude-hook" });
+            for (var i = 0; i < 5; i++) {
+                await Task.Delay(1000);
+                Assert.Equal(owner, (await Notifier()).GetProperty("active").GetString());
+            }
+            await Publish("after restart");
+            if (owner == "claude-hook") {
+                Assert.Equal(2, await Exit(waiter, 20));
+                Assert.Equal(1, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
+            }
+            else {
+                await Task.Delay(3000);
+                Assert.False(waiter.Process.HasExited);
+                Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
+            }
+        }
+        finally {
+            stopMonitor.Cancel();
+            await monitor;
+            stopMonitor.Dispose();
+        }
+    }
+
+    [Then("a waiting hook waiter claims exactly one wake after the silent monitor's ownership expires")]
+    public async Task LapsedMonitor() {
+        var (stopMonitor, monitor) = SimulatedMonitor();
+        await WaitForOwner("claude-monitor");
+        var waiter = await StartWaiter("reader-session", "--timeout", "60");
+        await Publish("while the monitor owns");
+        await Task.Delay(2000);
+        Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
+        // The monitor stops renewing without releasing, as if its process were killed.
+        stopMonitor.Cancel();
+        await monitor;
+        stopMonitor.Dispose();
+        Assert.Equal(2, await Exit(waiter, 30));
+        Assert.StartsWith("Pigeon wake generation ", await waiter.Errors);
+        var status = await Call(reader, "wake_status", new { });
+        Assert.Equal(1, status.GetProperty("Attempts").GetInt32());
+        Assert.Equal("claude-hook", status.GetProperty("History")[0].GetProperty("Mode").GetString());
+    }
+
     [Then("a short renewable waiter behind a monitor expires without a renewal")]
     public async Task BlockedRenewal() {
         var monitor = Guid.NewGuid().ToString("N");
@@ -345,6 +446,33 @@ public sealed class ClaudeHookWaitSteps {
         await Publish();
         Assert.Equal(2, await Exit(waiter));
         Assert.StartsWith("Pigeon wake generation ", await waiter.Errors);
+    }
+
+    [Then("a waiter under two Git Bash shells exits as orphaned when only the outer shell is killed, and a later message is not claimed")]
+    public async Task OuterShellKilled() {
+        var bash = Environment.GetEnvironmentVariable("PIGEON_TEST_BASH") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe");
+        Assert.True(File.Exists(bash), "Git Bash is required for this scenario; set PIGEON_TEST_BASH to its executable.");
+        // Git Bash's launcher starts a second bash, which runs the waiter: test -> bash -> bash -> pigeon.
+        var pigeon = Path.Combine(AppContext.BaseDirectory, "pigeon.exe").Replace('\\', '/');
+        var start = new ProcessStartInfo(bash) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add($"\"{pigeon}\" hook wait claude-code --timeout 60");
+        start.Environment["PIGEON_PORT"] = port;
+        var outer = Process.Start(start)!;
+        processes.Add(outer);
+        _ = outer.StandardOutput.ReadToEndAsync();
+        _ = outer.StandardError.ReadToEndAsync();
+        await outer.StandardInput.WriteAsync(JsonSerializer.Serialize(new { session_id = "reader-session", hook_event_name = "Stop" }));
+        outer.StandardInput.Close();
+        await WaitForOwner("claude-hook");
+        outer.Kill(entireProcessTree: false);
+        for (var i = 0; i < 30 && (await Notifier()).GetProperty("active").ValueKind != JsonValueKind.Null; i++) await Task.Delay(300);
+        var notifier = await Notifier();
+        Assert.Equal(JsonValueKind.Null, notifier.GetProperty("active").ValueKind);
+        Assert.Equal("orphaned", notifier.GetProperty("lastRelease").GetProperty("reason").GetString());
+        await Publish();
+        await Task.Delay(2500);
+        Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
     }
 
     [AfterScenario]
