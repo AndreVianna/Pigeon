@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "pigeon-dev",
+  "version": "0.2.0-dev.1",
+  "description": "Development copy of the Pigeon Codex plugin for host tests: frozen test build, isolated service on port 49473."
+}

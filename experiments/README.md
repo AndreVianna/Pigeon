@@ -4,6 +4,8 @@ Probes and fixtures used to establish host behavior. They are evidence, not prod
 
 | Path | What it established | Write-up |
 |---|---|---|
+| `host-test/` | Runbook and helper for release host tests H1–H3 (not yet run) | [release plan](../docs/release-plan.md) |
+| `codex-plugin-dev/` | Development Codex plugin for host test H1b: isolated port, frozen test build | `host-test/README.md` |
 | `claude-hook-waiter-dev/` | Development Claude plugin for the Stop-hook waiter (milestone 3 Desktop tests) | [report](../docs/history/claude-hook-waiter-report.md) |
 | `claude-resume-probe/` | Whether hooks or plugins can start or re-arm a monitor without a prompt in Claude Desktop and the CLI | `claude-resume-probe/REPORT.md` |
 | `claude-desktop-diagnostic/` | Whether a skill-invoked plugin monitor can wake a Desktop session (no separate write-up) | — |

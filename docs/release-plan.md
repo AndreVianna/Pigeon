@@ -14,7 +14,7 @@ A Codex session and a Claude Desktop conversation on the same Windows machine ex
 
 - **Shown on the host:** an alpha.18 two-way exchange between Claude Desktop and Codex; 12 Desktop scenarios with the development plugin: idle and busy turns, bursts, a service restart and notifier takeover, with 21 of 21 messages acknowledged once.
 - **Automated:** 22 unit tests and 151 integration scenarios pass on the branch (after Phase 1).
-- **Never run on the host:** this branch's code; the packaged 0.4.0 plugin; the 12-hour renewal; Codex Desktop recovery.
+- **Never run on the host:** the packaged 0.4.0 plugin; the 12-hour renewal; Codex Desktop recovery. (This branch's code has since passed H1a, H2 and H3 with a dev plugin generated from the 0.4.0 hooks.)
 - **Known open defect (fixed since in 1.1):** a hook waiter could outlive its shell and swallow a wake.
 
 ## Phase 1: code changes
@@ -98,6 +98,8 @@ Investigate whether the Codex queue interface supports cancelling or replacing a
 These run after Phase 1. Every one needs your approval, uses an isolated service on its own port with a disposable database, uses new test conversations and synthetic messages, and never touches Project Sigma or existing sessions.
 
 Earlier, the auto-mode classifier blocked me from starting a test conversation. For these tests you open the new conversations; I prepare everything else and drive the messages.
+
+**Status (2026-10-31):** H1a (Claude with a scripted peer), H2 and H3 passed with the branch build; details and timings are in [the host-test runbook](../experiments/host-test/README.md#results-2026-10-31). H2's renewal turn still needs a visual check that it ended without polling or replying. H1b (Claude with Codex), H4, H5 and H6 have not run. Finding: on the host the hook launcher exits at once, so the waiter's chain ends at the top Git Bash shell and does not reach `claude.exe` (see [known issues](known-issues.md)).
 
 | # | Test | Setup | Pass criteria | Duration |
 |---|---|---|---|---|

@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "SessionStart": [{
+      "matcher": "startup|resume",
+      "hooks": [{
+        "type": "command",
+        "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Projects/Pigeon/src/Pigeon.Cli/bin/Debug/net11.0/pigeon.exe\" bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 120 --renew",
+        "async": true,
+        "asyncRewake": true,
+        "timeout": 240
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Projects/Pigeon/src/Pigeon.Cli/bin/Debug/net11.0/pigeon.exe\" bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 120 --renew",
+        "async": true,
+        "asyncRewake": true,
+        "timeout": 240
+      }]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "mcp_tool",
+        "server": "plugin:pigeon-dev:pigeon",
+        "tool": "pigeon_session_restore",
+        "input": { "tool": "claude-code", "sessionId": "${session_id}" },
+        "timeout": 5
+      }]
+    }]
+  }
+}

@@ -2,9 +2,14 @@
   "mcpServers": {
     "pigeon": {
       "type": "stdio",
-      "command": "C:/Projects/Pigeon/src/Pigeon.Cli/bin/Debug/net11.0/pigeon.exe",
-      "args": ["mcp"],
-      "env": { "PIGEON_RUNTIME": "claude-code", "PIGEON_PORT": "49473" }
+      "command": "C:/Projects/Pigeon/artifacts/host-test/bin/pigeon.exe",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "PIGEON_RUNTIME": "claude-code",
+        "PIGEON_PORT": "49473"
+      }
     }
   }
 }
