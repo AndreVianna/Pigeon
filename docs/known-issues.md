@@ -28,6 +28,9 @@ Codex may present wake prompts that have already been confirmed and completed. T
 
 ## Other technical debt and operating limits
 
+- Migration from project namespaces can refuse records Pigeon created itself (a `__pigeon__` sender in several old projects) or fail with a raw SQLite error when two old agents hold routes for the same tool and session. This depends on data from older versions and is untested.
+- Legacy non-topic mode is kept only for tests: production always enables topic mode, but `Mailbox` still carries both code paths.
+
 - Claude notifier ownership is held in service memory and expires after 15 seconds. After a service restart, competing notifiers reacquire it; test multi-notifier races and stale-owner recovery more thoroughly.
 - The Claude hook wrapper uses Git Bash. Its fallback for older CLI versions suppresses errors to avoid false wakes; status and diagnostics should make an incompatible or missing CLI easier to identify. The PowerShell alternative is not packaged because the current environment blocks unsigned scripts.
 - The loopback service has no application-level authentication. Any local process able to connect can impersonate a session or access messages. Topic routing is not an access-control boundary; authentication was explicitly deferred for the MVP.

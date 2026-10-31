@@ -50,3 +50,7 @@ Feature: Claude hook waiter
   Scenario: Claude notifiers need ownership to claim a wake
     Given an isolated service with a connected Claude session
     Then only the owning notifier can claim, and only its holder can release ownership
+
+  Scenario: A waiter keeps waiting while storage is temporarily locked
+    Given an isolated service with a connected Claude session
+    Then a waiter started during a held database lock keeps waiting and wakes after the lock is released

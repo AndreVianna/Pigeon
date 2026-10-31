@@ -22,14 +22,15 @@ public static class McpStdio {
                     continue;
                 McpOutboundNotification? notification;
                 try { notification = await nextNotification(stopped.Token); }
-                catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException) { continue; }
+                catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException) { continue; }
                 catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { continue; }
                 if (notification is null)
                     continue;
                 await WriteAsync(notification.Json, stopped.Token);
                 if (notification.Written is not null) {
                     try { await notification.Written(stopped.Token); }
-                    catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+                    catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException) { }
+                    catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { }
                 }
             }
         }

@@ -3,7 +3,7 @@
 # for Pigeon's own fixed wake or renewal line. Claude Code shows the stderr of an exit-2
 # asyncRewake hook to the model and starts a turn, so an older or mismatched `pigeon` that
 # exits 2 on a usage error would otherwise wake the session after every turn. Every other
-# outcome exits 0 without output. hook-wait.ps1 is the equivalent for hosts without Git Bash.
+# outcome exits 0 without output. An unpackaged PowerShell variant is kept in experiments/claude-hook-waiter-dev.
 # PIGEON_EXE selects a specific build for isolated tests; normally `pigeon` comes from PATH.
 for arg in "$@"; do
     case "$arg" in

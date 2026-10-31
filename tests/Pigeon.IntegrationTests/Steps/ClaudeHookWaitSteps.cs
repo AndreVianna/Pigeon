@@ -330,6 +330,23 @@ public sealed class ClaudeHookWaitSteps {
         Assert.False(unregistered.GetProperty("Ok").GetBoolean());
     }
 
+    [Then("a waiter started during a held database lock keeps waiting and wakes after the lock is released")]
+    public async Task HeldLock() {
+        Waiter waiter;
+        using (var other = new Sqlite(Path.Combine(directory, "messages.db"))) {
+            _ = other.Exec("BEGIN IMMEDIATE");
+            waiter = await StartWaiter();
+            // Its first restore waits out the lock and is reported as storage unavailable, not as an unknown session.
+            await Task.Delay(4000);
+            Assert.False(waiter.Process.HasExited);
+            _ = other.Exec("ROLLBACK");
+        }
+        await WaitForOwner("claude-hook");
+        await Publish();
+        Assert.Equal(2, await Exit(waiter));
+        Assert.StartsWith("Pigeon wake generation ", await waiter.Errors);
+    }
+
     [AfterScenario]
     public async Task Cleanup() {
         foreach (var process in processes) {

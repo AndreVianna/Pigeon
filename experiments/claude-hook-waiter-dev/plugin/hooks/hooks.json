@@ -4,7 +4,7 @@
       "matcher": "startup|resume",
       "hooks": [{
         "type": "command",
-        "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Users/andre/AppData/Local/Temp/claude/C--Projects-Pigeon/3c1a5fa5-9504-400e-ae83-12d51e361755/scratchpad/pigeon-a19/pigeon.exe\" bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 120 --renew",
+        "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Projects/Pigeon/src/Pigeon.Cli/bin/Debug/net11.0/pigeon.exe\" bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 120 --renew",
         "async": true,
         "asyncRewake": true,
         "timeout": 240
@@ -13,7 +13,7 @@
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Users/andre/AppData/Local/Temp/claude/C--Projects-Pigeon/3c1a5fa5-9504-400e-ae83-12d51e361755/scratchpad/pigeon-a19/pigeon.exe\" bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 120 --renew",
+        "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Projects/Pigeon/src/Pigeon.Cli/bin/Debug/net11.0/pigeon.exe\" bash \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 120 --renew",
         "async": true,
         "asyncRewake": true,
         "timeout": 240

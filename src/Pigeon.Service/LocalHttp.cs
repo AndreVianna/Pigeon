@@ -67,6 +67,9 @@ public static class LocalHttpClient {
             using var response = await Client.SendAsync(request, cancellation);
             response.EnsureSuccessStatusCode();
             using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellation), cancellationToken: cancellation);
+            // Report a temporary storage failure like an outage, so callers retry instead of treating it as a rejection.
+            if (json.RootElement.TryGetProperty("Error", out var error) && error.ValueKind == JsonValueKind.String && error.GetString() == Broker.StorageUnavailable)
+                throw new IOException("Pigeon storage is temporarily unavailable");
             return json.RootElement.Clone();
         }
         catch (HttpRequestException e) { throw new IOException("Pigeon service is unavailable", e); }

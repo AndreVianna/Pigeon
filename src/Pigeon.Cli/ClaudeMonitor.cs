@@ -71,11 +71,11 @@ internal static class ClaudeMonitor {
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
         finally {
             if (current is not null) {
-                try {
-                    _ = await LocalHttpClient.ExecuteAsync(port, current, "bridge_disconnect", new { id = monitorId });
-                    _ = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner_release", new { holderId = monitorId, reason = "stopped" });
-                }
-                catch (Exception e) when (e is IOException or TimeoutException) { }
+                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                try { _ = await LocalHttpClient.ExecuteAsync(port, current, "bridge_disconnect", new { id = monitorId }, cleanup.Token); }
+                catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) { }
+                try { _ = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner_release", new { holderId = monitorId, reason = "stopped" }, cleanup.Token); }
+                catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) { }
             }
         }
         return 0;

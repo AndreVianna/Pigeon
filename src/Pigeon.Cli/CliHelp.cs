@@ -79,7 +79,7 @@ internal static class CliHelp {
         }
         return true;
     }
-    private static bool ValidPort(string value) => int.TryParse(value, out var port) && port is >= 1024 and <= 65535;
+    internal static bool ValidPort(string value) => int.TryParse(value, out var port) && port is >= 1024 and <= 65535;
     private static bool Error(string message, out int exitCode) {
         Console.Error.WriteLine("Error: " + message);
         Console.Error.WriteLine("Run 'pigeon --help' for usage.");
@@ -91,7 +91,7 @@ internal static class CliHelp {
         writer.WriteLine("Pigeon - local messaging for agent sessions\n\nUsage: pigeon <command> [options]\n\nCommands:");
         writer.WriteLine("  start                Start the local messaging service");
         writer.WriteLine("  stop                 Stop the local messaging service");
-        writer.WriteLine("  status               Show service status and selected identity");
+        writer.WriteLine("  status               Show service, bridge, and pending-recipient status");
         writer.WriteLine("  topics               Manage project topics and subscriptions");
         writer.WriteLine("  sessions             Resolve legacy session identity conflicts");
         writer.WriteLine("  messages             Send, receive, acknowledge or inspect deliveries");

@@ -15,7 +15,7 @@ if (args.Length > 0 && args[0] is "start" or "stop" or "topics" or "sessions" or
     try {
         return await ServiceCommands.RunAsync(args);
     }
-    catch (Exception e) when (e is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or JsonException or FormatException or TimeoutException or OperationCanceledException) {
+    catch (Exception e) when (e is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or JsonException or FormatException or TimeoutException or OperationCanceledException or StorageUnavailableException) {
         if (e is InvalidOperationException && e.Message.Contains("automatic migration cannot safely merge", StringComparison.Ordinal)) {
             Console.Error.WriteLine(e.Message);
             return 1;
@@ -34,7 +34,7 @@ internal static class ServiceCommands {
         var defaultPort = Environment.GetEnvironmentVariable("PIGEON_PORT") ?? "49372";
         var grouped = args[0] is "start" or "stop" or "topics" or "sessions" or "messages" or "hook";
         var port = grouped || (args[0] == "status" && args.Length == 1) || (args[0] == "mcp" && (args.Length == 1 || args[1].StartsWith("--", StringComparison.Ordinal))) ? defaultPort : args[1];
-        if (!ValidPort(port))
+        if (!CliHelp.ValidPort(port))
             throw new ArgumentException();
         var project = Mailbox.TopicNamespace;
         var agent = "operator";
@@ -187,7 +187,7 @@ internal static class ServiceCommands {
                 var notifier = bridge.TryGetProperty("notifier", out var notifierValue) ? notifierValue : default;
                 var owner = notifier.ValueKind == JsonValueKind.Object ? notifier.GetProperty("active").GetString() : null;
                 var notification = "";
-                if (binding.ValueKind == JsonValueKind.Object && mode == "mcp" && string.Equals(runtime?.Replace('_', '-'), "claude-code", StringComparison.OrdinalIgnoreCase)) {
+                if (binding.ValueKind == JsonValueKind.Object && mode == "mcp" && Mailbox.ToolName(runtime) == "claude-code") {
                     if (owner is not null) notification = $" | notification: {owner}";
                     else if (!active.Any(other => other.GetProperty("agent").GetString() == agentName && other.GetProperty("mode").GetString() is "claude-monitor" or "claude-channel" or "claude-hook")) {
                         var last = notifier.ValueKind == JsonValueKind.Object ? notifier.GetProperty("lastRelease") : default;
@@ -255,6 +255,7 @@ internal static class ServiceCommands {
                     }
                 }
                 catch (IOException) { }
+                catch (OperationCanceledException) when (!ready.IsCancellationRequested) { }
                 await Task.Delay(100, ready.Token);
             }
             throw new InvalidOperationException("Pigeon service did not start.");
@@ -366,7 +367,6 @@ internal static class ServiceCommands {
         return 0;
     }
 
-    private static bool ValidPort(string value) => int.TryParse(value, out var port) && port is >= 1024 and <= 65535;
     private static async Task<string> ReadBodyAsync() {
         const int maxLength = 16384;
         var buffer = new char[1024];

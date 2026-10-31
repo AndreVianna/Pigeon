@@ -12,12 +12,6 @@ public sealed class ClaudeChannel {
     private readonly Func<string?> getSessionId;
     private readonly string holderId = Guid.NewGuid().ToString("N");
 
-    public ClaudeChannel(string port, Principal principal, string sessionId) {
-        if (string.IsNullOrWhiteSpace(sessionId)) throw new ArgumentException("A session claim is required.", nameof(sessionId));
-        this.port = port;
-        getPrincipal = () => principal;
-        getSessionId = () => sessionId;
-    }
     public ClaudeChannel(string port, Func<Principal> principal, Func<string?> sessionId) {
         this.port = port;
         getPrincipal = principal;
@@ -32,7 +26,7 @@ public sealed class ClaudeChannel {
         if (!connection.GetProperty("Ok").GetBoolean()) return null;
         var binding = connection.GetProperty("Value").GetProperty("binding");
         if (binding.ValueKind == JsonValueKind.Null ||
-            !string.Equals(binding.GetProperty("Runtime").GetString()?.Replace('_', '-'), "claude-code", StringComparison.OrdinalIgnoreCase) ||
+            Mailbox.ToolName(binding.GetProperty("Runtime").GetString()) != "claude-code" ||
             binding.GetProperty("SessionId").GetString() != sessionId) return null;
         // Another notifier, such as a monitor or hook waiter, may own this session's wakes.
         var ownership = await LocalHttpClient.ExecuteAsync(port, principal, "wake_owner", new { holderId, mode = "claude-channel" }, cancellation);

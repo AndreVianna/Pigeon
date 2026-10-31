@@ -11,7 +11,11 @@ public sealed record LegacySessionCandidate(string Agent, string[] Topics, int Q
 public sealed partial class Mailbox {
     private static string CanonicalTool(string tool) {
         Required(tool, "tool");
-        var name = tool.Trim().ToLowerInvariant().Replace('_', '-').Replace(' ', '-');
+        return ToolName(tool)!;
+    }
+    // The single tool-name normalization: `Claude`, `claude_code` and `Claude Code` are all `claude-code`.
+    public static string? ToolName(string? tool) {
+        var name = tool?.Trim().ToLowerInvariant().Replace('_', '-').Replace(' ', '-');
         return name == "claude" ? "claude-code" : name;
     }
 

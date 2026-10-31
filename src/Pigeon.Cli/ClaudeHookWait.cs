@@ -123,11 +123,10 @@ internal static class ClaudeHookWait {
         }
         finally {
             if (current is not null) {
-                try {
-                    using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                    _ = await LocalHttpClient.ExecuteAsync(port, current, "bridge_disconnect", new { id = holderId }, cleanup.Token);
-                    _ = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner_release", new { holderId, reason }, cleanup.Token);
-                }
+                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                try { _ = await LocalHttpClient.ExecuteAsync(port, current, "bridge_disconnect", new { id = holderId }, cleanup.Token); }
+                catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException or JsonException) { }
+                try { _ = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner_release", new { holderId, reason }, cleanup.Token); }
                 catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException or JsonException) { }
             }
         }

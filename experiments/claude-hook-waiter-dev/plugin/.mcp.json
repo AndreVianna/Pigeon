@@ -2,7 +2,7 @@
   "mcpServers": {
     "pigeon": {
       "type": "stdio",
-      "command": "C:/Users/andre/AppData/Local/Temp/claude/C--Projects-Pigeon/3c1a5fa5-9504-400e-ae83-12d51e361755/scratchpad/pigeon-a19/pigeon.exe",
+      "command": "C:/Projects/Pigeon/src/Pigeon.Cli/bin/Debug/net11.0/pigeon.exe",
       "args": ["mcp"],
       "env": { "PIGEON_RUNTIME": "claude-code", "PIGEON_PORT": "49473" }
     }

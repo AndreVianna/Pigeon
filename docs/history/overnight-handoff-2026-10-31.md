@@ -1,6 +1,6 @@
 # Pigeon overnight handoff — 2026-10-31
 
-This is a historical record of the overnight work. The user subsequently reported updating the service and plugin; installed runtime state may therefore differ from the machine state recorded below. See [known issues and technical debt](known-issues.md) for the current follow-up list.
+This is a historical record of the overnight work. The user subsequently reported updating the service and plugin; installed runtime state may therefore differ from the machine state recorded below. See [known issues and technical debt](../known-issues.md) for the current follow-up list.
 
 ## Outcome
 
