@@ -6,7 +6,7 @@ Milestone 2 of `docs/claude-hook-waiter-plan.md`. A copy of `integrations/claude
 
 ## What differs from the production plugin
 
-| | Production `pigeon@pigeon-local` | This copy `pigeon-dev@pigeon-hook-waiter-dev` |
+| | Production `pigeon@pigeon` | This copy `pigeon-dev@pigeon-hook-waiter-dev` |
 |---|---|---|
 | Binary | `pigeon` on `PATH` (installed tool) | `src/Pigeon.Cli/bin/Debug/net11.0/pigeon.exe` |
 | Service | default port 49372 | isolated port **49473** (`PIGEON_PORT` in `.mcp.json` and every hook command) |
