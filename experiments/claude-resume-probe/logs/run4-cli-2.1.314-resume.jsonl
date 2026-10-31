@@ -1,0 +1,5 @@
+{"ts": "2026-10-31T04:03:11.553+00:00", "probe": "A1", "event": "started", "pid": 19336, "ppid": 28176, "env_session_id": "3f9db8ec-7a65-43e0-b34a-24dd2974fc52", "source": "resume", "hook_session_id": "3f9db8ec-7a65-43e0-b34a-24dd2974fc52"}
+{"ts": "2026-10-31T04:03:11.590+00:00", "probe": "A2", "event": "started", "pid": 4232, "ppid": 35268, "env_session_id": "3f9db8ec-7a65-43e0-b34a-24dd2974fc52", "source": "resume", "hook_session_id": "3f9db8ec-7a65-43e0-b34a-24dd2974fc52"}
+{"ts": "2026-10-31T04:03:16.827+00:00", "probe": "B1", "event": "started", "pid": 34344, "ppid": 35828, "env_session_id": "3f9db8ec-7a65-43e0-b34a-24dd2974fc52"}
+{"ts": "2026-10-31T04:03:21.555+00:00", "probe": "A1", "event": "exiting-2", "pid": 19336, "ppid": 28176, "env_session_id": "3f9db8ec-7a65-43e0-b34a-24dd2974fc52", "source": "resume", "hook_session_id": "3f9db8ec-7a65-43e0-b34a-24dd2974fc52"}
+{"ts": "2026-10-31T04:03:21.591+00:00", "probe": "A2", "event": "exiting-2", "pid": 4232, "ppid": 35268, "env_session_id": "3f9db8ec-7a65-43e0-b34a-24dd2974fc52", "source": "resume", "hook_session_id": "3f9db8ec-7a65-43e0-b34a-24dd2974fc52"}

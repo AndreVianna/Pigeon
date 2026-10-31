@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "python \"${CLAUDE_PLUGIN_ROOT}/stop_waiter.py\"",
+        "async": true,
+        "asyncRewake": true,
+        "timeout": 600
+      }]
+    }]
+  }
+}

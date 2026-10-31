@@ -1,0 +1,6 @@
+{
+  "name": "pigeon-dev",
+  "version": "0.4.0-dev.1",
+  "author": { "name": "Pigeon" },
+  "description": "Development copy of the Pigeon plugin. Uses the Debug build against the isolated test service on port 49473 and wakes sessions with a Stop-hook waiter."
+}

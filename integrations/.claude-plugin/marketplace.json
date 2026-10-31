@@ -1,0 +1,12 @@
+{
+  "name": "pigeon-local",
+  "description": "Local Pigeon integration for Claude Code",
+  "owner": { "name": "Pigeon" },
+  "plugins": [
+    {
+      "name": "pigeon",
+      "source": "./claude-plugin",
+      "description": "Local Pigeon messaging and session notifications"
+    }
+  ]
+}

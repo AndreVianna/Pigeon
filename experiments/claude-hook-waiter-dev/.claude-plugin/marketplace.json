@@ -1,0 +1,12 @@
+{
+  "name": "pigeon-hook-waiter-dev",
+  "description": "Development copy of the Pigeon Claude plugin with the Stop-hook waiter",
+  "owner": { "name": "Pigeon" },
+  "plugins": [
+    {
+      "name": "pigeon-dev",
+      "source": "./plugin",
+      "description": "Pigeon messaging against an isolated test service, woken by an asyncRewake hook waiter"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "name": "pigeon-resume-probe",
+  "owner": { "name": "Pigeon" },
+  "plugins": [{ "name": "pigeon-resume-probe", "source": "./plugin", "description": "Bounded SessionStart rewake and plugin monitor diagnostic" }]
+}

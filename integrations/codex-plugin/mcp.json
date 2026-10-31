@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "pigeon": {
+      "type": "stdio",
+      "command": "pigeon",
+      "args": ["mcp", "--codex-queue"],
+      "env": { "PIGEON_RUNTIME": "codex" }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "SessionStart": [{
+      "matcher": "startup|resume",
+      "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 43200 --renew", "async": true, "asyncRewake": true, "timeout": 43320 }]
+    }],
+    "Stop": [{
+      "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 43200 --renew", "async": true, "asyncRewake": true, "timeout": 43320 }]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "mcp_tool",
+        "server": "plugin:pigeon:pigeon",
+        "tool": "pigeon_session_restore",
+        "input": { "tool": "claude-code", "sessionId": "${session_id}" },
+        "timeout": 5
+      }]
+    }]
+  }
+}

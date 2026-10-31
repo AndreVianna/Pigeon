@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+__pycache__/
+.dotnet-home/
+.packages/
+artifacts/
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+.claude/settings.local.json

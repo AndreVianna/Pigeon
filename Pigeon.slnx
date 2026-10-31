@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Pigeon.Core/Pigeon.Core.csproj" />
+    <Project Path="src/Pigeon.Service/Pigeon.Service.csproj" />
+    <Project Path="src/Pigeon.Adapters/Pigeon.Adapters.csproj" />
+    <Project Path="src/Pigeon.Cli/Pigeon.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Pigeon.UnitTests/Pigeon.UnitTests.csproj" />
+    <Project Path="tests/Pigeon.IntegrationTests/Pigeon.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,5 @@
+{
+  "name": "pigeon-desktop-diagnostic",
+  "owner": { "name": "Pigeon" },
+  "plugins": [{ "name": "pigeon-monitor-check", "source": "./plugin", "description": "Bounded local monitor diagnostic" }]
+}

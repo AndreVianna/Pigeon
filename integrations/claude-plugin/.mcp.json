@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "pigeon": {
+      "type": "stdio",
+      "command": "pigeon",
+      "args": ["mcp"],
+      "env": { "PIGEON_RUNTIME": "claude-code" }
+    }
+  }
+}

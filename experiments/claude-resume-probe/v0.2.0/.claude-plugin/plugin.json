@@ -1,0 +1,6 @@
+{
+  "name": "pigeon-resume-probe",
+  "version": "0.2.0",
+  "author": { "name": "Pigeon" },
+  "description": "A bounded synthetic test of SessionStart asyncRewake and plugin monitors; never accesses Pigeon."
+}
