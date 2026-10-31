@@ -1,6 +1,6 @@
 {
-  "name": "pigeon-local",
-  "interface": { "displayName": "Pigeon (local)" },
+  "name": "pigeon",
+  "interface": { "displayName": "Pigeon" },
   "plugins": [
     {
       "name": "pigeon",
