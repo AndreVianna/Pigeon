@@ -1,0 +1,12 @@
+{
+  "name": "pigeon-codex-dev",
+  "interface": { "displayName": "Pigeon (host-test dev)" },
+  "plugins": [
+    {
+      "name": "pigeon-dev",
+      "source": { "source": "local", "path": "./plugin" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

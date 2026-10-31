@@ -21,7 +21,7 @@ Run with the frozen build of `2db7c84` (0.1.0-alpha.19), dev plugin 0.4.0-dev.2 
 | Frozen test build | `artifacts/host-test/bin/pigeon.exe` (ignored by Git) | Debug build of commit `2db7c84`. Rebuilding the solution does not touch it. |
 | Isolated service | port 49473, database in `artifacts/host-test/data` | Started and stopped with the helper. Your normal service on 49372 is not used. |
 | Claude dev plugin `pigeon-dev` 0.4.0-dev.2 | `experiments/claude-hook-waiter-dev` | Generated from the production 0.4.0 hooks, with the same direct `hook-wait.sh` invocation and the same wrapper script. Only the port, the binary and a 3-minute renewal deadline (hook timeout 5 minutes) differ. |
-| Codex dev plugin `pigeon-dev` 0.2.0-dev.1 | `experiments/codex-plugin-dev` | MCP server `pigeon-dev` on port 49473 with the queue adapter, plus the MCP restore hooks. The session-start command hook is left out because it cannot be pointed at another port portably. Only needed for H1b. |
+| Codex dev plugin `pigeon-dev` 0.2.0-dev.1 | marketplace `pigeon-codex-dev` at `experiments/codex-plugin-dev` (plugin in `plugin/`) | MCP server `pigeon-dev` on port 49473 with the queue adapter, plus the MCP restore hooks. The session-start command hook is left out because it cannot be pointed at another port portably. Only needed for H1b. |
 | Helper | `experiments/host-test/hosttest.py` | Runs the service, a scripted peer (`mock`/`host-test-peer`) and the H3 kill. Dry-run checked against a throwaway service. |
 
 ## Actions that need your approval
@@ -33,7 +33,7 @@ Run with the frozen build of `2db7c84` (0.1.0-alpha.19), dev plugin 0.4.0-dev.2 
    `claude plugin install pigeon-dev@pigeon-hook-waiter-dev --scope local`
    Run both from `C:\Projects\PigeonHookWaiterTest`.
 3. **You open a new Claude Desktop conversation** in `C:\Projects\PigeonHookWaiterTest` and type `/pigeon-dev:connect pigeon-host-test`. Earlier, Claude's auto-mode classifier refused to let me start a test conversation, so you start it.
-4. **H1b only:** you add `experiments/codex-plugin-dev` to a new Codex conversation the way you installed the production Codex plugin, accept its hook-trust review, and ask it to connect to `pigeon-host-test`.
+4. **H1b only:** you add the marketplace root `C:\Projects\Pigeon\experiments\codex-plugin-dev` to Codex (`codex plugin marketplace add` or the ChatGPT desktop app), install `pigeon-dev` from it, accept its hook-trust review, and in a new Codex conversation ask it to connect to `pigeon-host-test`. This is also the first host check of a Codex plugin install: note whether the hook review appears and whether its `mcp_tool` restore hooks run (Codex's documentation shows only `command` hooks). The production Pigeon server was earlier configured as a standalone MCP server, not through the plugin.
 
 ## Tests
 

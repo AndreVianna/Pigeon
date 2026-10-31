@@ -1,0 +1,12 @@
+{
+  "name": "pigeon-local",
+  "interface": { "displayName": "Pigeon (local)" },
+  "plugins": [
+    {
+      "name": "pigeon",
+      "source": { "source": "local", "path": "./integrations/codex-plugin" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

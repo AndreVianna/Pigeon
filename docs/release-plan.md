@@ -86,6 +86,7 @@ Investigate whether the Codex queue interface supports cancelling or replacing a
 | Item | Change |
 |---|---|
 | Version | CLI `0.1.0`. Claude plugin `0.4.1` (its packaged files changed). Codex plugin stays `0.2.0`. Update the README `dotnet tool update` line and the version mentions in docs. |
+| Codex plugin install | Repo marketplace `.agents/plugins/marketplace.json` added (and copied into the CLI's publish output). Reinstall the production Codex integration as the `pigeon` plugin instead of the standalone MCP server it was configured as, so its hooks and connect skill are active. If H1b shows `mcp_tool` hooks do not run in Codex, switch them to command hooks and bump the plugin to `0.3.0`. |
 | CI | GitHub Actions on `windows-latest`: SDK from `global.json`, then build, test and pack, plus a Git Bash check. Verify that the runner can install the .NET 11 RC SDK and has `winsqlite3`. |
 | Secret scanning | Optional `ggshield` step in CI. It needs a GitGuardian API key stored as a repository secret, which you would create. |
 | Release notes | `CHANGELOG.md` for 0.1.0: features, fixes since alpha.19, and documented limits. |
