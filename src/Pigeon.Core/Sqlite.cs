@@ -4,6 +4,10 @@ using System.Runtime.InteropServices;
 
 namespace Pigeon.Core;
 
+// A storage condition that may clear on its own (a held lock, I/O or space trouble).
+// Callers should retry it rather than treat it as a rejected request.
+public sealed class StorageUnavailableException(string message) : Exception(message);
+
 // Narrow Windows SQLite binding: parameterized statements only, no external packages.
 internal sealed class Sqlite : IDisposable {
     private IntPtr db;
@@ -21,6 +25,7 @@ internal sealed class Sqlite : IDisposable {
     [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_column_count(IntPtr stmt);
     [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr sqlite3_column_text(IntPtr stmt, int index);
     [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_changes(IntPtr db);
+    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_get_autocommit(IntPtr db);
 
     public Sqlite(string path) {
         var rc = sqlite3_open_v2(path, out db, 2 | 4 | 0x10000, IntPtr.Zero);
@@ -30,15 +35,21 @@ internal sealed class Sqlite : IDisposable {
             throw new InvalidOperationException(message);
         }
 
-        Check(sqlite3_busy_timeout(db, 5000));
+        // Shorter than the 3-second client timeout, so a held lock is reported as storage unavailable.
+        Check(sqlite3_busy_timeout(db, 2000));
         _ = Exec("PRAGMA foreign_keys=ON");
         _ = Exec("PRAGMA journal_mode=WAL");
     }
     private string Error() => db == IntPtr.Zero ? "SQLite open failed" : Marshal.PtrToStringUTF8(sqlite3_errmsg(db)) ?? "SQLite error";
     private void Check(int rc) {
         if (rc != 0)
-            throw new InvalidOperationException(Error());
+            throw Failure(rc);
     }
+    // BUSY, LOCKED, NOMEM, IOERR, FULL, CANTOPEN and PROTOCOL are transient; constraint
+    // and other errors remain rejections of the request.
+    private Exception Failure(int rc) => (rc & 0xFF) is 5 or 6 or 7 or 10 or 13 or 14 or 15
+        ? new StorageUnavailableException(Error())
+        : new InvalidOperationException(Error());
     public List<string?[]> Query(string sql, params string?[] args) {
         Check(sqlite3_prepare_v2(db, sql, -1, out var stmt, IntPtr.Zero));
         try {
@@ -53,7 +64,7 @@ internal sealed class Sqlite : IDisposable {
                 rows.Add(row);
             }
 
-            return rc != Done ? throw new InvalidOperationException(Error()) : rows;
+            return rc != Done ? throw Failure(rc) : rows;
         }
         finally {
             _ = sqlite3_finalize(stmt);
@@ -71,7 +82,10 @@ internal sealed class Sqlite : IDisposable {
             return value;
         }
         catch {
-            _ = Exec("ROLLBACK");
+            // SQLite may already have rolled back (for example after an I/O error);
+            // a second ROLLBACK would fail and hide the original error.
+            if (sqlite3_get_autocommit(db) == 0)
+                _ = Exec("ROLLBACK");
             throw;
         }
     }

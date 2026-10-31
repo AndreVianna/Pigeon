@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -38,7 +39,7 @@ public sealed class LocalHttpServer(string port, Broker broker, Action? stopRequ
                 var stop = request?.Operation == "service_stop" && stopRequested is not null;
                 var result = request is null || request.Principal is null || string.IsNullOrWhiteSpace(request.Principal.Project) || string.IsNullOrWhiteSpace(request.Principal.Agent) || request.Operation is null
                     ? new BrokerResult(false, null, "invalid request")
-                    : request.Operation == "service_status" ? new BrokerResult(true, new { available = true }, null)
+                    : request.Operation == "service_status" ? new BrokerResult(true, new { available = true, version = PigeonVersion.Current }, null)
                     : stop ? new BrokerResult(true, new { stopping = true }, null)
                     : broker.Execute(request.Principal, request.Operation, request.Arguments);
                 await context.Response.WriteAsJsonAsync(result, new JsonSerializerOptions(), cancellationToken: context.RequestAborted);
@@ -57,6 +58,11 @@ public sealed class LocalHttpServer(string port, Broker broker, Action? stopRequ
     }
 }
 
+public static class PigeonVersion {
+    // The package version of the running pigeon executable, without build metadata.
+    public static readonly string Current = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "unknown";
+}
+
 public static class LocalHttpClient {
     private static readonly HttpClient Client = new(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(3) };
     public static async Task<JsonElement> ExecuteAsync(string port, Principal principal, string operation, object args, CancellationToken cancellation = default) {
@@ -67,6 +73,9 @@ public static class LocalHttpClient {
             using var response = await Client.SendAsync(request, cancellation);
             response.EnsureSuccessStatusCode();
             using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellation), cancellationToken: cancellation);
+            // Report a temporary storage failure like an outage, so callers retry instead of treating it as a rejection.
+            if (json.RootElement.TryGetProperty("Error", out var error) && error.ValueKind == JsonValueKind.String && error.GetString() == Broker.StorageUnavailable)
+                throw new IOException("Pigeon storage is temporarily unavailable");
             return json.RootElement.Clone();
         }
         catch (HttpRequestException e) { throw new IOException("Pigeon service is unavailable", e); }

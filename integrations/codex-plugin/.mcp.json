@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pigeon": {
+      "command": "pigeon",
+      "args": ["mcp", "--codex-queue"],
+      "env": { "PIGEON_RUNTIME": "codex" }
+    }
+  }
+}

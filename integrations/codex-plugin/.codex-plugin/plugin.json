@@ -1,0 +1,8 @@
+{
+  "name": "pigeon",
+  "version": "0.3.0",
+  "description": "Local project-scoped Pigeon messaging through MCP.",
+  "author": { "name": "Pigeon" },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

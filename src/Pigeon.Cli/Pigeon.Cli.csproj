@@ -17,6 +17,7 @@
     <Content Include="../../integrations/codex-plugin/**/*" Link="integrations/codex-plugin/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" Pack="false" />
     <Content Include="../../integrations/claude-plugin/**/*" Exclude="../../integrations/claude-plugin/scripts/*.ps1" Link="integrations/claude-plugin/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" Pack="false" />
     <Content Include="../../integrations/.claude-plugin/marketplace.json" Link="integrations/.claude-plugin/marketplace.json" CopyToPublishDirectory="PreserveNewest" Pack="false" />
+    <Content Include="../../.agents/plugins/marketplace.json" Link=".agents/plugins/marketplace.json" CopyToPublishDirectory="PreserveNewest" Pack="false" />
     <ProjectReference Include="../Pigeon.Core/Pigeon.Core.csproj" />
     <ProjectReference Include="../Pigeon.Adapters/Pigeon.Adapters.csproj" />
     <ProjectReference Include="../Pigeon.Service/Pigeon.Service.csproj" />

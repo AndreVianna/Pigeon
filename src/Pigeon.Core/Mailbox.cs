@@ -230,7 +230,7 @@ public sealed partial class Mailbox : IDisposable {
                 CheckAutomatedRate(p.Project, 1, topic);
             var id = Guid.NewGuid().ToString("N");
             _ = db.Exec("INSERT INTO messages(id,project,sender,recipient,body,correlation,reply_to,topic,idem,automated,created,expires,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'queued')", id, p.Project, p.Agent, recipient, body, correlation, replyTo, topic, "D:" + idempotency, automated ? "1" : "0", Time(), expires.ToString());
-            EnsureWake(p.Project, recipient);
+            WakeForNewMessage(p.Project, recipient);
             Log(p.Project, "stored", id, p.Agent + " -> " + recipient);
             return id;
         });
@@ -270,13 +270,6 @@ public sealed partial class Mailbox : IDisposable {
             Log(project, "topic-created", null, topic);
         return created;
     }
-    public bool DeleteTopic(Principal p, string topic) {
-        Required(topic, "topic");
-        return db.Transaction(() => {
-            Registered(p);
-            return DeleteTopicCore(p.Project, topic);
-        });
-    }
     public bool DeleteTopicForProject(string project, string topic) {
         Required(project, "project");
         Required(topic, "topic");
@@ -292,7 +285,7 @@ public sealed partial class Mailbox : IDisposable {
             foreach (var subscriber in subscribers) {
                 var id = Guid.NewGuid().ToString("N");
                 _ = db.Exec("INSERT INTO messages(id,project,sender,recipient,body,correlation,reply_to,topic,idem,automated,created,expires,status) VALUES(?,?,'__pigeon__',?,?,?,NULL,?,?,0,?,?,'queued')", id, project, subscriber[0], "Topic closed: " + topic, "topic-closed-" + id, topic, "C:" + id, Time(), expires);
-                EnsureWake(project, subscriber[0]!);
+                WakeForNewMessage(project, subscriber[0]!);
                 Log(project, "topic-closure-queued", id, subscriber[0]);
             }
         }
@@ -301,10 +294,6 @@ public sealed partial class Mailbox : IDisposable {
         if (removed)
             Log(project, "topic-deleted", null, topic);
         return removed;
-    }
-    public string[] Topics(Principal p) {
-        Registered(p);
-        return TopicsForProject(p.Project);
     }
     public string[] TopicsForProject(string project) {
         Required(project, "project");
@@ -360,7 +349,7 @@ public sealed partial class Mailbox : IDisposable {
                 var id = Guid.NewGuid().ToString("N");
                 ids.Add(id);
                 _ = db.Exec("INSERT INTO messages(id,project,sender,recipient,body,correlation,reply_to,topic,idem,automated,created,expires,status) VALUES(?,?,?,?,?,?,NULL,?,?,?,?,?,'queued')", id, p.Project, p.Agent, subscriber[0], body, correlation, topic, "P:" + publication + ":" + subscriber[0], automated ? "1" : "0", Time(), expires.ToString());
-                EnsureWake(p.Project, subscriber[0]!);
+                WakeForNewMessage(p.Project, subscriber[0]!);
                 _ = db.Exec("INSERT INTO publication_messages(publication,message) VALUES(?,?)", publication, id);
                 Log(p.Project, "stored", id, p.Agent + " -> " + subscriber[0] + " @ " + topic);
             }

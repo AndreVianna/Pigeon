@@ -61,6 +61,19 @@ Feature: Durable wake delivery
     When the wake tables are absent as in the previous version
     Then the next service startup preserves the delivery and creates its wake lazily
 
+  Scenario: A new message re-arms an exhausted wake with one fresh budget
+    Given a durable Codex inbox with a pending message
+    When the wake budget is exhausted without progress
+    Then a new message starts one fresh wake generation that a burst shares
+
+  Scenario: A legacy Claude runtime name can claim its session's wake
+    Given a durable Codex inbox with a pending message
+    Then an identity registered with the runtime "Claude Code" can claim hook and channel wakes
+
+  Scenario: A held database lock is reported as storage unavailable
+    Given a durable Codex inbox with a pending message
+    Then a wake claim during another writer's lock fails as storage unavailable and later succeeds
+
   Scenario: Repeated confirmations without message progress exhaust the wake budget
     Given a durable Codex inbox with a pending message
     Then repeated confirmation without acknowledgement cannot cause an unbounded wake loop

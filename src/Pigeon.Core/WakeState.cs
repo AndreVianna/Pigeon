@@ -24,6 +24,14 @@ public sealed partial class Mailbox {
         }
     }
 
+    // Called for a newly stored delivery. An exhausted wake gets one fresh, bounded
+    // budget so a single stuck message cannot silence every later one.
+    private void WakeForNewMessage(string project, string agent) {
+        if (db.Exec("UPDATE wake_state SET generation=?,state='ready',attempts=0,next_at=?,last_outcome=NULL,confirmed_at=NULL,updated=? WHERE project=? AND agent=? AND state='exhausted'", NewGeneration(), Time(), Time(), project, agent) != 0)
+            Log(project, "wake-rearmed", null, agent);
+        EnsureWake(project, agent);
+    }
+
     private (int Queued, int Leased) PendingCounts(Principal p) {
         var rows = db.Query("SELECT status,COUNT(*) FROM messages WHERE project=? AND recipient=? AND status IN ('queued','leased') GROUP BY status", p.Project, p.Agent)
             .ToDictionary(row => row[0]!, row => int.Parse(row[1]!, CultureInfo.InvariantCulture));
@@ -56,10 +64,10 @@ public sealed partial class Mailbox {
         Registered(p);
         if (mode is not ("codex-queue" or "claude-channel" or "claude-monitor" or "claude-hook")) throw new ArgumentException("Invalid wake mode");
         var binding = db.Query("SELECT runtime,session FROM agents WHERE project=? AND agent=?", p.Project, p.Agent)[0];
-        var runtime = binding[0]!.Replace('_', '-');
+        var runtime = ToolName(binding[0]);
         if (mode is "claude-monitor" or "claude-hook" && (string.IsNullOrWhiteSpace(sessionId) || binding[1] != sessionId)) throw new InvalidOperationException("Monitor session does not match binding");
-        if ((mode == "codex-queue" && !runtime.Equals("codex", StringComparison.OrdinalIgnoreCase)) ||
-            (mode is "claude-channel" or "claude-monitor" or "claude-hook" && !runtime.Equals("claude-code", StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("Wake mode does not match runtime");
+        if ((mode == "codex-queue" && runtime != "codex") ||
+            (mode is "claude-channel" or "claude-monitor" or "claude-hook" && runtime != "claude-code")) throw new InvalidOperationException("Wake mode does not match runtime");
         Sweep(p.Project);
         var (queued, leased) = PendingCounts(p);
         CompleteIfEmpty(p, queued, leased);

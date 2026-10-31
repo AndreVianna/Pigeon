@@ -256,6 +256,55 @@ public sealed class WakeStateSteps {
         Assert.Equal(1, box.Inbox(recipient).Queued);
     }
 
+    [When("the wake budget is exhausted without progress")]
+    public void Exhaust() {
+        claim = Assert.IsType<WakeClaim>(box.ClaimWake(recipient, "codex-queue"));
+        for (var attempt = 2; attempt <= 3; attempt++) {
+            now += 100;
+            Assert.Equal(attempt, Assert.IsType<WakeClaim>(box.ClaimWake(recipient, "codex-queue")).Attempt);
+        }
+        now += 100;
+        Assert.Null(box.ClaimWake(recipient, "codex-queue"));
+        Assert.Equal("exhausted", box.GetWakeStatus(recipient).State);
+    }
+    [Then("a new message starts one fresh wake generation that a burst shares")]
+    public void Rearmed() {
+        Publish();
+        var rearmed = box.GetWakeStatus(recipient);
+        Assert.Equal("ready", rearmed.State);
+        Assert.Equal(0, rearmed.Attempts);
+        Assert.NotEqual(claim.Generation, rearmed.Generation);
+        Publish();
+        Assert.Equal(rearmed.Generation, box.GetWakeStatus(recipient).Generation);
+        var next = Assert.IsType<WakeClaim>(box.ClaimWake(recipient, "codex-queue"));
+        Assert.Equal(rearmed.Generation, next.Generation);
+        Assert.Equal(1, next.Attempt);
+        Assert.False(box.ConfirmWake(recipient, claim.Generation).Accepted);
+        Assert.Equal(3, box.Inbox(recipient).Queued);
+    }
+
+    [Then("an identity registered with the runtime \"Claude Code\" can claim hook and channel wakes")]
+    public void LegacyClaudeRuntime() {
+        var legacy = new Principal(recipient.Project, "legacy-claude");
+        box.Register(legacy.Project, legacy.Agent, "Claude Code", "legacy-session");
+        box.Subscribe(legacy, "topic");
+        Publish();
+        Assert.NotNull(box.ClaimWake(legacy, "claude-hook", "legacy-session"));
+        now += 100;
+        Assert.NotNull(box.ClaimWake(legacy, "claude-channel"));
+        Assert.Throws<InvalidOperationException>(() => box.ClaimWake(legacy, "codex-queue"));
+    }
+
+    [Then("a wake claim during another writer's lock fails as storage unavailable and later succeeds")]
+    public void HeldLock() {
+        using (var other = new Sqlite(Database)) {
+            _ = other.Exec("BEGIN IMMEDIATE");
+            Assert.Throws<StorageUnavailableException>(() => box.ClaimWake(recipient, "codex-queue"));
+            _ = other.Exec("ROLLBACK");
+        }
+        Assert.NotNull(box.ClaimWake(recipient, "codex-queue"));
+    }
+
     [AfterScenario]
     public void Cleanup() {
         box?.Dispose();

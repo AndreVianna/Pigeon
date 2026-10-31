@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "pigeon-dev",
+            "tool": "pigeon_session_restore",
+            "input": {
+              "tool": "codex",
+              "sessionId": "${session_id}"
+            },
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "pigeon-dev",
+            "tool": "pigeon_session_restore",
+            "input": {
+              "tool": "codex",
+              "sessionId": "${session_id}"
+            },
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

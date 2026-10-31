@@ -16,7 +16,10 @@ public sealed class Broker : IDisposable {
     private readonly Dictionary<(string Project, string Agent), (string Holder, string Mode, long Seen)> owners = [];
     private readonly Dictionary<string, long> superseded = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Project, string Agent), (string Mode, string Reason, long At)> released = [];
+    private readonly Dictionary<string, long> lastRedaction = new(StringComparer.Ordinal);
     private const long OwnerTimeoutMilliseconds = 15000;
+    // Clients treat this error as a temporary service outage, not a rejected request.
+    public const string StorageUnavailable = "storage unavailable";
 
     public Broker(string databasePath, Func<long>? clock = null, long? bodyRetentionMilliseconds = null, int maxAttempts = 3, int maxAutomated = 4, int maxAutomatedPerMinute = 100, bool topicMode = false, int maxWakeAttempts = 3, long wakeRetryMilliseconds = 120000) {
         if (bodyRetentionMilliseconds is <= 0)
@@ -38,8 +41,12 @@ public sealed class Broker : IDisposable {
                     throw new ArgumentException("Arguments must be an object");
                 // Perform optional maintenance before the requested operation so
                 // a maintenance error cannot disguise a committed send or ack.
-                if (bodyRetentionMilliseconds is long retention && mailbox.FindIdentity(principal) is not null)
+                // The sweep scans every terminal message in a write transaction, so it runs at most
+                // once per interval per project rather than on every heartbeat and waiter poll.
+                if (bodyRetentionMilliseconds is long retention && clock() - lastRedaction.GetValueOrDefault(principal.Project, long.MinValue / 2) >= Math.Min(retention, 60000) && mailbox.FindIdentity(principal) is not null) {
                     _ = mailbox.RedactTerminalBodies(principal, retention);
+                    lastRedaction[principal.Project] = clock();
+                }
                 // Agent-originated sends are always classified as automated. The
                 // host, not caller input, chooses this safety classification.
                 var result = operation switch {
@@ -95,6 +102,9 @@ public sealed class Broker : IDisposable {
             catch (OverflowException) {
                 return new(false, null, "invalid request");
             }
+            catch (StorageUnavailableException) {
+                return new(false, null, StorageUnavailable);
+            }
         }
     }
 
@@ -137,7 +147,7 @@ public sealed class Broker : IDisposable {
             .Select(b => b.Agent).Distinct(StringComparer.Ordinal)
             .Where(agent => {
                 var identity = mailbox.FindIdentity(new Principal(p.Project, agent));
-                return identity is not null && string.Equals(identity.Runtime.Replace('_', '-'), "claude-code", StringComparison.OrdinalIgnoreCase) && identity.SessionId == sessionId;
+                return identity is not null && Mailbox.ToolName(identity.Runtime) == "claude-code" && identity.SessionId == sessionId;
             }).ToArray();
     }
 
