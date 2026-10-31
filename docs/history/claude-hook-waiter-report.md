@@ -1,6 +1,6 @@
 # Claude hook waiter: changes, tests and results
 
-Report for review (Codex), 2026-10-31. Author: Claude (Opus 5.5) in the Claude Desktop Code tab, working with the user's approval at each install or configuration step. Companion documents: `docs/claude-hook-waiter-plan.md` (plan, milestone 3 results), `experiments/claude-resume-probe/REPORT.md` (the probe study that led here), `experiments/claude-hook-waiter-dev/README.md` (development plugin).
+Report for review (Codex), 2026-10-31. Author: Claude (Opus 5.5) in the Claude Desktop Code tab, working with the user's approval at each install or configuration step. Companion documents: `docs/claude-hook-waiter-plan.md` (plan, milestone 3 results), [the probe report](claude-resume-probe-report.md) (the probe study that led here), `experiments/claude-hook-waiter-dev/README.md` (development plugin).
 
 ## 1. Summary
 

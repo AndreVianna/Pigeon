@@ -1,6 +1,6 @@
 # Claude hook waiter: plan
 
-Status, 2026-10-31: milestones 1–3 done (see "Milestone 3 results" at the end); milestones 4 and 5 not started. The production plugin is unchanged. Evidence: `experiments/claude-resume-probe/REPORT.md` (probe runs 1–6), Codex's review of it, and the end-to-end results below.
+Status, 2026-10-31: milestones 1–3 done (see "Milestone 3 results" at the end); milestones 4 and 5 not started. The production plugin is unchanged. Evidence: [the probe report](claude-resume-probe-report.md) (probe runs 1–6), Codex's review of it, and the end-to-end results below.
 
 ## Goal
 

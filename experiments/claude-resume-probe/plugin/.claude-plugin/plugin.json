@@ -1,6 +1,0 @@
-{
-  "name": "pigeon-resume-probe",
-  "version": "0.3.0",
-  "author": { "name": "Pigeon" },
-  "description": "A bounded synthetic test of an async asyncRewake Stop hook used as a wake waiter; never accesses Pigeon."
-}

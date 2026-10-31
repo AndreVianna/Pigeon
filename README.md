@@ -91,7 +91,7 @@ The session routing upgrade adds a durable mapping without rewriting message IDs
 The solution is `Pigeon.slnx`, targets .NET 11 and C# 14, and contains separate xUnit unit tests and Gherkin/Reqnroll integration tests.
 The Claude hook wrapper integration test requires Git Bash; if it is not installed at its usual Windows location, set `PIGEON_TEST_BASH` to the Bash executable for the test run.
 
-Current reliability limitations and follow-up work are documented in [known issues and technical debt](docs/known-issues.md), and proposed work in [next steps](docs/next-steps.md). The current design is described in [architecture](docs/architecture.md), [session recovery](docs/session-recovery.md) and [local trust boundaries](docs/security-design.md). Dated research, plans, test reports and handoffs are kept in [docs/history](docs/history) as evidence; they may describe superseded behavior. Host probes and test fixtures are indexed in [experiments](experiments/README.md).
+Current reliability limitations and follow-up work are documented in [known issues and technical debt](docs/known-issues.md), and proposed work in [next steps](docs/next-steps.md). The current design is described in [architecture](docs/architecture.md), [session recovery](docs/session-recovery.md) and [local trust boundaries](docs/security-design.md). Dated research, plans, test reports and handoffs are kept in [docs/history](docs/history) as evidence; they may describe superseded behavior. Host-test fixtures are indexed in [experiments](experiments/README.md); earlier probes remain in Git history.
 
 ```powershell
 dotnet build Pigeon.slnx

@@ -1,2 +1,0 @@
-{"ts": "2026-10-31T03:28:46.764+00:00", "probe": "A", "event": "started", "pid": 37440, "ppid": 9292, "env_session_id": "51a7c1d5-6ee8-4ffa-a190-31aaa195271e", "source": "startup", "hook_session_id": "51a7c1d5-6ee8-4ffa-a190-31aaa195271e"}
-{"ts": "2026-10-31T03:28:56.770+00:00", "probe": "A", "event": "exiting-2", "pid": 37440, "ppid": 9292, "env_session_id": "51a7c1d5-6ee8-4ffa-a190-31aaa195271e", "source": "startup", "hook_session_id": "51a7c1d5-6ee8-4ffa-a190-31aaa195271e"}

@@ -1,4 +1,0 @@
-{"ts": "2026-10-31T03:52:39.751+00:00", "probe": "A1", "event": "started", "pid": 38604, "ppid": 6128, "env_session_id": "c85745b8-c208-423b-8375-4d85d4f59415", "source": "startup", "hook_session_id": "c85745b8-c208-423b-8375-4d85d4f59415"}
-{"ts": "2026-10-31T03:52:39.775+00:00", "probe": "A2", "event": "started", "pid": 10152, "ppid": 8268, "env_session_id": "c85745b8-c208-423b-8375-4d85d4f59415", "source": "startup", "hook_session_id": "c85745b8-c208-423b-8375-4d85d4f59415"}
-{"ts": "2026-10-31T03:52:49.765+00:00", "probe": "A1", "event": "exiting-2", "pid": 38604, "ppid": 6128, "env_session_id": "c85745b8-c208-423b-8375-4d85d4f59415", "source": "startup", "hook_session_id": "c85745b8-c208-423b-8375-4d85d4f59415"}
-{"ts": "2026-10-31T03:52:49.785+00:00", "probe": "A2", "event": "exiting-2", "pid": 10152, "ppid": 8268, "env_session_id": "c85745b8-c208-423b-8375-4d85d4f59415", "source": "startup", "hook_session_id": "c85745b8-c208-423b-8375-4d85d4f59415"}
