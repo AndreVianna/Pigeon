@@ -115,10 +115,11 @@ Result: identical to run 4 — A1, A2 and B1 all worked at startup and on resume
 
 Design (`v0.3.0/stop_waiter.py`, `hooks.json`):
 - `Stop` hook, `"async": true`, `"asyncRewake": true`, `timeout: 600`.
-- Reads `session_id` from stdin, writes a per-session lock containing a random token ("newest waiter supersedes older ones"), then polls every second:
-  - lock token changed → exit 0 (superseded);
+- Reads `session_id` from stdin, writes a per-session lock containing a random lock ID ("newest waiter supersedes older ones"), then polls every second:
+  - lock ID changed → exit 0 (superseded);
   - trigger file `logs/trigger-<session_id>` present → delete it, print `PROBE_C_WAKE …` to stderr, exit 2;
   - 570 s elapsed → exit 0 quietly (before the hook timeout).
+- The run 6 logs predate a rename and record this lock ID in a field named `token`. It is a random value, not a credential; GitGuardian flagged six of them as generic secrets, and they were marked false positives on 2026-10-31.
 - Stand-in for `pigeon messages wait --claude <session_id>`.
 
 Observed:

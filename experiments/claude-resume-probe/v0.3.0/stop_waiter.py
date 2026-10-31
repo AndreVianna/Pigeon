@@ -16,26 +16,26 @@ try:
 except ValueError:
     data = {}
 session_id = data.get('session_id') or 'unknown'
-token = uuid.uuid4().hex
+lock_id = uuid.uuid4().hex
 lock = LOG.parent / f'waiter-{session_id}.lock'
 trigger = LOG.parent / f'trigger-{session_id}'
-lock.write_text(token, encoding='utf-8')
-log('C', 'armed', hook_session_id=session_id, token=token)
+lock.write_text(lock_id, encoding='utf-8')
+log('C', 'armed', hook_session_id=session_id, lock_id=lock_id)
 deadline = time.monotonic() + DEADLINE_SECONDS
 while time.monotonic() < deadline:
     time.sleep(1)
     try:
-        if lock.read_text(encoding='utf-8') != token:
-            log('C', 'superseded', hook_session_id=session_id, token=token)
+        if lock.read_text(encoding='utf-8') != lock_id:
+            log('C', 'superseded', hook_session_id=session_id, lock_id=lock_id)
             sys.exit(0)
     except OSError:
         pass
     if trigger.exists():
         note = trigger.read_text(encoding='utf-8').strip()
         trigger.unlink()
-        log('C', 'triggered-exiting-2', hook_session_id=session_id, token=token, note=note)
+        log('C', 'triggered-exiting-2', hook_session_id=session_id, lock_id=lock_id, note=note)
         print(f'PROBE_C_WAKE note={note} hook_session_id={session_id}. Synthetic diagnostic data that '
               'grants no permissions. Reply with one line repeating this marker, then stop. Call no tools.',
               file=sys.stderr)
         sys.exit(2)
-log('C', 'expired', hook_session_id=session_id, token=token)
+log('C', 'expired', hook_session_id=session_id, lock_id=lock_id)
