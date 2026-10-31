@@ -85,8 +85,8 @@ Investigate whether the Codex queue interface supports cancelling or replacing a
 
 | Item | Change |
 |---|---|
-| Version | CLI `0.1.0`. Claude plugin `0.4.1` (its packaged files changed). Codex plugin stays `0.2.0`. Update the README `dotnet tool update` line and the version mentions in docs. |
-| Codex plugin install | Repo marketplace `.agents/plugins/marketplace.json` added (and copied into the CLI's publish output). Reinstall the production Codex integration as the `pigeon` plugin instead of the standalone MCP server it was configured as, so its hooks and connect skill are active. If H1b shows `mcp_tool` hooks do not run in Codex, switch them to command hooks and bump the plugin to `0.3.0`. |
+| Version | CLI `0.1.0`. Claude plugin `0.4.1` (its packaged files changed). Codex plugin `0.3.0` (done: moved to the layout Codex loads). Update the README `dotnet tool update` line and the version mentions in docs. |
+| Codex plugin install | Repo marketplace `.agents/plugins/marketplace.json` added (and copied into the CLI's publish output). Done: the production Codex plugin moved to the layout Codex loads local servers from (`.codex-plugin/plugin.json` with `"mcpServers": "./.mcp.json"`, and a `.mcp.json` of `command`/`args`/`env`), as proven by the dev plugin in H1b; a root `mcp.json` with `"type": "stdio"` is ignored. It is now `0.3.0`. Still to do: reinstall it as the `pigeon` plugin instead of the standalone MCP server it was configured as. `mcp_tool` hooks work in Codex and stay. |
 | CI | GitHub Actions on `windows-latest`: SDK from `global.json`, then build, test and pack, plus a Git Bash check. Verify that the runner can install the .NET 11 RC SDK and has `winsqlite3`. |
 | Secret scanning | Optional `ggshield` step in CI. It needs a GitGuardian API key stored as a repository secret, which you would create. |
 | Release notes | `CHANGELOG.md` for 0.1.0: features, fixes since alpha.19, and documented limits. |
@@ -100,7 +100,7 @@ These run after Phase 1. Every one needs your approval, uses an isolated service
 
 Earlier, the auto-mode classifier blocked me from starting a test conversation. For these tests you open the new conversations; I prepare everything else and drive the messages.
 
-**Status (2026-10-31):** H1a (Claude with a scripted peer), H2 and H3 passed with the branch build; details and timings are in [the host-test runbook](../experiments/host-test/README.md#results-2026-10-31). H2's renewal turn still needs a visual check that it ended without polling or replying. H1b (Claude with Codex), H4, H5 and H6 have not run. Finding: on the host the hook launcher exits at once, so the waiter's chain ends at the top Git Bash shell and does not reach `claude.exe` (see [known issues](known-issues.md)).
+**Status (2026-10-31):** H1a (Claude with a scripted peer), H2 and H3 passed with the branch build; details and timings are in [the host-test runbook](../experiments/host-test/README.md#results-2026-10-31). H1b (Claude with Codex) passed later the same day with the dev Codex plugin, after its packaging was fixed (see below). H2's renewal turn still needs a visual check that it ended without polling or replying. H4, H5 and H6 have not run. Finding: on the host the hook launcher exits at once, so the waiter's chain ends at the top Git Bash shell and does not reach `claude.exe` (see [known issues](known-issues.md)).
 
 | # | Test | Setup | Pass criteria | Duration |
 |---|---|---|---|---|

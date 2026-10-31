@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pigeon-dev": {
+      "command": "C:/Projects/Pigeon/artifacts/host-test/bin/pigeon.exe",
+      "args": ["mcp", "--codex-queue"],
+      "env": { "PIGEON_RUNTIME": "codex", "PIGEON_PORT": "49473" }
+    }
+  }
+}

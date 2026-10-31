@@ -1,0 +1,8 @@
+{
+  "name": "pigeon-dev",
+  "version": "0.2.0-dev.2",
+  "description": "Development copy of the Pigeon Codex plugin for host tests: frozen test build, isolated service on port 49473.",
+  "author": { "name": "Pigeon" },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}
