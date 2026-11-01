@@ -100,6 +100,8 @@ These run after Phase 1. Every one needs your approval, uses an isolated service
 
 Earlier, the auto-mode classifier blocked me from starting a test conversation. For these tests you open the new conversations; I prepare everything else and drive the messages.
 
+**Redesign (2026-11-01):** 0.5.0-beta.1 replaced the messaging model with two-member topics, new commands and new agent tools. The host results below were recorded before that change: H1a and H1b must be repeated with the new plugins before the release; H2 and H3 cover the hook waiter, which did not change in behavior.
+
 **Status (2026-10-31):** H1a (Claude with a scripted peer), H2 and H3 passed with the branch build; details and timings are in [the host-test runbook](../experiments/host-test/README.md#results-2026-10-31). H1b (Claude with Codex) passed later the same day with the dev Codex plugin, after its packaging was fixed (see below). H2's renewal turn still needs a visual check that it ended without polling or replying. H4, H5 and H6 have not run. Finding: on the host the hook launcher exits at once, so the waiter's chain ends at the top Git Bash shell and does not reach `claude.exe` (see [known issues](known-issues.md)).
 
 | # | Test | Setup | Pass criteria | Duration |

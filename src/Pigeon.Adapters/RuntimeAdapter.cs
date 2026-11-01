@@ -44,12 +44,12 @@ public sealed class ClaudeCodeAdapter : IRuntimeAdapter {
     public AdapterCapabilities Capabilities { get; } = new(
         new(CapabilityState.NotImplemented, "A claimed session ID is not verified or automatically attached to a running session."),
         new(CapabilityState.NotImplemented, "Pigeon does not launch Claude Code sessions."),
-        new(CapabilityState.Available, "An idle, newly created interactive session with the bundled channel loaded received and acknowledged one isolated test message. Session opt-in is required; other session states are unverified."),
-        new(CapabilityState.NotImplemented, "Safe-checkpoint delivery is unverified and not implemented."),
+        new(CapabilityState.NotImplemented, "Live notification is not implemented."),
+        new(CapabilityState.Available, "The plugin's asynchronous Stop hook wakes an idle conversation whose process is running; a closed conversation cannot be woken."),
         new(CapabilityState.Available, "Shared MCP polling was demonstrated in a new isolated session; connection and existing-session availability are not verified."));
 
     public NotificationResult Notify(RuntimeSession session, RuntimeMessage message, NotificationMode mode)
-        => new(NotificationOutcome.Unavailable, "Notifications are written by the opted-in Claude MCP channel, not by this direct adapter method; no delivery was attempted.");
+        => new(NotificationOutcome.Unavailable, "Notifications are emitted by the plugin's hook waiter, not by this direct adapter method; no delivery was attempted.");
 }
 
 // Explicitly bundled adapters only: no dynamic loading or plugin discovery.

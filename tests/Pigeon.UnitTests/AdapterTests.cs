@@ -18,8 +18,8 @@ public class AdapterTests {
         var capabilities = adapter.Capabilities;
         Assert.All([capabilities.IdentifyExistingSession, capabilities.IdentifyNewSession],
             capability => Assert.Equal(CapabilityState.NotImplemented, capability.State));
-        Assert.Equal(name == "codex" ? CapabilityState.Available : CapabilityState.NotImplemented, capabilities.SafeCheckpoint.State);
-        Assert.Equal(name == "claude" ? CapabilityState.Available : CapabilityState.NotImplemented, capabilities.LiveNotification.State);
+        Assert.Equal(CapabilityState.Available, capabilities.SafeCheckpoint.State);
+        Assert.Equal(CapabilityState.NotImplemented, capabilities.LiveNotification.State);
         Assert.Equal(CapabilityState.Available, capabilities.Polling.State);
         Assert.Contains("isolated", capabilities.Polling.Detail);
     }

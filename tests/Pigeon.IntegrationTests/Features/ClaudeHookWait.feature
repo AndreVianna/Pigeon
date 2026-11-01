@@ -11,9 +11,9 @@ Feature: Claude hook waiter
     When a waiter is running and two messages arrive
     Then it writes only the fixed wake instruction to stderr, exits 2 and releases its ownership
 
-  Scenario: A newer waiter replaces an older one and another notifier is not displaced
+  Scenario: A newer waiter replaces an older one
     Given an isolated service with a connected Claude session
-    Then a second waiter replaces the first, and a waiter waits behind a live monitor owner until it stops
+    Then a second waiter replaces the first, which leaves quietly
 
   Scenario: An expired waiter leaves quietly and status shows the gap
     Given an isolated service with a connected Claude session
@@ -23,17 +23,13 @@ Feature: Claude hook waiter
     Given an isolated service with a connected Claude session
     Then a short renewable waiter requests one renewal and its replacement wakes for a message
 
-  Scenario: A waiter behind a different notifier does not request a renewal
+  Scenario: A session in no topic does not renew
     Given an isolated service with a connected Claude session
-    Then a short renewable waiter behind a monitor expires without a renewal
+    Then a session in no topic and with nothing waiting expires without a renewal
 
-  Scenario: A session with no subscriptions or pending deliveries does not renew
+  Scenario: Session bridge lookup finds only the session's own MCP bridge
     Given an isolated service with a connected Claude session
-    Then an unsubscribed idle session expires without a renewal
-
-  Scenario: Session bridge lookup excludes other sessions and notifier bridges
-    Given an isolated service with a connected Claude session
-    Then the lightweight bridge lookup returns only distinct matching ordinary MCP identities
+    Then the bridge lookup finds only the session's own ordinary MCP bridge
 
   Scenario: Status reports a lost notifier without waiting for another claimant
     Given an isolated service with a connected Claude session
@@ -47,9 +43,9 @@ Feature: Claude hook waiter
     Given an isolated service with a connected Claude session
     Then a waiter started before a service restart wakes for a message published after it
 
-  Scenario: Claude notifiers need ownership to claim a wake
+  Scenario: A waiter needs ownership to claim a wake
     Given an isolated service with a connected Claude session
-    Then only the owning notifier can claim, and only its holder can release ownership
+    Then only the owning waiter can claim, and only its holder can release ownership
 
   Scenario: A waiter keeps waiting while storage is temporarily locked
     Given an isolated service with a connected Claude session
@@ -62,14 +58,6 @@ Feature: Claude hook waiter
   Scenario: An owning waiter still renews when the service is down at its deadline
     Given an isolated service with a connected Claude session
     Then a short renewable waiter whose service stops before the deadline requests one renewal, and its replacement waits for the service
-
-  Scenario: Exactly one notifier owns a session after a service restart
-    Given an isolated service with a connected Claude session
-    Then a monitor and a hook waiter that both reconnect after a restart leave one stable owner and at most one wake attempt
-
-  Scenario: A monitor that dies without releasing is replaced once its ownership lapses
-    Given an isolated service with a connected Claude session
-    Then a waiting hook waiter claims exactly one wake after the silent monitor's ownership expires
 
   Scenario: Status reports versions and a session that never had a notifier
     Given an isolated service with a connected Claude session

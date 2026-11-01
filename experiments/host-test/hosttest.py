@@ -4,10 +4,10 @@ Uses only the frozen test build in artifacts/host-test/bin, an isolated service 
 and a disposable database in artifacts/host-test/data. It never touches the user's normal
 Pigeon service (port 49372) or any session other than the test ones named on the command line.
 
-  python -I hosttest.py start                       start the isolated service, create the topic and the peer
-  python -I hosttest.py status                      pigeon status for the isolated service
-  python -I hosttest.py send <tool> <session> <text> send a synthetic message from the peer
-  python -I hosttest.py inbox                       show and acknowledge messages sent to the peer
+  python -I hosttest.py start                       start the isolated service and join the peer to the topic
+  python -I hosttest.py status                      pigeon status and topics for the isolated service
+  python -I hosttest.py send <text>                 send a synthetic message from the peer to its partner
+  python -I hosttest.py inbox                       receive the messages sent to the peer
   python -I hosttest.py waiters                     list test waiters and their launcher chains
   python -I hosttest.py kill-outer-shell --yes      H3: kill only the outer hook shell of the test waiter
   python -I hosttest.py stop [--clean]              stop the isolated service; --clean deletes its data
@@ -19,7 +19,7 @@ EXE = os.path.join(ROOT, 'artifacts', 'host-test', 'bin', 'pigeon.exe')
 # The overrides exist only to dry-run this script against a throwaway service.
 DATA = os.environ.get('HOSTTEST_DATA') or os.path.join(ROOT, 'artifacts', 'host-test', 'data')
 PORT, TOPIC = os.environ.get('HOSTTEST_PORT') or '49473', 'pigeon-host-test'
-PEER_TOOL, PEER_SESSION = 'mock', 'host-test-peer'
+PEER_TOOL, PEER_SESSION = 'host-test', 'host-test-peer'
 ENV = dict(os.environ, PIGEON_PORT=PORT, PIGEON_DATABASE=os.path.join(DATA, 'messages.db'))
 ENV.pop('CLAUDE_CODE_SESSION_ID', None)
 
@@ -58,22 +58,15 @@ def main(argv):
     if command == 'start':
         os.makedirs(DATA, exist_ok=True)
         print(pigeon('start').stdout.strip())
-        pigeon('topics', 'create', TOPIC, check=False)
-        pigeon('topics', 'join', TOPIC, PEER_TOOL, PEER_SESSION)
-        print(f'Topic {TOPIC} ready; peer {PEER_TOOL}/{PEER_SESSION} joined. Service on port {PORT}, data in {DATA}.')
+        print(pigeon('join', TOPIC, 'as', PEER_SESSION, 'using', PEER_TOOL).stdout.strip())
+        print(f'Service on port {PORT}, data in {DATA}. The test conversation joins {TOPIC} as the partner.')
     elif command == 'status':
         print(pigeon('status', check=False).stdout)
-    elif command == 'send' and len(argv) == 4:
-        print(pigeon('messages', 'send-session', PEER_TOOL, PEER_SESSION, argv[1], argv[2], argv[3], '--topic', TOPIC).stdout.strip())
+        print(pigeon('topics', check=False).stdout)
+    elif command == 'send' and len(argv) == 2:
+        print(pigeon('send', 'from', PEER_SESSION, 'to', TOPIC, argv[1]).stdout.strip())
     elif command == 'inbox':
-        out = pigeon('messages', 'get-session', PEER_TOOL, PEER_SESSION, TOPIC).stdout.strip()
-        messages = json.loads(out or '[]')
-        for m in messages if isinstance(messages, list) else [messages]:
-            if not m:
-                continue
-            print(f"from {m.get('SenderTool')}/{m.get('SenderSessionId')}: {m.get('Body')!r}")
-            pigeon('messages', 'ack-session', PEER_TOOL, PEER_SESSION, m['Receipt'])
-        print('inbox drained')
+        print(pigeon('receive', 'for', PEER_SESSION, 'from', TOPIC).stdout.strip())
     elif command == 'waiters':
         for chain in waiters():
             print(' <- '.join(f"{p['ProcessId']} {p['Name']}" for p in chain))

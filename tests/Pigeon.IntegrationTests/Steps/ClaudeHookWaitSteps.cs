@@ -14,8 +14,7 @@ public sealed class ClaudeHookWaitSteps {
 
     private readonly string directory = Path.Combine(Path.GetTempPath(), "pigeon-hook-wait-" + Guid.NewGuid().ToString("N"));
     private readonly string port = TestPorts.FreePort();
-    private readonly Principal sender = new(Mailbox.TopicNamespace, "sender");
-    private readonly Principal reader = new(Mailbox.TopicNamespace, "reader");
+    private const string Sender = "sender-session", Reader = "reader-session";
     private readonly string bridgeId = Guid.NewGuid().ToString("N");
     private readonly List<Process> processes = [];
     private Broker broker = null!;
@@ -25,17 +24,18 @@ public sealed class ClaudeHookWaitSteps {
     private Task heartbeats = null!;
     private int key;
 
-    private async Task<JsonElement> Call(Principal principal, string operation, object args) {
-        var result = await LocalHttpClient.ExecuteAsync(port, principal, operation, args);
+    private async Task<JsonElement> Call(string operation, object args) {
+        var result = await LocalHttpClient.ExecuteAsync(port, operation, args);
         Assert.True(result.GetProperty("Ok").GetBoolean(), result.ToString());
         return result.GetProperty("Value");
     }
 
     private Task Publish(string body = "synthetic") =>
-        Call(sender, "publish", new { topic = "test", body, correlationId = "test", idempotencyKey = "key-" + ++key, expiresAtUnixMs = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeMilliseconds() });
+        Call("send", new { sessionId = Sender, topic = "test", message = body, retryKey = "key-" + ++key });
+    private Task<JsonElement> WakeStatus() => Call("wake_status", new { sessionId = Reader });
 
     private async Task StartService() {
-        broker = new Broker(Path.Combine(directory, "messages.db"), topicMode: true);
+        broker = new Broker(Path.Combine(directory, "messages.db"));
         stop = new CancellationTokenSource();
         var host = new LocalHttpServer(port, broker);
         server = host.RunAsync(stop.Token);
@@ -80,8 +80,8 @@ public sealed class ClaudeHookWaitSteps {
     }
 
     private async Task<JsonElement> Notifier() {
-        var bridges = await Call(sender, "bridges", new { });
-        return bridges.EnumerateArray().First(b => b.GetProperty("agent").GetString() == "reader" && b.GetProperty("mode").GetString() == "mcp").GetProperty("notifier");
+        var bridges = await Call("bridges", new { });
+        return bridges.EnumerateArray().First(b => b.GetProperty("sessionId").GetString() == Reader && b.GetProperty("mode").GetString() == "mcp").GetProperty("notifier");
     }
 
     private async Task WaitForOwner(string mode) {
@@ -96,15 +96,13 @@ public sealed class ClaudeHookWaitSteps {
     public async Task Setup() {
         Directory.CreateDirectory(directory);
         await StartService();
-        await Call(sender, "register", new { runtime = "codex", sessionId = "sender-session" });
-        await Call(reader, "register", new { runtime = "claude-code", sessionId = "reader-session" });
-        await Call(sender, "topic_create", new { topic = "test" });
-        await Call(reader, "subscribe", new { topic = "test" });
+        await Call("join", new { tool = "codex", sessionId = Sender, topic = "test" });
+        await Call("join", new { tool = "claude-code", sessionId = Reader, topic = "test" });
         // Stands in for the session's MCP bridge, which renews its heartbeat every few seconds.
         heartbeat = new CancellationTokenSource();
         heartbeats = Task.Run(async () => {
             while (!heartbeat.IsCancellationRequested) {
-                try { _ = await LocalHttpClient.ExecuteAsync(port, reader, "bridge_heartbeat", new { id = bridgeId, mode = "mcp" }, heartbeat.Token); }
+                try { _ = await LocalHttpClient.ExecuteAsync(port, "bridge_heartbeat", new { id = bridgeId, mode = "mcp", sessionId = Reader }, heartbeat.Token); }
                 catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) { }
                 try { await Task.Delay(1000, heartbeat.Token); }
                 catch (OperationCanceledException) { }
@@ -141,7 +139,7 @@ public sealed class ClaudeHookWaitSteps {
 
     [Then("it writes only the fixed wake instruction to stderr, exits 2 and releases its ownership")]
     public async Task Woke() {
-        var status = await Call(reader, "wake_status", new { });
+        var status = await WakeStatus();
         Assert.Equal(2, status.GetProperty("Queued").GetInt32());
         Assert.Equal(0, status.GetProperty("Leased").GetInt32());
         Assert.Equal(1, status.GetProperty("Attempts").GetInt32());
@@ -152,7 +150,7 @@ public sealed class ClaudeHookWaitSteps {
         Assert.Equal("woke", notifier.GetProperty("lastRelease").GetProperty("reason").GetString());
     }
 
-    [Then("a second waiter replaces the first, and a waiter waits behind a live monitor owner until it stops")]
+    [Then("a second waiter replaces the first, which leaves quietly")]
     public async Task Supersede() {
         var first = await StartWaiter();
         await WaitForOwner("claude-hook");
@@ -164,31 +162,17 @@ public sealed class ClaudeHookWaitSteps {
         Assert.Equal(2, await Exit(second));
         var wake = await second.Errors;
         Assert.StartsWith("Pigeon wake generation ", wake);
-        // Drain as the agent would, so the next message starts a new claimable wake.
+        // Drain as the agent would; the next message then starts a new claimable wake.
         var generation = wake.Split(' ')[3].TrimEnd('.');
-        Assert.True((await Call(reader, "wake_confirm", new { generation })).GetProperty("Accepted").GetBoolean());
-        var message = await Call(reader, "receive", new { });
-        await Call(reader, "acknowledge", new { receipt = message.GetProperty("Receipt").GetString() });
-        await Call(reader, "wake_complete", new { generation });
-
-        var monitor = Guid.NewGuid().ToString("N");
-        Assert.True((await Call(reader, "wake_owner", new { holderId = monitor, mode = "claude-monitor" })).GetProperty("owner").GetBoolean());
-        var waiting = await StartWaiter();
-        await Publish();
-        await Task.Delay(3000);
-        // The waiter neither claims nor leaves while the monitor owns the session.
-        Assert.False(waiting.Process.HasExited);
-        Assert.Equal("claude-monitor", (await Notifier()).GetProperty("active").GetString());
-        var pending = await Call(reader, "wake_status", new { });
-        Assert.Equal("ready", pending.GetProperty("State").GetString());
-        Assert.Equal(0, pending.GetProperty("Attempts").GetInt32());
-        // A monitor stopped without warning releases nothing; here it releases explicitly.
-        Assert.True((await Call(reader, "wake_owner_release", new { holderId = monitor, reason = "stopped" })).GetProperty("released").GetBoolean());
-        Assert.Equal(2, await Exit(waiting));
-        Assert.StartsWith("Pigeon wake generation ", await waiting.Errors);
-        var claimed = await Call(reader, "wake_status", new { });
-        Assert.Equal(1, claimed.GetProperty("Attempts").GetInt32());
-        Assert.Equal("claude-hook", claimed.GetProperty("History")[0].GetProperty("Mode").GetString());
+        var batch = await Call("wake_receive", new { sessionId = Reader, generation });
+        Assert.True(batch.GetProperty("Accepted").GetBoolean());
+        Assert.Single(batch.GetProperty("Messages").EnumerateArray());
+        Assert.True((await Call("wake_complete", new { sessionId = Reader, generation })).GetBoolean());
+        Assert.Equal(0, (await WakeStatus()).GetProperty("Queued").GetInt32());
+        var third = await StartWaiter();
+        await WaitForOwner("claude-hook");
+        await Publish("second message");
+        Assert.Equal(2, await Exit(third));
     }
 
     [Then("a waiter with a short timeout exits 0 without output and status reports that it expired")]
@@ -200,7 +184,7 @@ public sealed class ClaudeHookWaitSteps {
         var notifier = await Notifier();
         Assert.Equal(JsonValueKind.Null, notifier.GetProperty("active").ValueKind);
         Assert.Equal("expired", notifier.GetProperty("lastRelease").GetProperty("reason").GetString());
-        var status = Pigeon("status", port);
+        var status = Pigeon("status");
         var text = await status.StandardOutput.ReadToEndAsync();
         await status.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Contains("notification: none (last claude-hook expired at ", text);
@@ -216,7 +200,7 @@ public sealed class ClaudeHookWaitSteps {
         Assert.StartsWith("Pigeon notification waiter needs renewal.", text);
         Assert.DoesNotContain("Pigeon wake generation", text);
         Assert.Equal("renewed", (await Notifier()).GetProperty("lastRelease").GetProperty("reason").GetString());
-        Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
+        Assert.Equal(0, (await WakeStatus()).GetProperty("Attempts").GetInt32());
         var next = await StartWaiter("reader-session", "--timeout", "10", "--renew");
         await WaitForOwner("claude-hook");
         await Publish("after renewal");
@@ -256,113 +240,32 @@ public sealed class ClaudeHookWaitSteps {
         Assert.Contains("notification: none (no notifier seen since the service started", output);
     }
 
-    // Stands in for a Monitor: it renews ownership every second until stopped, and never claims.
-    private (CancellationTokenSource Stop, Task Loop) SimulatedMonitor() {
-        var holderId = Guid.NewGuid().ToString("N");
-        var stopMonitor = new CancellationTokenSource();
-        var loop = Task.Run(async () => {
-            while (!stopMonitor.IsCancellationRequested) {
-                try { _ = await LocalHttpClient.ExecuteAsync(port, reader, "wake_owner", new { holderId, mode = "claude-monitor" }, stopMonitor.Token); }
-                catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) { }
-                try { await Task.Delay(1000, stopMonitor.Token); }
-                catch (OperationCanceledException) { }
-            }
-        });
-        return (stopMonitor, loop);
-    }
-
-    [Then("a monitor and a hook waiter that both reconnect after a restart leave one stable owner and at most one wake attempt")]
-    public async Task OwnershipAfterRestart() {
-        var (stopMonitor, monitor) = SimulatedMonitor();
-        try {
-            await WaitForOwner("claude-monitor");
-            var waiter = await StartWaiter("reader-session", "--timeout", "60");
-            await Task.Delay(1500);
-            await StopService();
-            await Task.Delay(1500);
-            await StartService();
-            await Task.Delay(3000); // Both notifiers and the stand-in bridge reconnect and race for ownership.
-            var owner = (await Notifier()).GetProperty("active").GetString();
-            Assert.Contains(owner, new[] { "claude-monitor", "claude-hook" });
-            for (var i = 0; i < 5; i++) {
-                await Task.Delay(1000);
-                Assert.Equal(owner, (await Notifier()).GetProperty("active").GetString());
-            }
-            await Publish("after restart");
-            if (owner == "claude-hook") {
-                Assert.Equal(2, await Exit(waiter, 20));
-                Assert.Equal(1, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
-            }
-            else {
-                await Task.Delay(3000);
-                Assert.False(waiter.Process.HasExited);
-                Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
-            }
-        }
-        finally {
-            stopMonitor.Cancel();
-            await monitor;
-            stopMonitor.Dispose();
-        }
-    }
-
-    [Then("a waiting hook waiter claims exactly one wake after the silent monitor's ownership expires")]
-    public async Task LapsedMonitor() {
-        var (stopMonitor, monitor) = SimulatedMonitor();
-        await WaitForOwner("claude-monitor");
-        var waiter = await StartWaiter("reader-session", "--timeout", "60");
-        await Publish("while the monitor owns");
-        await Task.Delay(2000);
-        Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
-        // The monitor stops renewing without releasing, as if its process were killed.
-        stopMonitor.Cancel();
-        await monitor;
-        stopMonitor.Dispose();
-        Assert.Equal(2, await Exit(waiter, 30));
-        Assert.StartsWith("Pigeon wake generation ", await waiter.Errors);
-        var status = await Call(reader, "wake_status", new { });
-        Assert.Equal(1, status.GetProperty("Attempts").GetInt32());
-        Assert.Equal("claude-hook", status.GetProperty("History")[0].GetProperty("Mode").GetString());
-    }
-
-    [Then("a short renewable waiter behind a monitor expires without a renewal")]
-    public async Task BlockedRenewal() {
-        var monitor = Guid.NewGuid().ToString("N");
-        Assert.True((await Call(reader, "wake_owner", new { holderId = monitor, mode = "claude-monitor" })).GetProperty("owner").GetBoolean());
-        var waiter = await StartWaiter("reader-session", "--timeout", "10", "--renew");
-        Assert.Equal(0, await Exit(waiter, 25));
-        Assert.Equal("", await waiter.Errors);
-        Assert.Equal("claude-monitor", (await Notifier()).GetProperty("active").GetString());
-        Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
-    }
-
-    [Then("an unsubscribed idle session expires without a renewal")]
+    [Then("a session in no topic and with nothing waiting expires without a renewal")]
     public async Task UnsubscribedRenewal() {
         var waiter = await StartWaiter("reader-session", "--timeout", "10", "--renew");
         await WaitForOwner("claude-hook");
-        await Call(reader, "subscribe", new { topic = "test", subscribed = false });
+        await Call("leave", new { sessionId = Reader, topic = "test" });
         Assert.Equal(0, await Exit(waiter, 25));
         Assert.Equal("", await waiter.Errors);
         Assert.Equal("expired", (await Notifier()).GetProperty("lastRelease").GetProperty("reason").GetString());
     }
 
-    [Then("the lightweight bridge lookup returns only distinct matching ordinary MCP identities")]
+    [Then("the bridge lookup finds only the session's own ordinary MCP bridge")]
     public async Task SessionBridgeLookup() {
-        await Call(reader, "bridge_heartbeat", new { id = Guid.NewGuid().ToString("N"), mode = "mcp" });
-        await Call(reader, "bridge_heartbeat", new { id = Guid.NewGuid().ToString("N"), mode = "claude-hook" });
-        var another = new Principal(Mailbox.TopicNamespace, "another-reader");
-        await Call(another, "register", new { runtime = "claude-code", sessionId = "different-session" });
-        await Call(another, "bridge_heartbeat", new { id = Guid.NewGuid().ToString("N"), mode = "mcp" });
-        var found = await Call(sender, "claude_session_bridges", new { sessionId = "reader-session" });
-        Assert.Equal(new[] { "reader" }, found.EnumerateArray().Select(item => item.GetString()).ToArray());
-        var missing = await Call(sender, "claude_session_bridges", new { sessionId = "unknown-session" });
-        Assert.Empty(missing.EnumerateArray());
+        Assert.True((await Call("claude_session_bridges", new { sessionId = Reader })).GetBoolean());
+        await Call("join", new { tool = "claude-code", sessionId = "different-session", topic = "other" });
+        await Call("bridge_heartbeat", new { id = Guid.NewGuid().ToString("N"), mode = "claude-hook", sessionId = "different-session" });
+        Assert.False((await Call("claude_session_bridges", new { sessionId = "different-session" })).GetBoolean());
+        // A Codex session's bridge never counts as a Claude session's.
+        await Call("bridge_heartbeat", new { id = Guid.NewGuid().ToString("N"), mode = "mcp", sessionId = Sender });
+        Assert.False((await Call("claude_session_bridges", new { sessionId = Sender })).GetBoolean());
+        Assert.False((await Call("claude_session_bridges", new { sessionId = "unknown-session" })).GetBoolean());
     }
 
     [Then("a notifier that stops renewing is reported lost after its ownership lapses")]
     public async Task LostOwner() {
         var holder = Guid.NewGuid().ToString("N");
-        Assert.True((await Call(reader, "wake_owner", new { holderId = holder, mode = "claude-hook" })).GetProperty("owner").GetBoolean());
+        Assert.True((await Call("wake_owner", new { sessionId = Reader, holderId = holder, mode = "claude-hook" })).GetProperty("owner").GetBoolean());
         await Task.Delay(TimeSpan.FromSeconds(16));
         var notifier = await Notifier();
         Assert.Equal(JsonValueKind.Null, notifier.GetProperty("active").ValueKind);
@@ -384,7 +287,7 @@ public sealed class ClaudeHookWaitSteps {
         codex.StandardInput.Close();
         await codex.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(1, codex.ExitCode);
-        Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
+        Assert.Equal(0, (await WakeStatus()).GetProperty("Attempts").GetInt32());
     }
 
     [Then("a waiter started before a service restart wakes for a message published after it")]
@@ -402,33 +305,27 @@ public sealed class ClaudeHookWaitSteps {
         Assert.DoesNotContain("after restart", errors);
     }
 
-    [Then("only the owning notifier can claim, and only its holder can release ownership")]
+    [Then("only the owning waiter can claim, and only its holder can release ownership")]
     public async Task Ownership() {
         await Publish();
-        string first = Guid.NewGuid().ToString("N"), channel = Guid.NewGuid().ToString("N"), second = Guid.NewGuid().ToString("N");
-        Assert.True((await Call(reader, "wake_owner", new { holderId = first, mode = "claude-monitor" })).GetProperty("owner").GetBoolean());
-        var refused = await Call(reader, "wake_owner", new { holderId = channel, mode = "claude-channel" });
-        Assert.False(refused.GetProperty("owner").GetBoolean());
-        Assert.Equal("claude-monitor", refused.GetProperty("active").GetString());
-        Assert.Equal(JsonValueKind.Null, (await Call(reader, "wake_claim", new { mode = "claude-channel", holderId = channel })).ValueKind);
-        Assert.Equal(JsonValueKind.Null, (await Call(reader, "wake_claim", new { mode = "claude-monitor", sessionId = "reader-session" })).ValueKind);
-        // A newer holder of the same mode replaces the older one, which cannot take it back.
-        Assert.True((await Call(reader, "wake_owner", new { holderId = second, mode = "claude-monitor" })).GetProperty("owner").GetBoolean());
-        Assert.False((await Call(reader, "wake_owner", new { holderId = first, mode = "claude-monitor" })).GetProperty("owner").GetBoolean());
-        Assert.Equal(JsonValueKind.Null, (await Call(reader, "wake_claim", new { mode = "claude-monitor", sessionId = "reader-session", holderId = first })).ValueKind);
-        Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
-        Assert.Equal(JsonValueKind.Object, (await Call(reader, "wake_claim", new { mode = "claude-monitor", sessionId = "reader-session", holderId = second })).ValueKind);
-        Assert.False((await Call(reader, "wake_owner_release", new { holderId = first, reason = "stopped" })).GetProperty("released").GetBoolean());
-        Assert.True((await Call(reader, "wake_owner_release", new { holderId = second, reason = "stopped" })).GetProperty("released").GetBoolean());
+        string first = Guid.NewGuid().ToString("N"), second = Guid.NewGuid().ToString("N");
+        Assert.True((await Call("wake_owner", new { sessionId = Reader, holderId = first, mode = "claude-hook" })).GetProperty("owner").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, (await Call("wake_claim", new { sessionId = Reader, mode = "claude-hook" })).ValueKind);
+        // A newer holder replaces the older one, which cannot take it back.
+        Assert.True((await Call("wake_owner", new { sessionId = Reader, holderId = second, mode = "claude-hook" })).GetProperty("owner").GetBoolean());
+        Assert.False((await Call("wake_owner", new { sessionId = Reader, holderId = first, mode = "claude-hook" })).GetProperty("owner").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, (await Call("wake_claim", new { sessionId = Reader, mode = "claude-hook", holderId = first })).ValueKind);
+        Assert.Equal(0, (await WakeStatus()).GetProperty("Attempts").GetInt32());
+        Assert.Equal(JsonValueKind.Object, (await Call("wake_claim", new { sessionId = Reader, mode = "claude-hook", holderId = second })).ValueKind);
+        Assert.False((await Call("wake_owner_release", new { sessionId = Reader, holderId = first, reason = "stopped" })).GetProperty("released").GetBoolean());
+        Assert.True((await Call("wake_owner_release", new { sessionId = Reader, holderId = second, reason = "stopped" })).GetProperty("released").GetBoolean());
         var notifier = await Notifier();
         Assert.Equal(JsonValueKind.Null, notifier.GetProperty("active").ValueKind);
         Assert.Equal("stopped", notifier.GetProperty("lastRelease").GetProperty("reason").GetString());
-        // With no live owner, the replaced holder may take over again.
-        Assert.True((await Call(reader, "wake_owner", new { holderId = first, mode = "claude-monitor" })).GetProperty("owner").GetBoolean());
-        var invalid = await LocalHttpClient.ExecuteAsync(port, reader, "wake_owner", new { holderId = "not-a-guid", mode = "claude-monitor" });
+        var invalid = await LocalHttpClient.ExecuteAsync(port, "wake_owner", new { sessionId = Reader, holderId = "not-a-guid", mode = "claude-hook" });
         Assert.False(invalid.GetProperty("Ok").GetBoolean());
-        var unregistered = await LocalHttpClient.ExecuteAsync(port, new Principal(Mailbox.TopicNamespace, "nobody"), "wake_owner", new { holderId = Guid.NewGuid().ToString("N"), mode = "claude-hook" });
-        Assert.False(unregistered.GetProperty("Ok").GetBoolean());
+        var unknown = await LocalHttpClient.ExecuteAsync(port, "wake_owner", new { sessionId = "nobody", holderId = Guid.NewGuid().ToString("N"), mode = "claude-hook" });
+        Assert.False(unknown.GetProperty("Ok").GetBoolean());
     }
 
     [Then("a waiter started during a held database lock keeps waiting and wakes after the lock is released")]
@@ -472,7 +369,7 @@ public sealed class ClaudeHookWaitSteps {
         Assert.Equal("orphaned", notifier.GetProperty("lastRelease").GetProperty("reason").GetString());
         await Publish();
         await Task.Delay(2500);
-        Assert.Equal(0, (await Call(reader, "wake_status", new { })).GetProperty("Attempts").GetInt32());
+        Assert.Equal(0, (await WakeStatus()).GetProperty("Attempts").GetInt32());
     }
 
     [AfterScenario]

@@ -1,5 +1,4 @@
 using Pigeon.Adapters;
-using Pigeon.Core;
 using Pigeon.Service;
 using System.Text.Json;
 
@@ -24,9 +23,8 @@ internal static class ClaudeHookWait {
         using var parent = MonitorParent.Capture();
         using var stop = new CancellationTokenSource(timeout);
         var holderId = Guid.NewGuid().ToString("N");
-        var operatorPrincipal = new Principal(Mailbox.TopicNamespace, "operator");
         var associated = false;
-        Principal? current = null;
+        string? current = null;
         var reason = "expired";
         // Whether the service's last ownership answer named this waiter as the owner.
         var ownedAtLastCheck = false;
@@ -35,39 +33,32 @@ internal static class ClaudeHookWait {
                 if (!parent.IsAlive) { reason = "orphaned"; break; }
                 try {
                     if (!associated) {
-                        var route = await LocalHttpClient.ExecuteAsync(port, operatorPrincipal, "session_restore", new { tool = "claude-code", sessionId }, stop.Token);
+                        var route = await LocalHttpClient.ExecuteAsync(port, "session_restore", new { tool = "claude-code", sessionId }, stop.Token);
                         // Unconnected sessions also run this hook after every turn; leave at once.
                         if (!route.GetProperty("Ok").GetBoolean() || route.GetProperty("Value").ValueKind != JsonValueKind.Object) return 0;
                         associated = true;
                     }
-                    var bridges = await LocalHttpClient.ExecuteAsync(port, operatorPrincipal, "claude_session_bridges", new { sessionId }, stop.Token);
+                    var bridges = await LocalHttpClient.ExecuteAsync(port, "claude_session_bridges", new { sessionId }, stop.Token);
                     if (!bridges.GetProperty("Ok").GetBoolean()) throw new InvalidOperationException();
-                    var matches = bridges.GetProperty("Value").EnumerateArray().Select(bridge => bridge.GetString()!).ToArray();
-                    // Never guess if no registered bridge matches or more than one identity claims the session.
-                    var selected = matches.Length == 1 ? new Principal(Mailbox.TopicNamespace, matches[0]) : null;
+                    // Wait only while this session's own MCP server is connected and bound to it.
+                    var selected = bridges.GetProperty("Value").GetBoolean() ? sessionId : null;
                     if (current is not null && current != selected) {
-                        _ = await LocalHttpClient.ExecuteAsync(port, current, "bridge_disconnect", new { id = holderId }, stop.Token);
-                        _ = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner_release", new { holderId, reason = "stopped" }, stop.Token);
+                        _ = await LocalHttpClient.ExecuteAsync(port, "bridge_disconnect", new { id = holderId }, stop.Token);
+                        _ = await LocalHttpClient.ExecuteAsync(port, "wake_owner_release", new { sessionId, holderId, reason = "stopped" }, stop.Token);
                     }
                     current = selected;
                     if (current is not null) {
-                        _ = await LocalHttpClient.ExecuteAsync(port, current, "bridge_heartbeat", new { id = holderId, mode = "claude-hook" }, stop.Token);
-                        var ownership = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner", new { holderId, mode = "claude-hook" }, stop.Token);
+                        _ = await LocalHttpClient.ExecuteAsync(port, "bridge_heartbeat", new { id = holderId, mode = "claude-hook", sessionId }, stop.Token);
+                        var ownership = await LocalHttpClient.ExecuteAsync(port, "wake_owner", new { sessionId, holderId, mode = "claude-hook" }, stop.Token);
                         ownedAtLastCheck = ownership.GetProperty("Ok").GetBoolean() && ownership.GetProperty("Value").GetProperty("owner").GetBoolean();
                         if (ownership.GetProperty("Ok").GetBoolean() && !ownership.GetProperty("Value").GetProperty("owner").GetBoolean()) {
                             // A newer waiter replaced this one, so leave.
-                            if (ownership.GetProperty("Value").GetProperty("active").GetString() == "claude-hook") {
-                                _ = await LocalHttpClient.ExecuteAsync(port, current, "bridge_disconnect", new { id = holderId }, stop.Token);
-                                current = null;
-                                return 0;
-                            }
-                            // A Monitor or channel owns the session. Wait without claiming, and take over
-                            // once it stops or its ownership lapses, so a killed Monitor leaves no gap.
-                            await Task.Delay(TimeSpan.FromSeconds(1), stop.Token);
-                            continue;
+                            _ = await LocalHttpClient.ExecuteAsync(port, "bridge_disconnect", new { id = holderId }, stop.Token);
+                            current = null;
+                            return 0;
                         }
                         if (!parent.IsAlive) { reason = "orphaned"; break; }
-                        var result = await LocalHttpClient.ExecuteAsync(port, current, "wake_claim", new { mode = "claude-hook", sessionId, holderId }, stop.Token);
+                        var result = await LocalHttpClient.ExecuteAsync(port, "wake_claim", new { mode = "claude-hook", sessionId, holderId }, stop.Token);
                         if (result.GetProperty("Ok").GetBoolean() && result.GetProperty("Value").ValueKind == JsonValueKind.Object) {
                             var claim = result.GetProperty("Value");
                             var generation = claim.GetProperty("Generation").GetString()!;
@@ -80,7 +71,7 @@ internal static class ClaudeHookWait {
                                 reason = "stopped";
                                 try {
                                     using var failureTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                                    _ = await LocalHttpClient.ExecuteAsync(port, current, "wake_result", new { generation, attempt, outcome = "transport-failed" }, failureTimeout.Token);
+                                    _ = await LocalHttpClient.ExecuteAsync(port, "wake_result", new { sessionId, generation, attempt, outcome = "transport-failed" }, failureTimeout.Token);
                                 }
                                 catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException or JsonException) { }
                                 return 0;
@@ -89,7 +80,7 @@ internal static class ClaudeHookWait {
                             // if the service disappears before the transport result is recorded.
                             try {
                                 using var reportTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                                _ = await LocalHttpClient.ExecuteAsync(port, current, "wake_result", new { generation, attempt, outcome = "transport-written" }, reportTimeout.Token);
+                                _ = await LocalHttpClient.ExecuteAsync(port, "wake_result", new { sessionId, generation, attempt, outcome = "transport-written" }, reportTimeout.Token);
                             }
                             catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException or JsonException) { }
                             reason = "woke";
@@ -115,7 +106,7 @@ internal static class ClaudeHookWait {
                 var renewal = false;
                 try {
                     using var renewalTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                    var result = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner_check", new { holderId }, renewalTimeout.Token);
+                    var result = await LocalHttpClient.ExecuteAsync(port, "wake_owner_check", new { sessionId, holderId }, renewalTimeout.Token);
                     renewal = result.GetProperty("Ok").GetBoolean() && result.GetProperty("Value").GetProperty("owner").GetBoolean();
                 }
                 catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) {
@@ -137,9 +128,9 @@ internal static class ClaudeHookWait {
         finally {
             if (current is not null) {
                 using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                try { _ = await LocalHttpClient.ExecuteAsync(port, current, "bridge_disconnect", new { id = holderId }, cleanup.Token); }
+                try { _ = await LocalHttpClient.ExecuteAsync(port, "bridge_disconnect", new { id = holderId }, cleanup.Token); }
                 catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException or JsonException) { }
-                try { _ = await LocalHttpClient.ExecuteAsync(port, current, "wake_owner_release", new { holderId, reason }, cleanup.Token); }
+                try { _ = await LocalHttpClient.ExecuteAsync(port, "wake_owner_release", new { sessionId, holderId, reason }, cleanup.Token); }
                 catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException or JsonException) { }
             }
         }
