@@ -2,6 +2,11 @@
 
 The CLI and the Claude and Codex plugins share one version (see the README's developer section).
 
+## 0.5.0-beta.2 (unreleased)
+
+### Fixed
+- Cursor imports installed Claude plugins' hooks and runs them through PowerShell, where the Claude plugin's bare `hook-wait.sh` command opened the script in a text editor at every chat start and turn end. The plugin now runs it as `sh "…/hook-wait.sh"`: unchanged in Claude Code's Git Bash, and a harmless "not found" in other shells. (`bash` was avoided because on Windows it often resolves to WSL.) A unit test keeps the command in this form.
+
 ## 0.5.0-beta.1 (unreleased)
 
 First beta. The CLI moves from 0.1.0-alpha.19, the Claude plugin from 0.4.0 and the Codex plugin from 0.3.0 to one shared version. This release changes how Pigeon is used; see "Changed".

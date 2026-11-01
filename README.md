@@ -19,7 +19,7 @@ Everything stays on your computer. Pigeon runs a small background service that o
 
 ```powershell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.5.0-beta.1 --source .\artifacts
+dotnet tool install --global Pigeon.Cli --version 0.5.0-beta.2 --source .\artifacts
 ```
 
 To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.

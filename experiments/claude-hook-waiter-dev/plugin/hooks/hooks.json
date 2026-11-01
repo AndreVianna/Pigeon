@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Projects/Pigeon/artifacts/host-test/bin/pigeon.exe\" \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 180 --renew",
+            "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Projects/Pigeon/artifacts/host-test/bin/pigeon.exe\" sh \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 180 --renew",
             "async": true,
             "asyncRewake": true,
             "timeout": 300
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Projects/Pigeon/artifacts/host-test/bin/pigeon.exe\" \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 180 --renew",
+            "command": "PIGEON_PORT=49473 PIGEON_EXE=\"C:/Projects/Pigeon/artifacts/host-test/bin/pigeon.exe\" sh \"${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh\" --timeout 180 --renew",
             "async": true,
             "asyncRewake": true,
             "timeout": 300
