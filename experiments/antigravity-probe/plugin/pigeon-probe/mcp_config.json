@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "probe": {
+      "command": "C:\\Program Files\\Python312\\python.exe",
+      "args": [
+        "C:\\Projects\\Pigeon\\experiments\\antigravity-probe\\scripts\\mcp_server.py"
+      ]
+    }
+  }
+}

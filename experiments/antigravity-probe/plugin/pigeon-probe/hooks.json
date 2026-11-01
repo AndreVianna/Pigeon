@@ -1,0 +1,25 @@
+{
+  "pigeon-probe": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\antigravity-probe\\scripts\\hook.py SessionStart",
+        "timeout": 10
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\antigravity-probe\\scripts\\hook.py PreInvocation",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\antigravity-probe\\scripts\\hook.py Stop",
+        "timeout": 10
+      }
+    ]
+  }
+}
