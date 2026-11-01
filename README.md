@@ -101,10 +101,12 @@ dotnet test Pigeon.slnx
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --no-restore --output artifacts
 ```
 
+Versions move in lockstep: the CLI (`<Version>` in `src/Pigeon.Cli/Pigeon.Cli.csproj`), the Claude plugin and the Codex plugin always share one version, and a release bumps all three together even when a plugin is unchanged. A unit test fails if they differ. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
 Packing does not install the tool. For an earlier user-installed version, after you choose to update it:
 
 ```powershell
-dotnet tool update --global Pigeon.Cli --version 0.1.0-alpha.19 --source .\artifacts
+dotnet tool update --global Pigeon.Cli --version 0.5.0-beta.1 --source .\artifacts
 ```
 
 With `PIGEON_BODY_RETENTION_DAYS` configured, terminal message bodies are lazily redacted after the retention period, subject to publication sibling deliveries. Metadata and deduplication records remain; SQLite pages, WAL files and backups can retain data. This is not secure erasure. The other bounded service settings are `PIGEON_MAX_ATTEMPTS`, `PIGEON_MAX_AUTOMATED` and `PIGEON_MAX_AUTOMATED_PER_MINUTE`. `PIGEON_MESSAGE_TTL_SECONDS` applies only to the CLI's `messages send` and `messages direct` commands; MCP sends and `messages send-session` default to 24 hours.
