@@ -163,7 +163,7 @@ internal static class ServiceCommands {
                 var health = await LocalHttpClient.ExecuteAsync(port, principal, "service_status", new { });
                 if (!health.GetProperty("Ok").GetBoolean())
                     throw new InvalidOperationException();
-                // Services before 0.1.0 do not report a version.
+                // Older services do not report a version.
                 var serviceVersion = health.GetProperty("Value").TryGetProperty("version", out var reported) ? reported.GetString() : null;
                 Console.WriteLine(serviceVersion == PigeonVersion.Current
                     ? $"Pigeon service: running, version {serviceVersion}"

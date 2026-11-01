@@ -1,8 +1,8 @@
-# Release plan: 0.1.0
+# Release plan: 0.5.0
 
-Draft of 2026-10-31 for review. Nothing in it is approved or started. It covers every change and test between the current branch (`cleanup-and-wake-fixes`, version 0.1.0-alpha.19) and a 0.1.0 release.
+Plan of 2026-10-31. It covers every change and test between 0.1.0-alpha.19 and the 0.5.0 release. The target was renumbered from 0.1.0 to 0.5.0 when the CLI and plugins moved to one shared version; 0.5.0-beta.1 comes first.
 
-## What 0.1.0 should promise
+## What 0.5.0 should promise
 
 A Codex session and a Claude Desktop conversation on the same Windows machine exchange durable messages without the user copying them, and each wakes the other while its conversation process is running. The following stay documented limits, not release promises:
 
@@ -85,14 +85,14 @@ Investigate whether the Codex queue interface supports cancelling or replacing a
 
 | Item | Change |
 |---|---|
-| Version | CLI `0.1.0`. Claude plugin `0.4.1` (its packaged files changed). Codex plugin `0.3.0` (done: moved to the layout Codex loads). Update the README `dotnet tool update` line and the version mentions in docs. |
+| Version | Lockstep versions: the CLI and both plugins share one version. `0.5.0-beta.1` first (in progress), `0.5.0` for the release. A unit test enforces the match. Update the README `dotnet tool update` line and the version mentions in docs. |
 | Codex plugin install | Repo marketplace `.agents/plugins/marketplace.json` added (and copied into the CLI's publish output). Done: the production Codex plugin moved to the layout Codex loads local servers from (`.codex-plugin/plugin.json` with `"mcpServers": "./.mcp.json"`, and a `.mcp.json` of `command`/`args`/`env`), as proven by the dev plugin in H1b; a root `mcp.json` with `"type": "stdio"` is ignored. It is now `0.3.0`. Still to do: reinstall it as the `pigeon` plugin instead of the standalone MCP server it was configured as. `mcp_tool` hooks work in Codex and stay. |
 | CI | GitHub Actions on `windows-latest`: SDK from `global.json`, then build, test and pack, plus a Git Bash check. Verify that the runner can install the .NET 11 RC SDK and has `winsqlite3`. |
 | Secret scanning | Optional `ggshield` step in CI. It needs a GitGuardian API key stored as a repository secret, which you would create. |
-| Release notes | `CHANGELOG.md` for 0.1.0: features, fixes since alpha.19, and documented limits. |
+| Release notes | `CHANGELOG.md`: started for 0.5.0-beta.1 with the fixes since alpha.19 and the documented limits. |
 | Docs | Install-from-scratch instructions in the README, checked on a clean tool path; refreshed known issues; `next-steps.md` folded into this plan or retired. |
-| Upgrade | Install the packed 0.1.0 into a temporary `--tool-path` and run it against a synthetic older-schema database. Optionally, with your approval, a copy of your current database, to confirm migration without touching the live one. |
-| Tag and publish | Merge to `main`, tag `v0.1.0`, create a GitHub release with the `.nupkg`. Publishing to nuget.org is a separate decision. |
+| Upgrade | Install the packed 0.5.0 into a temporary `--tool-path` and run it against a synthetic older-schema database. Optionally, with your approval, a copy of your current database, to confirm migration without touching the live one. |
+| Tag and publish | Merge to `main`, tag `v0.5.0`, create a GitHub release with the `.nupkg`. Publishing to nuget.org is a separate decision. |
 
 ## Phase 3: live host tests
 

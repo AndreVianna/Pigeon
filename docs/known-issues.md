@@ -1,6 +1,6 @@
 # Known issues and technical debt
 
-This list reflects the alpha.19 implementation. A topic is a project, and a tool/session pair is a routing claim, not an authenticated identity.
+This list reflects the 0.5.0-beta.1 implementation. A topic is a project, and a tool/session pair is a routing claim, not an authenticated identity.
 
 ## Notification reliability
 
