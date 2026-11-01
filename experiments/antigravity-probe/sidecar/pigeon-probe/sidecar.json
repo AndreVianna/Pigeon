@@ -1,0 +1,9 @@
+{
+  "command": "C:\\Program Files\\Python312\\python.exe",
+  "args": [
+    "C:\\Projects\\Pigeon\\experiments\\antigravity-probe\\scripts\\sidecar.py"
+  ],
+  "restart_policy": "always",
+  "display_name": "Pigeon probe",
+  "description": "Test sidecar for the Pigeon research: sends one test message to a conversation when asked, and logs the result."
+}

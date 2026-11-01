@@ -10,3 +10,5 @@ node_modules/
 *.db-shm
 *.db-wal
 .claude/settings.local.json
+experiments/antigravity-probe/logs/
+experiments/cursor-probe/logs/

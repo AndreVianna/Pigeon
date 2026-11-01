@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "python C:\\Projects\\Pigeon\\experiments\\cursor-probe\\scripts\\hook.py sessionStart",
+        "timeout": 10
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "python C:\\Projects\\Pigeon\\experiments\\cursor-probe\\scripts\\hook.py beforeSubmitPrompt",
+        "timeout": 10
+      }
+    ],
+    "stop": [
+      {
+        "command": "python C:\\Projects\\Pigeon\\experiments\\cursor-probe\\scripts\\hook.py stop",
+        "timeout": 900
+      }
+    ]
+  }
+}
