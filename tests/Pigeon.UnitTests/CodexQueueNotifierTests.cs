@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Pigeon.Adapters;
-using Pigeon.Core;
 using Xunit;
 
 namespace Pigeon.UnitTests;
@@ -12,31 +11,40 @@ public sealed class CodexQueueNotifierTests {
     public async Task Failed_queue_attempt_is_recorded_and_not_immediately_retried() {
         var calls = 0;
         var outcomes = new List<string>();
-        var notifier = Create(Session, "codex", Session, (_, _, _) => { calls++; return Task.FromResult(false); }, outcomes);
+        var notifier = Create(Session, claimAccepted: true, (_, _, _) => { calls++; return Task.FromResult(false); }, outcomes);
         for (var i = 0; i < 4; i++) await notifier.TickAsync(CancellationToken.None);
         Assert.Equal(1, calls);
         Assert.Equal(["transport-failed"], outcomes);
     }
 
+    [Fact]
+    public async Task Queues_the_fixed_wake_prompt_for_the_bound_session_only() {
+        string? target = null, prompt = null;
+        var notifier = Create(Session, claimAccepted: true, (session, message, _) => { target = session; prompt = message; return Task.FromResult(true); }, []);
+        await notifier.TickAsync(CancellationToken.None);
+        Assert.Equal(Session, target);
+        Assert.StartsWith("Pigeon wake generation 1284d10c6f3f471fa834a87ba13e71fa. Call pigeon_receive", prompt);
+    }
+
     [Theory]
-    [InlineData("not-a-uuid", "codex", "not-a-uuid")]
-    [InlineData(Session, "claude-code", Session)]
-    [InlineData(Session, "codex", "c1122145-145c-4af1-b02b-c2731e423fed")]
-    public async Task Does_not_queue_for_an_invalid_or_mismatched_binding(string claimed, string runtime, string bound) {
+    [InlineData("not-a-uuid", true)]
+    [InlineData(null, true)]
+    // The service refuses the claim when the session did not join as codex.
+    [InlineData(Session, false)]
+    public async Task Does_not_queue_for_an_invalid_or_refused_session(string? bound, bool claimAccepted) {
         var calls = 0;
-        var notifier = Create(claimed, runtime, bound, (_, _, _) => { calls++; return Task.FromResult(true); }, []);
+        var notifier = Create(bound, claimAccepted, (_, _, _) => { calls++; return Task.FromResult(true); }, []);
         await notifier.TickAsync(CancellationToken.None);
         Assert.Equal(0, calls);
     }
 
-    private static CodexQueueNotifier Create(string claimed, string runtime, string bound,
+    private static CodexQueueNotifier Create(string? bound, bool claimAccepted,
         Func<string, string, CancellationToken, Task<bool>> queue, List<string> outcomes) {
         var claimedOnce = false;
-        return new(() => new Principal("test", "recipient"), () => claimed,
-            (_, operation, args, _) => {
+        return new(() => bound,
+            (operation, args, _) => {
                 object result = operation switch {
-                    "connection" => new { Ok = true, Value = new { binding = new { Runtime = runtime, SessionId = bound } } },
-                    "wake_claim" => ClaimOnce(ref claimedOnce),
+                    "wake_claim" => claimAccepted ? ClaimOnce(ref claimedOnce) : new { Ok = false, Error = "Wake mode does not match the session's tool." },
                     "wake_result" => Recorded(args, outcomes),
                     _ => throw new InvalidOperationException()
                 };

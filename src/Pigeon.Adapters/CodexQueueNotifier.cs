@@ -1,47 +1,38 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
-using Pigeon.Core;
 using Pigeon.Service;
 
 namespace Pigeon.Adapters;
 
 // Queue acceptance is not a wake confirmation or a message acknowledgment.
 public sealed class CodexQueueNotifier {
-    private readonly Func<Principal> principal;
     private readonly Func<string?> sessionId;
-    private readonly Func<Principal, string, object, CancellationToken, Task<JsonElement>> broker;
+    private readonly Func<string, object, CancellationToken, Task<JsonElement>> broker;
     private readonly Func<string, string, CancellationToken, Task<bool>> enqueue;
 
-    public CodexQueueNotifier(string port, Func<Principal> principal, Func<string?> sessionId)
-        : this(principal, sessionId, (p, op, args, token) => LocalHttpClient.ExecuteAsync(port, p, op, args, token), QueueAsync) { }
+    public CodexQueueNotifier(string port, Func<string?> sessionId)
+        : this(sessionId, (op, args, token) => LocalHttpClient.ExecuteAsync(port, op, args, token), QueueAsync) { }
 
-    public CodexQueueNotifier(Func<Principal> principal, Func<string?> sessionId,
-        Func<Principal, string, object, CancellationToken, Task<JsonElement>> broker,
+    public CodexQueueNotifier(Func<string?> sessionId,
+        Func<string, object, CancellationToken, Task<JsonElement>> broker,
         Func<string, string, CancellationToken, Task<bool>> enqueue) {
-        this.principal = principal;
         this.sessionId = sessionId;
         this.broker = broker;
         this.enqueue = enqueue;
     }
 
+    // The service refuses the claim unless the bound session joined as codex.
     public async Task<McpOutboundNotification?> TickAsync(CancellationToken cancellation) {
-        var p = principal();
         var id = sessionId();
         if (!Guid.TryParse(id, out _)) return null;
-        var connection = await broker(p, "connection", new { }, cancellation);
-        if (!connection.GetProperty("Ok").GetBoolean()) return null;
-        var binding = connection.GetProperty("Value").GetProperty("binding");
-        if (binding.ValueKind == JsonValueKind.Null ||
-            !string.Equals(binding.GetProperty("Runtime").GetString(), "codex", StringComparison.OrdinalIgnoreCase) ||
-            binding.GetProperty("SessionId").GetString() != id) return null;
-        var claim = await broker(p, "wake_claim", new { mode = "codex-queue" }, cancellation);
+        var claim = await broker("wake_claim", new { sessionId = id, mode = "codex-queue" }, cancellation);
         if (!claim.GetProperty("Ok").GetBoolean() || claim.GetProperty("Value").ValueKind == JsonValueKind.Null) return null;
         var value = claim.GetProperty("Value");
         var generation = value.GetProperty("Generation").GetString()!;
         var attempt = value.GetProperty("Attempt").GetInt32();
         var accepted = await enqueue(id!, WakePrompt.For(generation), cancellation);
-        _ = await broker(p, "wake_result", new { generation, attempt, outcome = accepted ? "transport-accepted" : "transport-failed" }, cancellation);
+        _ = await broker("wake_result", new { sessionId = id, generation, attempt, outcome = accepted ? "transport-accepted" : "transport-failed" }, cancellation);
         return null;
     }
 

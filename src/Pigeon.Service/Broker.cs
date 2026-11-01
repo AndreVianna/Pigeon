@@ -8,99 +8,72 @@ public sealed record BrokerResult(bool Ok, object? Value, string? Error);
 public sealed class Broker : IDisposable {
     private readonly Mailbox mailbox;
     private readonly long? bodyRetentionMilliseconds;
+    private readonly long abandonedTopicMilliseconds;
     private readonly Func<long> clock;
     private readonly object gate = new();
-    private readonly Dictionary<string, (string Project, string Agent, string Mode, string? Restoration, long Seen)> bridges = new(StringComparer.Ordinal);
-    // One Claude notifier owns an identity's wakes at a time. Ownership is a routing
-    // safeguard kept only in memory; holders renew it every tick and reacquire after a restart.
-    private readonly Dictionary<(string Project, string Agent), (string Holder, string Mode, long Seen)> owners = [];
+    private readonly Dictionary<string, (string? Session, string Mode, string? Restoration, long Seen)> bridges = new(StringComparer.Ordinal);
+    // One Claude notifier owns a session's wakes at a time. Ownership is a routing safeguard
+    // kept only in memory; holders renew it every tick and reacquire it after a restart.
+    private readonly Dictionary<string, (string Holder, string Mode, long Seen)> owners = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> superseded = new(StringComparer.Ordinal);
-    private readonly Dictionary<(string Project, string Agent), (string Mode, string Reason, long At)> released = [];
-    private readonly Dictionary<string, long> lastRedaction = new(StringComparer.Ordinal);
-    private const long OwnerTimeoutMilliseconds = 15000;
+    private readonly Dictionary<string, (string Mode, string Reason, long At)> released = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> lastTouch = new(StringComparer.Ordinal);
+    private long lastMaintenance, lastRequest;
+    private const long BridgeTimeoutMilliseconds = 15000, OwnerTimeoutMilliseconds = 15000;
     // Clients treat this error as a temporary service outage, not a rejected request.
     public const string StorageUnavailable = "storage unavailable";
 
-    public Broker(string databasePath, Func<long>? clock = null, long? bodyRetentionMilliseconds = null, int maxAttempts = 3, int maxAutomated = 4, int maxAutomatedPerMinute = 100, bool topicMode = false, int maxWakeAttempts = 3, long wakeRetryMilliseconds = 120000) {
-        if (bodyRetentionMilliseconds is <= 0)
+    public Broker(string databasePath, Func<long>? clock = null, long? bodyRetentionMilliseconds = null, int maxAttempts = 3, int maxMessagesPerHour = 60, int maxWakeAttempts = 3, long wakeRetryMilliseconds = 120000, long abandonedTopicMilliseconds = 3600000, long leaseMilliseconds = 600000) {
+        if (bodyRetentionMilliseconds is <= 0 || abandonedTopicMilliseconds <= 0)
             throw new ArgumentOutOfRangeException(nameof(bodyRetentionMilliseconds));
         this.bodyRetentionMilliseconds = bodyRetentionMilliseconds;
+        this.abandonedTopicMilliseconds = abandonedTopicMilliseconds;
         this.clock = clock ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-        mailbox = new Mailbox(databasePath, clock, maxAttempts, maxAutomated, maxAutomatedPerMinute, maxWakeAttempts, wakeRetryMilliseconds);
-        if (topicMode) {
-            try { mailbox.EnableTopicMode(); }
-            catch { mailbox.Dispose(); throw; }
-        }
+        mailbox = new Mailbox(databasePath, clock, maxAttempts, maxMessagesPerHour, maxWakeAttempts, wakeRetryMilliseconds, leaseMilliseconds);
+        try { mailbox.TouchAll(); }
+        catch { mailbox.Dispose(); throw; }
+        lastMaintenance = lastRequest = this.clock();
     }
 
-    // Identity and project are caller-supplied routing labels, not authentication.
-    internal BrokerResult Execute(Principal principal, string operation, JsonElement args) {
+    internal BrokerResult Execute(string operation, JsonElement args) {
         lock (gate) {
             try {
                 if (args.ValueKind != JsonValueKind.Object)
                     throw new ArgumentException("Arguments must be an object");
-                // Perform optional maintenance before the requested operation so
-                // a maintenance error cannot disguise a committed send or ack.
-                // The sweep scans every terminal message in a write transaction, so it runs at most
-                // once per interval per project rather than on every heartbeat and waiter poll.
-                if (bodyRetentionMilliseconds is long retention && clock() - lastRedaction.GetValueOrDefault(principal.Project, long.MinValue / 2) >= Math.Min(retention, 60000) && mailbox.FindIdentity(principal) is not null) {
-                    _ = mailbox.RedactTerminalBodies(principal, retention);
-                    lastRedaction[principal.Project] = clock();
-                }
-                // Agent-originated sends are always classified as automated. The
-                // host, not caller input, chooses this safety classification.
+                Maintain();
                 var result = operation switch {
-                    "register" => Register(principal, args),
-                    "session_join" => mailbox.JoinSession(principal.Project, Str(args, "tool"), Str(args, "sessionId"), Str(args, "topic")),
-                    "session_restore" => mailbox.RestoreSession(principal.Project, Str(args, "tool"), Str(args, "sessionId")),
-                    "session_candidates" => mailbox.LegacyCandidates(principal.Project, Str(args, "tool"), Str(args, "sessionId")),
-                    "session_adopt" => mailbox.AdoptLegacySession(principal.Project, Str(args, "tool"), Str(args, "sessionId"), Str(args, "legacyAgent")),
-                    "session_send" => SessionSend(principal, args),
-                    "session_leave" => SessionLeave(principal, args),
-                    "topic_sessions" => mailbox.TopicSessions(principal.Project, Str(args, "topic")),
-                    "connection" => new { service = "available", project = principal.Project, agent = principal.Agent, binding = mailbox.FindIdentity(principal) },
-                    "bridge_heartbeat" => BridgeHeartbeat(principal, args),
-                    "bridge_disconnect" => BridgeDisconnect(principal, args),
-                    "bridges" => ActiveBridges(principal),
-                    "claude_session_bridges" => ClaudeSessionBridges(principal, Str(args, "sessionId")),
-                    "identity" => mailbox.Identity(principal),
-                    "inbox_status" => mailbox.Inbox(principal),
-                    "send" => Send(principal, args),
-                    "receive" => mailbox.Receive(principal, 30000, Optional(args, "topic")),
-                    "wake_owner" => WakeOwner(principal, args),
-                    "wake_owner_check" => WakeOwnerCheck(principal, args),
-                    "wake_owner_release" => WakeOwnerRelease(principal, args),
-                    "wake_claim" => ClaimWake(principal, args),
-                    "wake_result" => mailbox.RecordWakeResult(principal, Str(args, "generation"), checked((int)(OptionalNumber(args, "attempt") ?? throw new ArgumentException())), Str(args, "outcome")),
-                    "wake_confirm" => mailbox.ConfirmWake(principal, Str(args, "generation")),
-                    "wake_complete" => mailbox.FinishWake(principal, Str(args, "generation")),
-                    "wake_status" => mailbox.GetWakeStatus(principal),
-                    "wake_retry" => mailbox.RetryWake(principal),
-                    "wake_states" => mailbox.PendingWakeStatuses(principal.Project),
-                    "acknowledge" => mailbox.Ack(principal, Str(args, "receipt")),
-                    "subscribe" => Subscribe(principal, args),
-                    "topic_join" => JoinTopic(principal, args),
-                    "topic_create" => CreateTopic(principal, args),
-                    "topic_delete" => mailbox.DeleteTopicForProject(principal.Project, Str(args, "topic")),
-                    "topics" => mailbox.TopicsForProject(principal.Project),
-                    "topic_read" => mailbox.ReadTopic(principal, Str(args, "topic"), OptionalNumber(args, "afterSequence"), checked((int)(OptionalNumber(args, "limit") ?? 3))),
-                    "mailboxes" => mailbox.Subscriptions(principal),
-                    "publish" => Publish(principal, args),
-                    "status" => mailbox.Details(principal, Str(args, "messageId")),
-                    "pause" => Pause(principal, args),
-                    "activity" => mailbox.Activity(principal, OptionalNumber(args, "beforeSequence"), checked((int)(OptionalNumber(args, "limit") ?? 10))),
+                    "topics" => mailbox.Topics(Optional(args, "sessionId")),
+                    "join" => mailbox.Join(Str(args, "tool"), Str(args, "sessionId"), Str(args, "topic")),
+                    "leave" => new { deleted = mailbox.Leave(Str(args, "sessionId"), Str(args, "topic")) },
+                    "send" => Send(args),
+                    "take" => mailbox.Take(Str(args, "sessionId"), Str(args, "topic")),
+                    "session" => mailbox.Session(Str(args, "sessionId")),
+                    "session_restore" => mailbox.Restore(Str(args, "tool"), Str(args, "sessionId")),
+                    "bridge_heartbeat" => BridgeHeartbeat(args),
+                    "bridge_disconnect" => new { removed = bridges.Remove(Str(args, "id")) },
+                    "bridges" => ActiveBridges(),
+                    "claude_session_bridges" => ClaudeSessionBridges(Str(args, "sessionId")),
+                    "wake_owner" => WakeOwner(args),
+                    "wake_owner_check" => WakeOwnerCheck(args),
+                    "wake_owner_release" => WakeOwnerRelease(args),
+                    "wake_claim" => ClaimWake(args),
+                    "wake_result" => mailbox.RecordWakeResult(Str(args, "sessionId"), Str(args, "generation"), checked((int)(OptionalNumber(args, "attempt") ?? throw new ArgumentException())), Str(args, "outcome")),
+                    "wake_receive" => mailbox.ReceiveForWake(Str(args, "sessionId"), Str(args, "generation")),
+                    "wake_complete" => mailbox.FinishWake(Str(args, "sessionId"), Str(args, "generation")),
+                    "wake_status" => mailbox.GetWakeStatus(Str(args, "sessionId")),
+                    "wake_states" => mailbox.PendingWakeStatuses(),
                     _ => throw new ArgumentException("Unknown operation")
                 };
                 return new(true, result, null);
             }
-            catch (ArgumentException) {
-                return new(false, null, "invalid request");
-            }
-            catch (InvalidOperationException e) {
-                return new(false, null, e.Message == "Unknown topic" ? "Topic does not exist" : e.Message.StartsWith("Ambiguous legacy tool and session", StringComparison.Ordinal) ? e.Message : "operation rejected");
+            catch (ArgumentException e) {
+                return new(false, null, e.Message.StartsWith("Invalid ", StringComparison.Ordinal) ? e.Message + "." : "invalid request");
             }
             catch (OverflowException) {
                 return new(false, null, "invalid request");
+            }
+            catch (InvalidOperationException e) {
+                return new(false, null, e.Message);
             }
             catch (StorageUnavailableException) {
                 return new(false, null, StorageUnavailable);
@@ -108,57 +81,72 @@ public sealed class Broker : IDisposable {
         }
     }
 
-    private object BridgeHeartbeat(Principal p, JsonElement args) {
+    // Housekeeping runs before the requested operation, at most once a minute. A long gap since
+    // the previous request means the service or computer was suspended: every session gets a
+    // fresh grace period before any topic counts as abandoned.
+    private void Maintain() {
+        var now = clock();
+        if (now - lastRequest > 300000) mailbox.TouchAll();
+        lastRequest = now;
+        if (now - lastMaintenance < 60000) return;
+        lastMaintenance = now;
+        _ = mailbox.DeleteAbandoned(abandonedTopicMilliseconds);
+        if (bodyRetentionMilliseconds is long retention) _ = mailbox.RedactTerminalBodies(retention);
+    }
+
+    private bool Connected(string session) {
+        var cutoff = clock() - BridgeTimeoutMilliseconds;
+        return bridges.Values.Any(b => b.Session == session && b.Seen >= cutoff);
+    }
+
+    private object Send(JsonElement args) {
+        var topic = Str(args, "topic");
+        var outcome = mailbox.Send(Str(args, "sessionId"), topic, Str(args, "message"), Optional(args, "retryKey") ?? Guid.NewGuid().ToString("N"), checked(clock() + 86400000));
+        var delivery = outcome.Recipient is null ? "no-recipient" : Connected(outcome.Recipient.SessionId) ? "sent" : "recipient-offline";
+        return new { messageId = outcome.MessageId, delivery, text = Phrases.SendResult(delivery, topic) };
+    }
+
+    private object BridgeHeartbeat(JsonElement args) {
         var id = Str(args, "id");
         var mode = Str(args, "mode");
+        var session = Optional(args, "sessionId");
         var restoration = Optional(args, "restoration");
-        if (!Guid.TryParseExact(id, "N", out _) || mode is not ("mcp" or "claude-channel" or "codex-queue" or "claude-monitor" or "claude-hook"))
+        if (!Guid.TryParseExact(id, "N", out _) || mode is not ("mcp" or "codex-queue" or "claude-hook"))
             throw new ArgumentException();
         if (restoration is not (null or "pending" or "bound" or "missing-session" or "not-configured" or "conflict")) throw new ArgumentException();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        foreach (var stale in bridges.Where(pair => pair.Value.Seen < now - 15000).Select(pair => pair.Key).ToArray()) bridges.Remove(stale);
-        if (!bridges.ContainsKey(id) && bridges.Count >= 1024) throw new InvalidOperationException();
-        bridges[id] = (p.Project, p.Agent, mode, restoration, now);
+        var now = clock();
+        foreach (var stale in bridges.Where(pair => pair.Value.Seen < now - BridgeTimeoutMilliseconds).Select(pair => pair.Key).ToArray()) bridges.Remove(stale);
+        if (!bridges.ContainsKey(id) && bridges.Count >= 1024) throw new InvalidOperationException("Too many connected bridges.");
+        bridges[id] = (session, mode, restoration, now);
+        // Record that the session is alive, at most once a minute.
+        if (session is not null && now - lastTouch.GetValueOrDefault(session, long.MinValue / 2) >= 60000) {
+            mailbox.Touch(session);
+            lastTouch[session] = now;
+        }
         return new { recorded = true };
     }
-    private object BridgeDisconnect(Principal p, JsonElement args) {
-        var id = Str(args, "id");
-        if (bridges.TryGetValue(id, out var bridge) && bridge.Project == p.Project && bridge.Agent == p.Agent)
-            bridges.Remove(id);
-        return new { removed = true };
-    }
-    private object ActiveBridges(Principal p) {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    private object ActiveBridges() {
+        var now = clock();
         PruneOwners(now);
-        var cutoff = now - 15000;
-        foreach (var id in bridges.Where(pair => pair.Value.Seen < cutoff).Select(pair => pair.Key).ToArray()) bridges.Remove(id);
-        return bridges.Values.Where(value => value.Project == p.Project).Select(value => {
-            var identity = new Principal(value.Project, value.Agent);
-            var binding = mailbox.FindIdentity(identity);
-            return new { agent = value.Agent, mode = value.Mode, restoration = value.Restoration, lastSeenUnixMs = value.Seen, binding, topics = binding is null ? Array.Empty<string>() : mailbox.Subscriptions(identity), wake = binding is null ? null : mailbox.GetWakeStatus(identity), notifier = Notifier(value.Project, value.Agent) };
+        foreach (var id in bridges.Where(pair => pair.Value.Seen < now - BridgeTimeoutMilliseconds).Select(pair => pair.Key).ToArray()) bridges.Remove(id);
+        return bridges.Values.Select(value => {
+            var session = value.Session is null ? null : mailbox.Session(value.Session);
+            return new { sessionId = value.Session, tool = session?.Tool, mode = value.Mode, restoration = value.Restoration, lastSeenUnixMs = value.Seen, topics = session?.Topics ?? [], wake = session is null ? null : mailbox.GetWakeStatus(session.SessionId), notifier = session is null ? null : Notifier(session.SessionId) };
         }).ToArray();
     }
 
-    // Waiters need only matching live MCP identities. Avoid building the full status
-    // report and sweeping every bridge's inbox once a second for each waiter.
-    private string[] ClaudeSessionBridges(Principal p, string sessionId) {
-        var cutoff = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - 15000;
-        return bridges.Values.Where(b => b.Project == p.Project && b.Mode == "mcp" && b.Seen >= cutoff)
-            .Select(b => b.Agent).Distinct(StringComparer.Ordinal)
-            .Where(agent => {
-                var identity = mailbox.FindIdentity(new Principal(p.Project, agent));
-                return identity is not null && Mailbox.ToolName(identity.Runtime) == "claude-code" && identity.SessionId == sessionId;
-            }).ToArray();
+    // Hook waiters need to know only whether a live MCP bridge is bound to their Claude session.
+    private bool ClaudeSessionBridges(string session) {
+        var cutoff = clock() - BridgeTimeoutMilliseconds;
+        return bridges.Values.Any(b => b.Mode == "mcp" && b.Session == session && b.Seen >= cutoff) && mailbox.Session(session)?.Tool == "claude-code";
     }
 
-    private object Notifier(string project, string agent) {
-        var key = (project, agent);
-        string? active = owners.TryGetValue(key, out var owner) ? owner.Mode : null;
-        object? lastRelease = released.TryGetValue(key, out var last) ? new { mode = last.Mode, reason = last.Reason, atUnixMs = last.At } : null;
+    private object Notifier(string session) {
+        string? active = owners.TryGetValue(session, out var owner) ? owner.Mode : null;
+        object? lastRelease = released.TryGetValue(session, out var last) ? new { mode = last.Mode, reason = last.Reason, atUnixMs = last.At } : null;
         return new { active, lastRelease };
     }
-
-    private static bool IsClaudeNotifier(string mode) => mode is "claude-channel" or "claude-monitor" or "claude-hook";
 
     private void PruneOwners(long now) {
         foreach (var (key, owner) in owners.Where(pair => pair.Value.Seen < now - OwnerTimeoutMilliseconds).ToArray()) {
@@ -170,132 +158,82 @@ public sealed class Broker : IDisposable {
             _ = superseded.Remove(holder);
     }
 
-    // A newer holder of the same mode replaces the older one, as each Claude turn starts a
-    // fresh hook waiter. A live holder of another mode is never displaced.
-    private object WakeOwner(Principal p, JsonElement args) {
+    // A newer holder replaces the older one, as each Claude turn starts a fresh hook waiter.
+    private object WakeOwner(JsonElement args) {
+        var session = Str(args, "sessionId");
         var holder = Str(args, "holderId");
         var mode = Str(args, "mode");
-        if (!Guid.TryParseExact(holder, "N", out _) || !IsClaudeNotifier(mode)) throw new ArgumentException();
-        if (mailbox.FindIdentity(p) is null) throw new InvalidOperationException();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        if (!Guid.TryParseExact(holder, "N", out _) || mode != "claude-hook") throw new ArgumentException();
+        if (mailbox.Session(session) is null) throw new InvalidOperationException($"Session {session} is not known.");
+        var now = clock();
         PruneOwners(now);
-        var key = (p.Project, p.Agent);
-        if (owners.TryGetValue(key, out var current) && current.Holder != holder) {
-            if (superseded.ContainsKey(holder)) superseded[holder] = now;
-            if (current.Mode != mode || superseded.ContainsKey(holder))
+        if (owners.TryGetValue(session, out var current) && current.Holder != holder) {
+            if (superseded.ContainsKey(holder)) {
+                superseded[holder] = now;
                 return new { owner = false, active = current.Mode };
-            if (superseded.Count >= 1024) throw new InvalidOperationException();
+            }
+            if (superseded.Count >= 1024) throw new InvalidOperationException("Too many notifiers.");
             superseded[current.Holder] = now;
-            released[key] = (current.Mode, "superseded", now);
+            released[session] = (current.Mode, "superseded", now);
         }
-        else if (!owners.ContainsKey(key) && owners.Count >= 1024) throw new InvalidOperationException();
+        else if (!owners.ContainsKey(session) && owners.Count >= 1024) throw new InvalidOperationException("Too many notifiers.");
         _ = superseded.Remove(holder);
-        owners[key] = (holder, mode, now);
+        owners[session] = (holder, mode, now);
         return new { owner = true, active = mode };
     }
 
-    private object WakeOwnerCheck(Principal p, JsonElement args) {
+    private object WakeOwnerCheck(JsonElement args) {
+        var session = Str(args, "sessionId");
         var holder = Str(args, "holderId");
-        PruneOwners(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-        var owns = owners.TryGetValue((p.Project, p.Agent), out var owner) && owner.Holder == holder && owner.Mode == "claude-hook";
-        if (!owns) return new { owner = false };
-        var inbox = mailbox.Inbox(p);
-        // An unsubscribed session with no outstanding deliveries has nothing to watch.
-        return new { owner = mailbox.Subscriptions(p).Length > 0 || inbox.Queued > 0 || inbox.Leased > 0 };
+        PruneOwners(clock());
+        if (!owners.TryGetValue(session, out var owner) || owner.Holder != holder) return new { owner = false };
+        // A session in no topic and with nothing waiting has nothing to watch.
+        var status = mailbox.GetWakeStatus(session);
+        return new { owner = mailbox.Session(session)?.Topics.Length > 0 || status.Queued + status.Leased > 0 };
     }
 
-    private object WakeOwnerRelease(Principal p, JsonElement args) {
+    private object WakeOwnerRelease(JsonElement args) {
+        var session = Str(args, "sessionId");
         var holder = Str(args, "holderId");
         var reason = Str(args, "reason");
         if (reason is not ("woke" or "renewed" or "expired" or "orphaned" or "stopped")) throw new ArgumentException();
-        var key = (p.Project, p.Agent);
-        if (!owners.TryGetValue(key, out var owner) || owner.Holder != holder) return new { released = false };
-        _ = owners.Remove(key);
-        released[key] = (owner.Mode, reason, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        if (!owners.TryGetValue(session, out var owner) || owner.Holder != holder) return new { released = false };
+        _ = owners.Remove(session);
+        released[session] = (owner.Mode, reason, clock());
         return new { released = true };
     }
 
-    private WakeClaim? ClaimWake(Principal p, JsonElement args) {
+    private WakeClaim? ClaimWake(JsonElement args) {
+        var session = Str(args, "sessionId");
         var mode = Str(args, "mode");
-        if (IsClaudeNotifier(mode)) {
-            PruneOwners(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        if (mode == "claude-hook") {
+            PruneOwners(clock());
             var holder = Optional(args, "holderId");
-            if (holder is null || !owners.TryGetValue((p.Project, p.Agent), out var owner) || owner.Holder != holder || owner.Mode != mode)
-                return null;
+            if (holder is null || !owners.TryGetValue(session, out var owner) || owner.Holder != holder) return null;
         }
-        return mailbox.ClaimWake(p, mode, Optional(args, "sessionId"));
+        return mailbox.ClaimWake(session, mode);
     }
 
-    private object Register(Principal p, JsonElement args) {
-        mailbox.Register(p.Project, p.Agent, Str(args, "runtime"), Str(args, "sessionId"), Optional(args, "origin") ?? "unknown");
-        return new { registered = true, project = p.Project, agent = p.Agent, runtimeVerified = false };
-    }
-    private (string Correlation, string Key, long Expires) MessageOptions(JsonElement args) {
-        var correlation = Optional(args, "correlationId");
-        var key = Optional(args, "idempotencyKey");
-        var expiry = OptionalNumber(args, "expiresAtUnixMs");
-        if (key is not null && (correlation is null || expiry is null))
-            throw new ArgumentException("A retry key requires a fixed correlation ID and expiry");
-        if (Optional(args, "replyTo") is not null && correlation is null)
-            throw new ArgumentException("A reply requires the original correlation ID");
-        return (correlation ?? Guid.NewGuid().ToString("N"), key ?? Guid.NewGuid().ToString("N"), expiry ?? checked(clock() + 86400000));
-    }
-    private object Send(Principal p, JsonElement args) {
-        var options = MessageOptions(args);
-        return mailbox.Send(p, Str(args, "recipient"), Str(args, "body"), options.Correlation, Optional(args, "replyTo"), options.Key, options.Expires, true, Optional(args, "topic"));
-    }
-    private object SessionSend(Principal p, JsonElement args) {
-        var target = mailbox.RestoreSession(p.Project, Str(args, "recipientTool"), Str(args, "recipientSessionId")) ?? throw new InvalidOperationException("Unknown recipient session");
-        var options = MessageOptions(args);
-        return mailbox.Send(p, target.Agent, Str(args, "body"), options.Correlation, Optional(args, "replyTo"), options.Key, options.Expires, true, Optional(args, "topic"));
-    }
-    private object SessionLeave(Principal p, JsonElement args) {
-        var route = mailbox.RestoreSession(p.Project, Str(args, "tool"), Str(args, "sessionId")) ?? throw new InvalidOperationException("Unknown session");
-        mailbox.Subscribe(new Principal(p.Project, route.Agent), Str(args, "topic"), false);
-        return new { subscribed = false };
-    }
-    private object Publish(Principal p, JsonElement args) {
-        var options = MessageOptions(args);
-        return mailbox.Publish(p, Str(args, "topic"), Str(args, "body"), options.Correlation, options.Key, options.Expires, true);
-    }
-    private object Subscribe(Principal p, JsonElement args) {
-        var subscribed = !args.TryGetProperty("subscribed", out var v) || Bool(v);
-        mailbox.Subscribe(p, Str(args, "topic"), subscribed);
-        return new { subscribed };
-    }
-    private object CreateTopic(Principal p, JsonElement args) {
-        var created = mailbox.CreateTopicForProject(p.Project, Str(args, "topic"));
-        return new { created, warning = created ? null : "Topic already exists" };
-    }
-    private object JoinTopic(Principal p, JsonElement args) {
-        mailbox.RegisterAndSubscribe(p, Str(args, "topic"), Str(args, "runtime"), Str(args, "sessionId"));
-        return new { subscribed = true, project = p.Project, agent = p.Agent, runtimeVerified = false };
-    }
-    private object Pause(Principal p, JsonElement args) {
-        if (!args.TryGetProperty("paused", out var v))
-            throw new ArgumentException("Missing paused");
-        var paused = Bool(v);
-        mailbox.Pause(p, paused);
-        return new { paused };
-    }
     private static string Str(JsonElement e, string key) => Optional(e, key) ?? throw new ArgumentException("Required argument missing");
-    private static string? Optional(JsonElement e, string key) => e.ValueKind != JsonValueKind.Object
-            ? throw new ArgumentException("Arguments must be an object")
-            : !e.TryGetProperty(key, out var v) || v.ValueKind == JsonValueKind.Null
-            ? null
-            : v.ValueKind != JsonValueKind.String ? throw new ArgumentException("Invalid argument type") : v.GetString();
+    private static string? Optional(JsonElement e, string key) => !e.TryGetProperty(key, out var v) || v.ValueKind == JsonValueKind.Null
+        ? null
+        : v.ValueKind != JsonValueKind.String ? throw new ArgumentException("Invalid argument type") : v.GetString();
     private static long? OptionalNumber(JsonElement e, string key) {
         if (!e.TryGetProperty(key, out var v) || v.ValueKind == JsonValueKind.Null)
             return null;
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var value) ? value : throw new ArgumentException("Invalid number");
     }
-    private static bool Bool(JsonElement e) => e.ValueKind switch {
-        JsonValueKind.True => true,
-        JsonValueKind.False => false,
-        _ => throw new ArgumentException("Invalid boolean")
-    };
     public void Dispose() {
         lock (gate)
             mailbox.Dispose();
     }
+}
+
+// Wording shared by the CLI and the MCP tools.
+public static class Phrases {
+    public static string SendResult(string delivery, string topic) => delivery switch {
+        "sent" => "Sent.",
+        "recipient-offline" => "The recipient is unavailable right now; your message will wait until it returns (up to 24 hours).",
+        _ => $"The recipient is unavailable: nobody else is in {topic}. Your message is held until someone joins (up to 24 hours)."
+    };
 }

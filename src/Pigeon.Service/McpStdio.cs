@@ -4,7 +4,7 @@ public sealed record McpOutboundNotification(string Json, Func<CancellationToken
 
 // The stdio bridge has no database path and never starts a private service.
 public static class McpStdio {
-    public static async Task RunAsync(TextReader input, TextWriter output, McpSession session, CancellationToken cancellation = default, Func<CancellationToken, Task<McpOutboundNotification?>>? nextNotification = null, string notificationMode = "claude-channel") {
+    public static async Task RunAsync(TextReader input, TextWriter output, McpSession session, CancellationToken cancellation = default, Func<CancellationToken, Task<McpOutboundNotification?>>? nextNotification = null, string notificationMode = "codex-queue") {
         using var stopped = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         using var writeGate = new SemaphoreSlim(1, 1);
         async Task WriteAsync(string line, CancellationToken token) {
@@ -40,7 +40,7 @@ public static class McpStdio {
                 if (session.IsReady) {
                     try {
                         await session.TryRestoreAsync(stopped.Token);
-                        _ = await session.BridgeAsync("bridge_heartbeat", new { id = bridgeId, mode = nextNotification is null ? "mcp" : notificationMode, restoration = session.RestoreState }, stopped.Token);
+                        _ = await session.BridgeAsync("bridge_heartbeat", new { id = bridgeId, mode = nextNotification is null ? "mcp" : notificationMode, sessionId = session.SessionId, restoration = session.RestoreState }, stopped.Token);
                     }
                     catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
                     catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { }

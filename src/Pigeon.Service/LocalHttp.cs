@@ -10,7 +10,7 @@ using Pigeon.Core;
 
 namespace Pigeon.Service;
 
-internal sealed record BrokerRequest(Principal Principal, string Operation, JsonElement Arguments);
+internal sealed record BrokerRequest(string Operation, JsonElement Arguments);
 
 // The protocol is local-only, but is not authenticated: all local users can access it.
 public sealed class LocalHttpServer(string port, Broker broker, Action? stopRequested = null) {
@@ -37,11 +37,11 @@ public sealed class LocalHttpServer(string port, Broker broker, Action? stopRequ
             try {
                 var request = await context.Request.ReadFromJsonAsync<BrokerRequest>(cancellationToken: context.RequestAborted);
                 var stop = request?.Operation == "service_stop" && stopRequested is not null;
-                var result = request is null || request.Principal is null || string.IsNullOrWhiteSpace(request.Principal.Project) || string.IsNullOrWhiteSpace(request.Principal.Agent) || request.Operation is null
+                var result = request is null || request.Operation is null
                     ? new BrokerResult(false, null, "invalid request")
                     : request.Operation == "service_status" ? new BrokerResult(true, new { available = true, version = PigeonVersion.Current }, null)
                     : stop ? new BrokerResult(true, new { stopping = true }, null)
-                    : broker.Execute(request.Principal, request.Operation, request.Arguments);
+                    : broker.Execute(request.Operation, request.Arguments.ValueKind == JsonValueKind.Undefined ? JsonDocument.Parse("{}").RootElement : request.Arguments);
                 await context.Response.WriteAsJsonAsync(result, new JsonSerializerOptions(), cancellationToken: context.RequestAborted);
                 if (stop && result.Ok) {
                     await context.Response.CompleteAsync();
@@ -65,10 +65,10 @@ public static class PigeonVersion {
 
 public static class LocalHttpClient {
     private static readonly HttpClient Client = new(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(3) };
-    public static async Task<JsonElement> ExecuteAsync(string port, Principal principal, string operation, object args, CancellationToken cancellation = default) {
+    public static async Task<JsonElement> ExecuteAsync(string port, string operation, object args, CancellationToken cancellation = default) {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{port}/broker");
         request.Headers.Add("X-Pigeon-Client", "1");
-        request.Content = JsonContent.Create(new { Principal = principal, Operation = operation, Arguments = args });
+        request.Content = JsonContent.Create(new { Operation = operation, Arguments = args });
         try {
             using var response = await Client.SendAsync(request, cancellation);
             response.EnsureSuccessStatusCode();

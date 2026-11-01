@@ -1,6 +1,6 @@
 # Known issues and technical debt
 
-This list reflects the 0.5.0-beta.1 implementation. A topic is a project, and a tool/session pair is a routing claim, not an authenticated identity.
+This list reflects the 0.5.0-beta.1 implementation. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
 
 ## Notification reliability
 
@@ -8,11 +8,11 @@ This list reflects the 0.5.0-beta.1 implementation. A topic is a project, and a 
 
 The plugin requests a renewal turn after 12 idle hours and depends on Claude Desktop accepting the long hook timeout, delivering the turn, and running the Stop hook to arm a replacement. Short-deadline integration tests cover Pigeon's side, but a live Desktop renewal and the 12-hour timeout have not been verified. Each renewal uses the session's model; an otherwise idle session can use up to two renewal turns per day. Test a short renewal in an isolated Desktop conversation, then verify the long timeout before depending on unattended delivery.
 
-If the service is unavailable when renewal is due, a waiter that owned the session when it last reached the service still requests one renewal, so the next Stop hook re-arms a waiter that waits for the service to return. If another notifier owns the session, a standby hook can still expire; if that notifier later disappears, no hook waiter remains until another turn. Messages remain queued, subject to their normal expiry and retry limits.
+If the service is unavailable when renewal is due, a waiter that owned the session when it last reached the service still requests one renewal, so the next Stop hook re-arms a waiter that waits for the service to return. Messages remain queued, subject to their normal expiry and retry limits.
 
 ### Waiter lifetime follows its launcher chain, within limits
 
-A hook waiter or monitor holds every shell between itself and the first non-shell ancestor (normally Claude Code), plus that ancestor, and stops when any of them exits; an isolated test confirms that killing only the outer Git Bash process stops the waiter before it claims a wake. Limits: an ancestor that cannot be opened, has exited, or started after its child (a reused process ID) ends the chain unwatched; a non-shell process between the waiter and the host also ends the chain, so a host above it is not watched; and the walk stops after eight levels. On the host (Claude Desktop with Claude Code 2.1.309, 2026-10-31), the process that launches each hook's Git Bash shell exits immediately, so the chain ends at the top shell and Claude Code itself is not watched: killing that shell stops the waiter within about a second, but a conversation process that exits while its hook shells survive would not. Wake retries and manual retrieval still recover queued messages if a waiter is lost.
+A hook waiter holds every shell between itself and the first non-shell ancestor (normally Claude Code), plus that ancestor, and stops when any of them exits; an isolated test confirms that killing only the outer Git Bash process stops the waiter before it claims a wake. Limits: an ancestor that cannot be opened, has exited, or started after its child (a reused process ID) ends the chain unwatched; a non-shell process between the waiter and the host also ends the chain, so a host above it is not watched; and the walk stops after eight levels. On the host (Claude Desktop with Claude Code 2.1.309, 2026-10-31), the process that launches each hook's Git Bash shell exits immediately, so the chain ends at the top shell and Claude Code itself is not watched: killing that shell stops the waiter within about a second, but a conversation process that exits while its hook shells survive would not. Wake retries and manual retrieval still recover queued messages if a waiter is lost.
 
 ### Desktop reopen and app restart depend on the host
 
@@ -28,11 +28,12 @@ Codex may present wake prompts that have already been confirmed and completed. T
 
 ## Other technical debt and operating limits
 
-- Migration from project namespaces can refuse records Pigeon created itself (a `__pigeon__` sender in several old projects) or fail with a raw SQLite error when two old agents hold routes for the same tool and session. This depends on data from older versions and is untested.
-- Legacy non-topic mode is kept only for tests: production always enables topic mode, but `Mailbox` still carries both code paths.
+- Upgrading an earlier database keeps only sessions that had a tool/session route and at most two members per topic; name-based agents and their messages are not carried over. The upgrade is tested with a synthetic database, not with a real one from an earlier version.
+- A topic is deleted when both members have been disconnected for an hour of service running time. A conversation closed for longer than that loses its topic and any messages still waiting in it; it has to join again.
+- Messages and wakes use bounded retries and may be delivered more than once: if an agent fails before completing a wake, all messages received under it are delivered again.
 
-- Claude notifier ownership is held in service memory and expires after 15 seconds. After a service restart, competing notifiers reacquire it in whatever order they reconnect; integration tests cover a monitor and a hook waiter racing after a restart and a monitor that dies without releasing.
+- Claude notifier ownership is held in service memory and expires after 15 seconds. After a service restart, the hook waiter reacquires it when it reconnects.
 - The Claude hook wrapper uses Git Bash. Its fallback for older CLI versions suppresses errors to avoid false wakes. `pigeon status` reports the service and CLI versions and flags a Claude session that has had no notifier since the service started, which is how an incompatible or missing CLI shows up. The PowerShell alternative is not packaged because the current environment blocks unsigned scripts.
 - The loopback service has no application-level authentication. Any local process able to connect can impersonate a session or access messages. Topic routing is not an access-control boundary; authentication was explicitly deferred for the MVP.
-- Messages and wakes use bounded retries and may be delivered more than once. Transport acceptance, runtime receipt and agent acknowledgment are separate events. Keep explicit acknowledgment and idempotency; do not claim exactly-once delivery.
+- Transport acceptance, runtime receipt and acknowledgment are separate events; do not claim exactly-once delivery.
 - Peer messages are untrusted data, do not grant permissions, and do not reserve files. Multiple agents can still edit the same files concurrently.
