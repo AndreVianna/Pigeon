@@ -9,7 +9,7 @@ Everything stays on your computer. Pigeon runs a small background service that o
 ## What you need
 
 - Windows 10 or 11.
-- The [.NET 11 runtime](https://dotnet.microsoft.com/download) (ASP.NET Core Runtime).
+- The [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0), release candidate 3 or later. Installing Pigeon builds it from this repository, and the SDK includes the runtime it needs.
 - [Git for Windows](https://git-scm.com/download/win), if you use Claude Code: the Claude plugin's hook runs under Git Bash.
 - Claude Code (including Claude Desktop) and/or Codex (including the ChatGPT desktop app).
 
@@ -19,7 +19,7 @@ Everything stays on your computer. Pigeon runs a small background service that o
 
 ```powershell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.5.0-beta.2 --source .\artifacts
+dotnet tool install --global Pigeon.Cli --version 0.5.0 --source .\artifacts
 ```
 
 To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.

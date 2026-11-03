@@ -85,13 +85,13 @@ Investigate whether the Codex queue interface supports cancelling or replacing a
 
 | Item | Change |
 |---|---|
-| Version | Lockstep versions: the CLI and both plugins share one version. `0.5.0-beta.1` first (in progress), `0.5.0` for the release. A unit test enforces the match. Update the README `dotnet tool update` line and the version mentions in docs. |
+| Version | Lockstep versions: the CLI and both plugins share one version. `0.5.0-beta.1` and `0.5.0-beta.2` first, then `0.5.0` for the release. A unit test enforces the match. Update the README `dotnet tool update` line and the version mentions in docs. |
 | Codex plugin install | Repo marketplace `.agents/plugins/marketplace.json` added (and copied into the CLI's publish output). Done: the production Codex plugin moved to the layout Codex loads local servers from (`.codex-plugin/plugin.json` with `"mcpServers": "./.mcp.json"`, and a `.mcp.json` of `command`/`args`/`env`), as proven by the dev plugin in H1b; a root `mcp.json` with `"type": "stdio"` is ignored. It is now `0.3.0`. Still to do: reinstall it as the `pigeon` plugin instead of the standalone MCP server it was configured as. `mcp_tool` hooks work in Codex and stay. |
-| CI | GitHub Actions on `windows-latest`: SDK from `global.json`, then build, test and pack, plus a Git Bash check. Verify that the runner can install the .NET 11 RC SDK and has `winsqlite3`. |
+| CI | GitHub Actions on `windows-latest` (`.github/workflows/ci.yml`): SDK from `global.json`, a Git Bash check, then build, test and pack, uploading the `.nupkg`. Added for 0.5.0; its first run on GitHub shows whether the runner installs the .NET 11 RC SDK and has `winsqlite3`. |
 | Secret scanning | Optional `ggshield` step in CI. It needs a GitGuardian API key stored as a repository secret, which you would create. |
 | Release notes | `CHANGELOG.md`: started for 0.5.0-beta.1 with the fixes since alpha.19 and the documented limits. |
 | Docs | Install-from-scratch instructions in the README, checked on a clean tool path; refreshed known issues; `next-steps.md` folded into this plan or retired. |
-| Upgrade | Install the packed 0.5.0 into a temporary `--tool-path` and run it against a synthetic older-schema database. Optionally, with your approval, a copy of your current database, to confirm migration without touching the live one. |
+| Upgrade | Done on 2026-11-03: the packed 0.5.0 installed into a temporary `--tool-path` and, on an isolated port, passed join, a full-topic refusal, send and receive on a fresh database, and upgraded a synthetic pre-0.5 database (two most recent members kept, the third recorded as removed, the pending message delivered, the old tables left in place). |
 | Tag and publish | Merge to `main`, tag `v0.5.0`, create a GitHub release with the `.nupkg`. Publishing to nuget.org is a separate decision. |
 
 ## Phase 3: live host tests
@@ -132,3 +132,10 @@ Phase 1.5 and the code simplifications in `next-steps.md` (removing non-topic mo
 4. Whether to publish to nuget.org or only attach the package to a GitHub release.
 5. The fallback if H4 fails: a shorter renewal period, or document the 12-hour limit.
 6. Approval to run H1 to H6, with you opening the test conversations.
+
+## After 0.5.0: goals for 0.6.0
+
+Set by the user on 2026-11-03. Not yet planned in detail.
+
+1. **Antigravity, and possibly Cursor.** Start from [host integrations research](host-integrations-research.md). Antigravity wakes through an undocumented `agentapi send-message` call that interrupts a running turn and silently drops messages to deleted conversations, so the adapter needs idle detection and a delivery check. The Cursor probe still has to run once the account's usage limit allows it.
+2. **Agents on different machines.** Today the service accepts only loopback connections and has no authentication, because a session ID is only a routing claim (see [local trust boundaries](security-design.md)). Connecting machines needs authenticated peers, encrypted transport and a way to pair machines before any network listener is opened.

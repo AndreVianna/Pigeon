@@ -2,12 +2,29 @@
 
 The CLI and the Claude and Codex plugins share one version (see the README's developer section).
 
-## 0.5.0-beta.2 (unreleased)
+## 0.5.0 (2026-11-03)
+
+First stable release. It contains the changes of 0.5.0-beta.1 and 0.5.0-beta.2 below, with no further code changes. Coming from 0.1.0-alpha.19 or the 0.4/0.3 plugins, read "Changed" under beta.1: topics are now private conversations between two sessions, and the commands and agent tools are new.
+
+### Tested
+- On 2026-11-03 the end-to-end host tests passed on beta.2 in Claude Desktop and Codex: a message wakes an idle Claude conversation; Claude and Codex exchange three rounds with no typing; a renewal after idle time re-arms the waiter; a killed hook shell orphans no waiter; one wake delivers messages from two topics; a third session is refused from a full topic. The 12-hour renewal, Codex recovery after close and restart, and Claude Desktop reopen were reported as passed by the repository owner. See the [host-test runbook](experiments/host-test/README.md).
+
+### Known limits
+- No application-level authentication; a session ID is a routing claim.
+- Delivery is at least once; duplicates are possible.
+- A conversation whose process the host has not started (after a reopen or app restart) cannot be woken until it is used again.
+- A Codex chat whose Pigeon MCP server exits (for example when the service is stopped for an update) needs to be reopened, or the app restarted.
+- Each idle Claude conversation uses a short renewal turn every 12 hours.
+- Built on .NET 11 RC 3; it needs the matching ASP.NET Core runtime.
+
+See [known issues](docs/known-issues.md) for the full list.
+
+## 0.5.0-beta.2 (pre-release)
 
 ### Fixed
 - Cursor imports installed Claude plugins' hooks and runs them through PowerShell, where the Claude plugin's bare `hook-wait.sh` command opened the script in a text editor at every chat start and turn end. The plugin now runs it as `sh "…/hook-wait.sh"`: unchanged in Claude Code's Git Bash, and a harmless "not found" in other shells. (`bash` was avoided because on Windows it often resolves to WSL.) A unit test keeps the command in this form.
 
-## 0.5.0-beta.1 (unreleased)
+## 0.5.0-beta.1 (pre-release)
 
 First beta. The CLI moves from 0.1.0-alpha.19, the Claude plugin from 0.4.0 and the Codex plugin from 0.3.0 to one shared version. This release changes how Pigeon is used; see "Changed".
 
@@ -38,7 +55,7 @@ First beta. The CLI moves from 0.1.0-alpha.19, the Claude plugin from 0.4.0 and 
 - The repository is a plugin marketplace named `pigeon` for both Claude Code (`.claude-plugin/marketplace.json`) and Codex (`.agents/plugins/marketplace.json`).
 - Command errors explain what went wrong (for example which sessions fill a topic) and exit with 1; usage errors exit with 2.
 
-### Known limits
+### Known limits (at beta.1; see 0.5.0 above for the current list)
 - No application-level authentication; a session ID is a routing claim.
 - Delivery is at least once; duplicates are possible.
 - A conversation whose process the host has not started (after a reopen or app restart) cannot be woken.
