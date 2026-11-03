@@ -50,7 +50,7 @@ public sealed class ClaudeHookWaitSteps {
     }
 
     private Process Pigeon(params string[] args) {
-        var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "pigeon.exe")) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        var start = new ProcessStartInfo(TestTools.Pigeon) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         foreach (var arg in args) start.ArgumentList.Add(arg);
         start.Environment["PIGEON_PORT"] = port;
         var process = Process.Start(start)!;
@@ -347,13 +347,14 @@ public sealed class ClaudeHookWaitSteps {
 
     [Then("a waiter under two Git Bash shells exits as orphaned when only the outer shell is killed, and a later message is not claimed")]
     public async Task OuterShellKilled() {
-        var bash = Environment.GetEnvironmentVariable("PIGEON_TEST_BASH") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe");
-        Assert.True(File.Exists(bash), "Git Bash is required for this scenario; set PIGEON_TEST_BASH to its executable.");
+        var bash = TestTools.Bash;
+        Assert.True(File.Exists(bash), "bash (Git Bash on Windows) is required for this scenario; set PIGEON_TEST_BASH to its executable.");
         // Git Bash's launcher starts a second bash, which runs the waiter: test -> bash -> bash -> pigeon.
-        var pigeon = Path.Combine(AppContext.BaseDirectory, "pigeon.exe").Replace('\\', '/');
+        // Elsewhere bash runs it directly; the trailing command stops bash from replacing itself with it.
+        var pigeon = TestTools.Pigeon.Replace('\\', '/');
         var start = new ProcessStartInfo(bash) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         start.ArgumentList.Add("-c");
-        start.ArgumentList.Add($"\"{pigeon}\" hook wait claude-code --timeout 60");
+        start.ArgumentList.Add($"\"{pigeon}\" hook wait claude-code --timeout 60; exit $?");
         start.Environment["PIGEON_PORT"] = port;
         var outer = Process.Start(start)!;
         processes.Add(outer);

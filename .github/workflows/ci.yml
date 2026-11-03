@@ -11,8 +11,11 @@ permissions:
 
 jobs:
   build:
-    # Pigeon is Windows-only: it uses winsqlite3 and the Claude hook tests run under Git Bash.
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +23,9 @@ jobs:
         with:
           global-json-file: global.json
 
+      # The Claude hook tests run under Git Bash on Windows and the system bash and sh elsewhere.
       - name: Check Git Bash
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
@@ -33,10 +38,13 @@ jobs:
       - name: Test
         run: dotnet test Pigeon.slnx --configuration Release --no-build
 
+      # The tool package is the same on every platform, so one runner publishes it.
       - name: Pack
+        if: runner.os == 'Windows'
         run: dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --configuration Release --no-build --output artifacts
 
       - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
         with:
           name: nupkg
           path: artifacts/*.nupkg

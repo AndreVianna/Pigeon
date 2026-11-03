@@ -11,12 +11,18 @@ public class MonitorParentTests {
     [InlineData(@"C:\Program Files\Git\usr\bin\BASH.EXE")]
     [InlineData(@"C:\Windows\System32\cmd.exe")]
     [InlineData(@"C:\Program Files\PowerShell\7\pwsh.exe")]
+    [InlineData("/bin/bash")]
+    [InlineData("/usr/bin/dash")]
+    [InlineData("/bin/zsh")]
+    [InlineData("sh")]
     public void A_shell_is_watched_and_the_walk_continues(string image) =>
         Assert.Equal(Link.Continue, Classify(Process(image), childCreatedAt: 200, depth: 0));
 
     [Theory]
     [InlineData(@"C:\Users\me\AppData\Roaming\Claude\claude-code\claude.exe")]
     [InlineData(@"C:\Program Files\dotnet\dotnet.exe")]
+    [InlineData("/Users/me/.local/bin/claude")]
+    [InlineData("/usr/bin/bashful")]
     public void The_first_non_shell_ancestor_is_watched_last(string image) =>
         Assert.Equal(Link.Last, Classify(Process(image), childCreatedAt: 200, depth: 1));
 

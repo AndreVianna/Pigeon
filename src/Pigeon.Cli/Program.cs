@@ -2,9 +2,9 @@ using Pigeon.Adapters;
 using Pigeon.Core;
 using Pigeon.Service;
 
-using System.Security.Cryptography;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
@@ -38,8 +38,8 @@ internal static class ServiceCommands {
     public static string Port => Environment.GetEnvironmentVariable("PIGEON_PORT") ?? "49372";
 
     public static async Task<int> RunAsync(string[] args) {
-        if (!OperatingSystem.IsWindows())
-            throw new InvalidOperationException("Pigeon runs on Windows only.");
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            throw new InvalidOperationException("Pigeon runs on Windows, macOS and Linux.");
         var port = Port;
         if (!int.TryParse(port, out var number) || number is < 1024 or > 65535)
             throw new ArgumentException("PIGEON_PORT must be a port number from 1024 to 65535.");
@@ -95,39 +95,33 @@ internal static class ServiceCommands {
             var abandonedMinutes = ConfiguredLimit("PIGEON_ABANDONED_TOPIC_MINUTES", 60, 1, 525600);
             var maxWakeAttempts = ConfiguredLimit("PIGEON_MAX_WAKE_ATTEMPTS", 3, 1, 100);
             var wakeRetrySeconds = ConfiguredLimit("PIGEON_WAKE_RETRY_SECONDS", 120, 1, 86400);
-            var lockName = "Local\\Pigeon-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(port)));
-            using var guard = new Semaphore(1, 1, lockName);
-            if (!guard.WaitOne(0))
-                throw new InvalidOperationException();
-            try {
-                var parent = Path.GetDirectoryName(database);
-                if (parent is null)
-                    throw new ArgumentException();
-                if (configuredDatabase is null)
-                    Directory.CreateDirectory(parent);
-                else if (!Directory.Exists(parent))
-                    throw new ArgumentException();
-                using var broker = new Broker(database, bodyRetentionMilliseconds: retention, maxAttempts: maxAttempts, maxMessagesPerHour: maxPerHour, maxWakeAttempts: maxWakeAttempts, wakeRetryMilliseconds: wakeRetrySeconds * 1000L, abandonedTopicMilliseconds: abandonedMinutes * 60000L);
-                using var stop = new CancellationTokenSource();
-                Console.CancelKeyPress += (_, e) => {
-                    e.Cancel = true;
-                    stop.Cancel();
-                };
-                var host = new LocalHttpServer(port, broker, stop.Cancel);
-                var server = host.RunAsync(stop.Token);
-                if (await Task.WhenAny(server, host.Ready) == server)
-                    await server;
-                if (!background) {
-                    Console.WriteLine("Pigeon service ready. Press Enter or Ctrl+C to stop.");
-                    var input = Console.In.ReadLineAsync();
-                    if (await Task.WhenAny(server, input) == input)
-                        stop.Cancel();
-                }
+            using var guard = ServiceLock.TryAcquire(port) ?? throw new InvalidOperationException();
+            // A background service on Unix must outlive the terminal it was started from.
+            using var hangup = background && !OperatingSystem.IsWindows() ? PosixSignalRegistration.Create(PosixSignal.SIGHUP, context => context.Cancel = true) : null;
+            var parent = Path.GetDirectoryName(database);
+            if (parent is null)
+                throw new ArgumentException();
+            if (configuredDatabase is null)
+                Directory.CreateDirectory(parent);
+            else if (!Directory.Exists(parent))
+                throw new ArgumentException();
+            using var broker = new Broker(database, bodyRetentionMilliseconds: retention, maxAttempts: maxAttempts, maxMessagesPerHour: maxPerHour, maxWakeAttempts: maxWakeAttempts, wakeRetryMilliseconds: wakeRetrySeconds * 1000L, abandonedTopicMilliseconds: abandonedMinutes * 60000L);
+            using var stop = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) => {
+                e.Cancel = true;
+                stop.Cancel();
+            };
+            var host = new LocalHttpServer(port, broker, stop.Cancel);
+            var server = host.RunAsync(stop.Token);
+            if (await Task.WhenAny(server, host.Ready) == server)
                 await server;
+            if (!background) {
+                Console.WriteLine("Pigeon service ready. Press Enter or Ctrl+C to stop.");
+                var input = Console.In.ReadLineAsync();
+                if (await Task.WhenAny(server, input) == input)
+                    stop.Cancel();
             }
-            finally {
-                _ = guard.Release();
-            }
+            await server;
 
             return 0;
         }
@@ -253,8 +247,13 @@ internal static class ServiceCommands {
         catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) { }
 
         var executable = Environment.ProcessPath ?? throw new InvalidOperationException();
+        // On Windows the shell starts it without a window. Elsewhere shell execution would open
+        // the program with the desktop's file handler, so it starts directly, detached from the
+        // terminal's input and output.
+        var windows = OperatingSystem.IsWindows();
         var info = new ProcessStartInfo(executable) {
-            UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden,
+            UseShellExecute = windows, WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardInput = !windows, RedirectStandardOutput = !windows, RedirectStandardError = !windows,
             WorkingDirectory = Environment.CurrentDirectory
         };
         if (string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))

@@ -8,8 +8,8 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>pigeon</ToolCommandName>
     <PackageId>Pigeon.Cli</PackageId>
-    <Version>0.5.0</Version>
-    <Description>Private conversations between AI agent sessions on the same Windows computer.</Description>
+    <Version>0.6.0-alpha.1</Version>
+    <Description>Private conversations between AI agent sessions on the same computer.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Authors>Andre Vianna</Authors>
