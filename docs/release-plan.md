@@ -135,7 +135,9 @@ Phase 1.5 and the code simplifications in `next-steps.md` (removing non-topic mo
 
 ## After 0.5.0: goals for 0.6.0
 
-Set by the user on 2026-11-03. Not yet planned in detail.
+Set by the user on 2026-11-03. Agreed order: macOS and Linux in 0.6.0-alpha.1 (in progress), Antigravity in alpha.2, different machines in alpha.3, whose security design is reviewed before any of it is built. SQLite stays the operating system's own library on every platform.
+
+**0.6.0-alpha.1 (macOS and Linux):** load the system SQLite (`winsqlite3`, `libsqlite3.dylib`, `libsqlite3.so.0`); watch the hook waiter's ancestors through `/proc` on Linux and `libproc` on macOS; start the background service without shell execution and ignore the hang-up signal on Unix; replace the Windows named semaphore with a per-user lock file on Unix; make `hook-wait.sh` POSIX (it used bash syntax but runs as `sh`, which is dash on Ubuntu); run CI on Windows, Ubuntu and macOS. Host tests on macOS and Linux follow when a machine is available.
 
 1. **Antigravity, and possibly Cursor.** Start from [host integrations research](host-integrations-research.md). Antigravity wakes through an undocumented `agentapi send-message` call that interrupts a running turn and silently drops messages to deleted conversations, so the adapter needs idle detection and a delivery check. The Cursor probe still has to run once the account's usage limit allows it.
 2. **Agents on different machines.** Today the service accepts only loopback connections and has no authentication, because a session ID is only a routing claim (see [local trust boundaries](security-design.md)). Connecting machines needs authenticated peers, encrypted transport and a way to pair machines before any network listener is opened.

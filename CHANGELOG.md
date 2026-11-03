@@ -2,6 +2,17 @@
 
 The CLI and the Claude and Codex plugins share one version (see the README's developer section).
 
+## 0.6.0-alpha.1 (unreleased)
+
+First step toward 0.6.0: Pigeon runs on macOS and Linux. Not yet tried with Claude or Codex on those systems.
+
+### Added
+- macOS and Linux support. Storage uses the system's SQLite library on every platform. The Claude hook waiter watches its launcher shells through `/proc` on Linux and `libproc` on macOS, as it does through process handles on Windows. `pigeon start` starts the service detached from the terminal, and it survives the terminal closing.
+- CI runs the build and tests on Windows, Ubuntu and macOS.
+
+### Fixed
+- The Claude hook wrapper used bash-only syntax although the plugin runs it as `sh`. Under dash (`sh` on Debian and Ubuntu) it stopped with "Bad substitution" and exit code 2, which Claude Code treats as a wake. It now uses only POSIX features.
+
 ## 0.5.0 (2026-11-03)
 
 First stable release. It contains the changes of 0.5.0-beta.1 and 0.5.0-beta.2 below, with no further code changes. Coming from 0.1.0-alpha.19 or the 0.4/0.3 plugins, read "Changed" under beta.1: topics are now private conversations between two sessions, and the commands and agent tools are new.

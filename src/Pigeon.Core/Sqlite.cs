@@ -8,24 +8,38 @@ namespace Pigeon.Core;
 // Callers should retry it rather than treat it as a rejected request.
 public sealed class StorageUnavailableException(string message) : Exception(message);
 
-// Narrow Windows SQLite binding: parameterized statements only, no external packages.
+// Narrow binding to the operating system's own SQLite: parameterized statements only, no external packages.
 internal sealed class Sqlite : IDisposable {
+    private const string Library = "sqlite3";
+    // Windows ships winsqlite3; macOS and nearly every Linux distribution ship libsqlite3.
+    private static readonly string[] Candidates =
+        OperatingSystem.IsWindows() ? ["winsqlite3"]
+        : OperatingSystem.IsMacOS() ? ["/usr/lib/libsqlite3.dylib", "libsqlite3.dylib"]
+        : ["libsqlite3.so.0", "libsqlite3.so"];
+
+    static Sqlite() => NativeLibrary.SetDllImportResolver(typeof(Sqlite).Assembly, (name, assembly, path) => {
+        if (name != Library) return IntPtr.Zero;
+        foreach (var candidate in Candidates)
+            if (NativeLibrary.TryLoad(candidate, assembly, path, out var handle)) return handle;
+        throw new DllNotFoundException($"Pigeon needs the system SQLite library ({string.Join(" or ", Candidates)}). Install SQLite 3 with the system's package manager.");
+    });
+
     private IntPtr db;
     private const int Row = 100, Done = 101;
     private static readonly IntPtr Transient = new(-1);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_open_v2([MarshalAs(UnmanagedType.LPUTF8Str)] string name, out IntPtr db, int flags, IntPtr vfs);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_close_v2(IntPtr db);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr sqlite3_errmsg(IntPtr db);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_busy_timeout(IntPtr db, int ms);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_prepare_v2(IntPtr db, [MarshalAs(UnmanagedType.LPUTF8Str)] string sql, int length, out IntPtr stmt, IntPtr tail);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_finalize(IntPtr stmt);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_step(IntPtr stmt);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_bind_text(IntPtr stmt, int index, [MarshalAs(UnmanagedType.LPUTF8Str)] string value, int length, IntPtr destructor);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_bind_null(IntPtr stmt, int index);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_column_count(IntPtr stmt);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr sqlite3_column_text(IntPtr stmt, int index);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_changes(IntPtr db);
-    [DllImport("winsqlite3", CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_get_autocommit(IntPtr db);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_open_v2([MarshalAs(UnmanagedType.LPUTF8Str)] string name, out IntPtr db, int flags, IntPtr vfs);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_close_v2(IntPtr db);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr sqlite3_errmsg(IntPtr db);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_busy_timeout(IntPtr db, int ms);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_prepare_v2(IntPtr db, [MarshalAs(UnmanagedType.LPUTF8Str)] string sql, int length, out IntPtr stmt, IntPtr tail);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_finalize(IntPtr stmt);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_step(IntPtr stmt);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_bind_text(IntPtr stmt, int index, [MarshalAs(UnmanagedType.LPUTF8Str)] string value, int length, IntPtr destructor);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_bind_null(IntPtr stmt, int index);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_column_count(IntPtr stmt);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr sqlite3_column_text(IntPtr stmt, int index);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_changes(IntPtr db);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] private static extern int sqlite3_get_autocommit(IntPtr db);
 
     public Sqlite(string path) {
         var rc = sqlite3_open_v2(path, out db, 2 | 4 | 0x10000, IntPtr.Zero);

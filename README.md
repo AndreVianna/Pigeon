@@ -1,6 +1,6 @@
 # Pigeon
 
-Pigeon lets two AI agent sessions on the same Windows computer talk to each other, for example a Claude conversation and a Codex chat working on the same project. One agent sends a message; the other is woken up, reads it, and can reply. You do not have to copy text between windows.
+Pigeon lets two AI agent sessions on the same computer talk to each other, for example a Claude conversation and a Codex chat working on the same project. One agent sends a message; the other is woken up, reads it, and can reply. You do not have to copy text between windows.
 
 Conversations happen in **topics**. A topic is a private conversation between exactly two sessions, such as `parser-review`. Messages wait in order until the other side reads them, even if it is busy, idle, or has not joined yet.
 
@@ -8,25 +8,26 @@ Everything stays on your computer. Pigeon runs a small background service that o
 
 ## What you need
 
-- Windows 10 or 11.
+- Windows 10 or 11, macOS, or Linux. macOS and Linux are new in 0.6.0-alpha.1: they pass the automated tests but have not yet been tried with Claude or Codex.
 - The [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0), release candidate 3 or later. Installing Pigeon builds it from this repository, and the SDK includes the runtime it needs.
-- [Git for Windows](https://git-scm.com/download/win), if you use Claude Code: the Claude plugin's hook runs under Git Bash.
+- On Windows, [Git for Windows](https://git-scm.com/download/win) if you use Claude Code: the Claude plugin's hook runs under Git Bash. macOS and Linux use their own `sh`.
+- On Linux, the SQLite library (`libsqlite3`), which nearly every distribution includes. Windows and macOS have it built in.
 - Claude Code (including Claude Desktop) and/or Codex (including the ChatGPT desktop app).
 
 ## Install
 
 **1. Install the `pigeon` command.** Pigeon is not on nuget.org yet. Build the package from this repository and install it as a .NET tool:
 
-```powershell
+```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.5.0 --source .\artifacts
+dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.1 --source ./artifacts
 ```
 
-To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.
+The agent tools start `pigeon` by name, so the .NET tools folder (`~/.dotnet/tools` on macOS and Linux) must be on the `PATH` they see; `dotnet` says how to add it the first time. To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.
 
 **2. Start the service.**
 
-```powershell
+```shell
 pigeon start
 ```
 
@@ -69,7 +70,7 @@ Words such as `as`, `using`, `from`, `to` and `for` are part of the commands. A 
 
 Example:
 
-```powershell
+```shell
 pigeon join parser-review as 01a19407-57ce using codex
 #   Joined parser-review. Waiting for a partner.
 pigeon send from 01a19407-57ce to parser-review "Ready for review"
@@ -106,7 +107,7 @@ Set these environment variables before `pigeon start` (and, for the port, for th
 | Variable | Default | Meaning |
 |---|---|---|
 | `PIGEON_PORT` | `49372` | The local port the service uses. The service, the plugins and the commands must all use the same one. |
-| `PIGEON_DATABASE` | `%LOCALAPPDATA%\Pigeon\messages.db` | Where messages are stored (an absolute path). |
+| `PIGEON_DATABASE` | `%LOCALAPPDATA%\Pigeon\messages.db` on Windows, `~/Library/Application Support/Pigeon/messages.db` on macOS, `~/.local/share/Pigeon/messages.db` on Linux | Where messages are stored (an absolute path). |
 | `PIGEON_MAX_MESSAGES_PER_HOUR` | `60` | Messages one topic accepts per hour. |
 | `PIGEON_ABANDONED_TOPIC_MINUTES` | `60` | How long both members can be away before a topic is deleted. |
 | `PIGEON_BODY_RETENTION_DAYS` | not set | When set, the text of read or expired messages is erased after this many days. This is not secure erasure: database files and backups can still contain it. |
@@ -118,9 +119,9 @@ Version 0.5 replaced named agents and multi-member topics with two-member topics
 
 ## For developers
 
-The solution `Pigeon.slnx` targets .NET 11 and C# 14 and contains xUnit unit tests and Reqnroll (Gherkin) integration tests. The Claude hook tests need Git Bash; if it is not in its usual place, set `PIGEON_TEST_BASH` to its executable.
+The solution `Pigeon.slnx` targets .NET 11 and C# 14 and contains xUnit unit tests and Reqnroll (Gherkin) integration tests. The Claude hook tests need `bash` and `sh`: on Windows those of Git Bash (set `PIGEON_TEST_BASH` to `bash.exe` if it is not in its usual place), elsewhere the system's. CI runs the tests on Windows, Ubuntu and macOS.
 
-```powershell
+```shell
 dotnet build Pigeon.slnx
 dotnet test Pigeon.slnx
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts

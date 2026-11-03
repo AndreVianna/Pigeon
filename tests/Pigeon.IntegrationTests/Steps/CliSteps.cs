@@ -14,7 +14,7 @@ public sealed class CliSteps {
     private string stdout = "", stderr = "";
 
     private async Task<(int ExitCode, string Output, string Error)> Run(params string[] arguments) {
-        var info = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "pigeon.exe")) {
+        var info = new ProcessStartInfo(TestTools.Pigeon) {
             UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
             RedirectStandardInput = true, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden
         };

@@ -1,6 +1,16 @@
 # Known issues and technical debt
 
-This list reflects the 0.5.0 release. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+This list reflects 0.6.0-alpha.1. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+
+## macOS and Linux
+
+### Not yet tried with Claude or Codex
+
+0.6.0-alpha.1 runs on macOS and Linux and passes the automated tests there (CI on Ubuntu and macOS), including the hook waiter's parent watching and the hook wrapper under dash. It has not yet run with Claude Code or Codex on either system. In particular, desktop apps started from the macOS Dock or a Linux launcher may not see the `PATH` set in a shell profile, so they may not find `pigeon` in `~/.dotnet/tools`.
+
+### Background service
+
+`pigeon start` starts the service detached from the terminal and the service ignores the terminal's hang-up signal, so it survives closing the terminal. It is not a launchd agent or systemd unit, so like on Windows it does not restart after a reboot or log-out.
 
 ## Notification reliability
 
@@ -33,7 +43,7 @@ Codex may present wake prompts that have already been confirmed and completed. T
 - Messages and wakes use bounded retries and may be delivered more than once: if an agent fails before completing a wake, all messages received under it are delivered again.
 
 - Claude notifier ownership is held in service memory and expires after 15 seconds. After a service restart, the hook waiter reacquires it when it reconnects.
-- The Claude hook wrapper uses Git Bash. Its fallback for older CLI versions suppresses errors to avoid false wakes. `pigeon status` reports the service and CLI versions and flags a Claude session that has had no notifier since the service started, which is how an incompatible or missing CLI shows up. The PowerShell alternative is not packaged because the current environment blocks unsigned scripts.
+- On Windows the Claude hook wrapper uses Git Bash; on macOS and Linux it runs under the system `sh` and uses only POSIX features. Its fallback for older CLI versions suppresses errors to avoid false wakes. `pigeon status` reports the service and CLI versions and flags a Claude session that has had no notifier since the service started, which is how an incompatible or missing CLI shows up. The PowerShell alternative is not packaged because the current environment blocks unsigned scripts.
 - The loopback service has no application-level authentication. Any local process able to connect can impersonate a session or access messages. Topic routing is not an access-control boundary; authentication was explicitly deferred for the MVP.
 - Transport acceptance, runtime receipt and acknowledgment are separate events; do not claim exactly-once delivery.
 - Peer messages are untrusted data, do not grant permissions, and do not reserve files. Multiple agents can still edit the same files concurrently.
