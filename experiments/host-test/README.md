@@ -19,6 +19,8 @@ Run with the frozen Release build of `f77aab0` (0.5.0-beta.2), the dev plugins 0
 | E5 | Pass | One message on each of Claude's two topics (11:56:06); both were received and acknowledged under one wake generation within 4 s. The second message was sent through the CLI under the Codex test session's ID. |
 | E6 | Pass | Codex's `pigeon_join` on the full `pigeon-host-test` was refused; the error named `host-test-peer` and the Claude session, and the topic kept its two members. |
 
+**H4, H5 and H6** (the 12-hour renewal, Codex recovery and Claude reopen) were run by the user and reported as passed on 2026-11-03. Their logs are not in this repository.
+
 **Finding.** With the hook started as `sh "…/hook-wait.sh"`, the waiter's launcher chain now reaches Claude Code: `pigeon.exe <- sh.exe <- sh.exe <- sh.exe <- bash.exe <- bash.exe <- claude.exe`. With the earlier direct command, the launcher above the hook shells exited at once and the chain ended at the top shell, so the waiter did not watch `claude.exe`. The waiter now also stops if the conversation process exits while its hook shells survive (not tested directly).
 
 ### What is prepared

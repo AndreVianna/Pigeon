@@ -4,9 +4,9 @@ This list reflects the 0.5.0-beta.1 implementation. A topic is a private convers
 
 ## Notification reliability
 
-### Long-idle Claude Desktop renewal is not yet verified on the host
+### Long-idle Claude Desktop renewal
 
-The plugin requests a renewal turn after 12 idle hours and depends on Claude Desktop accepting the long hook timeout, delivering the turn, and running the Stop hook to arm a replacement. Short-deadline integration tests cover Pigeon's side, but a live Desktop renewal and the 12-hour timeout have not been verified. Each renewal uses the session's model; an otherwise idle session can use up to two renewal turns per day. Test a short renewal in an isolated Desktop conversation, then verify the long timeout before depending on unattended delivery.
+The plugin requests a renewal turn after 12 idle hours and depends on Claude Desktop accepting the long hook timeout, delivering the turn, and running the Stop hook to arm a replacement. The short (3-minute) renewal passed host tests H2 and E3, and the user reported the 12-hour run (H4) as passed on 2026-11-03. Each renewal uses the session's model; an otherwise idle session can use up to two renewal turns per day.
 
 If the service is unavailable when renewal is due, a waiter that owned the session when it last reached the service still requests one renewal, so the next Stop hook re-arms a waiter that waits for the service to return. Messages remain queued, subject to their normal expiry and retry limits.
 
@@ -16,11 +16,11 @@ A hook waiter holds every shell between itself and the first non-shell ancestor 
 
 ### Desktop reopen and app restart depend on the host
 
-Pigeon can restore an existing session's association when Claude Desktop starts its process. Tests observed both automatic process startup on reopen and conversations that did not start until a user message. A hook cannot wake a process that does not exist. Test supported Desktop startup behavior and report the session as unavailable rather than claiming guaranteed wake after every reopen.
+Pigeon can restore an existing session's association when Claude Desktop starts its process. Tests observed both automatic process startup on reopen and conversations that did not start until a user message. A hook cannot wake a process that does not exist. The user reported the reopen and restart behavior (H6) as observed on 2026-11-03. Report a session as unavailable rather than claiming a guaranteed wake after every reopen.
 
-### Codex Desktop recovery needs a host test
+### Codex Desktop recovery
 
-The Codex plugin's startup and prompt hooks use the host-provided session ID, but the actual Desktop hook trust flow, server name and automatic binding on resume remain unverified. Test with a new isolated Codex conversation and verify queued delivery, busy behavior and restart separately.
+The Codex plugin's startup and prompt hooks use the host-provided session ID to restore a joined session. The user reported Codex recovery (H5: idle, busy, close and reopen, app restart) as passed on 2026-11-03, and a Codex chat was observed restoring its session after an app restart. A chat's MCP server that exits (for example when the Pigeon service is stopped for an update) is not restarted by Codex; that chat needs to be reopened or the app restarted.
 
 ### Delayed Codex wake prompts can be repeated
 

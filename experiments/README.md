@@ -4,7 +4,7 @@ Development fixtures for the live host tests. They are not product code. Every t
 
 | Path | Purpose | Write-up |
 |---|---|---|
-| `host-test/` | Runbook, helper and results for release host tests (alpha.19 H1–H3 and beta.2 E1–E6 passed; H4–H6 pending) | [runbook](host-test/README.md), [release plan](../docs/release-plan.md) |
+| `host-test/` | Runbook, helper and results for release host tests (alpha.19 H1–H3 and beta.2 E1–E6 passed; H4–H6 passed, run by the user) | [runbook](host-test/README.md), [release plan](../docs/release-plan.md) |
 | `claude-hook-waiter-dev/` | Development Claude plugin: production hooks with an isolated port, the frozen test build and a short renewal deadline | [README](claude-hook-waiter-dev/README.md) |
 | `codex-plugin-dev/` | Development Codex marketplace and plugin: isolated port and the frozen test build | [runbook](host-test/README.md) |
 | `antigravity-probe/` | Probe plugin, sidecar, runbook and results for the open Antigravity questions (run on 2026-11-01) | [runbook](antigravity-probe/README.md), [research](../docs/host-integrations-research.md) |
