@@ -79,7 +79,7 @@ def main(argv):
         # Claude Code's hook launcher can exit at once (seen on the host), so the chain may end at
         # the top hook shell rather than at claude.exe.
         shells = chain[1:-1] if chain[-1]['Name'].lower() == 'claude.exe' else chain[1:]
-        if not shells or not all(p['Name'].lower() == 'bash.exe' and 'hook-wait.sh' in (p['CommandLine'] or '') for p in shells):
+        if not shells or not all(p['Name'].lower() in ('bash.exe', 'sh.exe') and 'hook-wait.sh' in (p['CommandLine'] or '') for p in shells):
             sys.exit('The test waiter is not under hook-wait.sh shells; nothing killed.')
         outer = shells[-1]  # the top hook shell; inner shells and the waiter stay alive
         print('chain: ' + ' <- '.join(f"{p['ProcessId']} {p['Name']}" for p in chain))
