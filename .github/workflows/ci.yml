@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Pigeon is Windows-only: it uses winsqlite3 and the Claude hook tests run under Git Bash.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Check Git Bash
+        shell: pwsh
+        run: |
+          $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
+          if (-not (Test-Path $bash)) { throw "Git Bash not found at $bash" }
+          & $bash -c 'sh --version | head -1'
+
+      - name: Build
+        run: dotnet build Pigeon.slnx --configuration Release
+
+      - name: Test
+        run: dotnet test Pigeon.slnx --configuration Release --no-build
+
+      - name: Pack
+        run: dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --configuration Release --no-build --output artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: artifacts/*.nupkg
