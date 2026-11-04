@@ -136,7 +136,8 @@ public sealed class CliSteps {
                 if (left.ProcessName is "pigeon" or "bash" or "sh")
                     left.Kill(entireProcessTree: true);
             }
-            catch (ArgumentException) { }
+            // Gone already (ArgumentException), or exited between the lookup and the name (InvalidOperationException).
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException) { }
         }
     }
 
