@@ -1,6 +1,9 @@
 using System.Text.Json;
 
 using Pigeon.Core;
+using Pigeon.Service.Peers;
+
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Pigeon.UnitTests")]
 
 namespace Pigeon.Service;
 
@@ -121,7 +124,8 @@ public sealed class Broker : IDisposable {
     private object Send(JsonElement args) {
         var topic = Str(args, "topic");
         var outcome = mailbox.Send(Str(args, "sessionId"), topic, Str(args, "message"), Optional(args, "retryKey") ?? Guid.NewGuid().ToString("N"), checked(clock() + 86400000));
-        var delivery = outcome.Recipient is null ? "no-recipient" : Connected(outcome.Recipient.SessionId) ? "sent" : "recipient-offline";
+        // A remote member ("@<peer>") is reached through the outbox; delivery to the peer happens later.
+        var delivery = outcome.Recipient is null ? "no-recipient" : outcome.Recipient.SessionId.StartsWith('@') ? "queued-for-peer" : Connected(outcome.Recipient.SessionId) ? "sent" : "recipient-offline";
         return new { messageId = outcome.MessageId, delivery, text = Phrases.SendResult(delivery, topic) };
     }
 
@@ -295,13 +299,143 @@ public sealed class Broker : IDisposable {
         lock (gate)
             mailbox.Dispose();
     }
+
+    // The peer link (see docs/remote-design.md). These are called by the peer listener and the
+    // delivery loop under the same lock as every other operation, never through the local API.
+    internal bool IsPeer(string fingerprint) {
+        lock (gate)
+            return mailbox.PeerByFingerprint(fingerprint) is not null;
+    }
+
+    internal PeerInfo AddPeer(string fingerprint, string name, string? address) {
+        lock (gate)
+            return mailbox.AddPeer(fingerprint, name, address);
+    }
+
+    internal ShareInfo Share(string topic, string peerName, bool shareTool) {
+        lock (gate)
+            return mailbox.Share(topic, peerName, shareTool);
+    }
+
+    // Items delivered by a paired peer. Each result is "ok", "unknown" (no such share; the peer
+    // drops the item) or "limited" (rate or size limit; the peer retries later).
+    internal string[] FromPeer(string fingerprint, PeerItem[] items) {
+        lock (gate) {
+            Maintain();
+            if (mailbox.PeerByFingerprint(fingerprint) is null)
+                return [.. items.Select(_ => "unknown")];
+            mailbox.TouchPeer(fingerprint);
+            return [.. items.Select(item => {
+                try {
+                    var known = item.Kind switch {
+                        "offer" => mailbox.AcceptOffer(fingerprint, item.Offered, item.SenderTool) is not null,
+                        "unshare" => mailbox.ReceiveUnshare(fingerprint, item.Offered) || true,
+                        "message" when item.MessageId is not null && item.Body is not null => mailbox.ReceiveFromPeer(fingerprint, item.Offered, item.MessageId, item.SenderTool, item.Body, item.ExpiresUnixMs),
+                        _ => false
+                    };
+                    return known ? "ok" : "unknown";
+                }
+                catch (InvalidOperationException) {
+                    return "limited";
+                }
+                catch (ArgumentException) {
+                    return "unknown";
+                }
+            })];
+        }
+    }
+
+    // Peers with an address and items due for them.
+    internal (PeerInfo Peer, OutboxItem[] Items)[] DueForPeers() {
+        lock (gate) {
+            return [.. mailbox.Peers().Where(peer => peer.Address is not null)
+                .Select(peer => (peer, mailbox.DueOutbox(peer.Fingerprint)))
+                .Where(due => due.Item2.Length != 0)];
+        }
+    }
+
+    // Open invitations live only in memory: a restart cancels them, which is the safe direction.
+    private readonly List<(byte[] Secret, long Expires)> invitations = [];
+
+    internal bool HasOpenInvitation() {
+        lock (gate) {
+            _ = invitations.RemoveAll(i => i.Expires <= clock());
+            return invitations.Count != 0;
+        }
+    }
+
+    internal Invitation CreateInvitation(string fingerprint, string address, string name) {
+        lock (gate) {
+            var invitation = new Invitation(address, fingerprint, name, System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+            invitations.Add((invitation.Secret, checked(clock() + (long)Invitation.Lifetime.TotalMilliseconds)));
+            return invitation;
+        }
+    }
+
+    // An acceptor presented a proof for one of the open invitations. On success the invitation is
+    // used up, the acceptor waits for the inviter to confirm the check code, and this returns it.
+    internal string? Pair(string inviter, string acceptor, string proof, string name, string? address) {
+        lock (gate) {
+            _ = invitations.RemoveAll(i => i.Expires <= clock());
+            if (mailbox.PeerByFingerprint(acceptor) is not null || acceptor == inviter)
+                return null;
+            var match = invitations.FindIndex(i => System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                System.Text.Encoding.ASCII.GetBytes(Invitation.Proof(i.Secret, inviter, acceptor)), System.Text.Encoding.ASCII.GetBytes(proof)));
+            if (match < 0)
+                return null;
+            var secret = invitations[match].Secret;
+            invitations.RemoveAt(match);
+            var check = Invitation.CheckCode(secret, inviter, acceptor);
+            // The pending pairing lasts an hour, so the inviter can confirm later.
+            mailbox.AddPendingPeer(acceptor, name, address, check, checked(clock() + 3600000));
+            return check;
+        }
+    }
+
+    internal PeerInfo ConfirmPendingPeer(string check, string? name) {
+        lock (gate)
+            return mailbox.ConfirmPendingPeer(check, name);
+    }
+
+    internal PendingPeer[] PendingPeers() {
+        lock (gate)
+            return mailbox.PendingPeers();
+    }
+
+    internal void SetPeerSetting(string key, string? value) {
+        lock (gate)
+            mailbox.SetSetting(key, value);
+    }
+
+    internal string? PeerSetting(string key) {
+        lock (gate)
+            return mailbox.Setting(key);
+    }
+
+    // "ok" delivered, "unknown" rejected for good, anything else (including no answer) retried later.
+    internal void PeerOutcome(string fingerprint, string itemId, string? outcome) {
+        lock (gate) {
+            if (outcome == "ok")
+                mailbox.OutboxDelivered(itemId);
+            else if (outcome == "unknown")
+                mailbox.OutboxRejected(itemId);
+            else
+                mailbox.OutboxFailed(itemId);
+            if (outcome is "ok" or "unknown" or "limited")
+                mailbox.TouchPeer(fingerprint);
+        }
+    }
 }
+
+// One item on the peer link: an offer, an unshare, or a message of a shared topic.
+public sealed record PeerItem(string Kind, string Offered, string? MessageId, string? SenderTool, string? Body, long ExpiresUnixMs);
 
 // Wording shared by the CLI and the MCP tools.
 public static class Phrases {
     public static string SendResult(string delivery, string topic) => delivery switch {
         "sent" => "Sent.",
         "recipient-offline" => "The recipient is unavailable right now; your message will wait until it returns (up to 24 hours).",
+        "queued-for-peer" => "Queued for the other machine; it is delivered when that machine is reachable (up to 24 hours).",
         _ => $"The recipient is unavailable: nobody else is in {topic}. Your message is held until someone joins (up to 24 hours)."
     };
 }

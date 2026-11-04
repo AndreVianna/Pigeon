@@ -51,6 +51,8 @@ public sealed partial class Mailbox : IDisposable {
                 _ = db.Exec(sql);
             }
 
+            CreatePeerSchema();
+            CreatePairingSchema();
             _ = db.Transaction(() => {
                 if (db.Query("SELECT 1 FROM pigeon_metadata WHERE key='schema'").Count == 0) {
                     MigrateEarlierSchema();
@@ -112,6 +114,9 @@ public sealed partial class Mailbox : IDisposable {
     private static void Required(string? s, string name, int max = 256) {
         if (string.IsNullOrWhiteSpace(s) || s.Length > max || s.Contains('\0') || (name != "message" && s.Any(char.IsControl)))
             throw new ArgumentException($"Invalid {name}");
+        // Remote seats are reserved for peers; a local caller cannot claim one.
+        if (name == "session ID" && IsRemoteSeat(s))
+            throw new ArgumentException($"A session ID cannot start with \"{RemoteSeatPrefix}\".");
     }
 
     // The single tool-name normalization: `Claude`, `claude_code` and `Claude Code` are all `claude-code`.
@@ -133,10 +138,21 @@ public sealed partial class Mailbox : IDisposable {
         var waiting = forSession is null
             ? db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND status IN ('queued','leased')", topic)
             : db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND recipient=? AND status IN ('queued','leased')", topic, forSession);
-        return new(topic, MembersOf(topic), int.Parse(waiting[0][0]!, CultureInfo.InvariantCulture));
+        return new(topic, [.. MembersOf(topic).Select(Shown)], int.Parse(waiting[0][0]!, CultureInfo.InvariantCulture));
+    }
+
+    // A remote seat is shown as "@<peer name>"; its fingerprint-based ID stays internal.
+    private Member Shown(Member member) {
+        if (!IsRemoteSeat(member.SessionId))
+            return member;
+        var fingerprint = member.SessionId[RemoteSeatPrefix.Length..].Split(':')[0];
+        return member with { SessionId = "@" + (PeerByFingerprint(fingerprint)?.Name ?? "peer") };
     }
     private string? ToolOf(string session) => db.Query("SELECT tool FROM p_sessions WHERE session=?", session).FirstOrDefault()?[0];
-    private Delivery ToDelivery(string?[] r) => new(r[0]!, r[1]!, ToolOf(r[2]!) ?? "unknown", r[2]!, r[3]!, Long(r[4]));
+    private Delivery ToDelivery(string?[] r) {
+        var sender = Shown(new Member(ToolOf(r[2]!) ?? "unknown", r[2]!));
+        return new(r[0]!, r[1]!, sender.Tool, sender.SessionId, r[3]!, Long(r[4]));
+    }
 
     // Expire old messages and return timed-out leases to the queue. A lease keeps its
     // generation so the wake that took it can still acknowledge it on completion.
@@ -163,6 +179,9 @@ public sealed partial class Mailbox : IDisposable {
                 return Info(topic);
             if (members.Length >= 2)
                 throw new TopicFullException(Info(topic));
+            // "<topic>@<peer>" names a topic a peer shared; it exists only once the peer has offered it.
+            if (topic.Contains('@') && members.Length == 0)
+                throw new InvalidOperationException($"Topic \"{topic}\" has not been shared with this machine. A topic name with @ names a topic a paired peer shared.");
             _ = db.Exec("INSERT OR IGNORE INTO p_topics(topic,created) VALUES(?,?)", topic, Time());
             _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", topic, session, Time());
             if (db.Exec("UPDATE p_messages SET recipient=? WHERE topic=? AND recipient IS NULL AND sender<>? AND status='queued'", session, topic, session) != 0)
@@ -245,7 +264,7 @@ public sealed partial class Mailbox : IDisposable {
             if (existing is not null) {
                 return existing[1] != topic || (existing[3] is null ? existing[2] != body : existing[3] != Digest(body))
                     ? throw new InvalidOperationException("This retry key was already used for a different message.")
-                    : new SendOutcome(existing[0]!, partner);
+                    : new SendOutcome(existing[0]!, partner is null ? null : Shown(partner));
             }
 
             if (expires <= now())
@@ -256,9 +275,11 @@ public sealed partial class Mailbox : IDisposable {
             var id = Guid.NewGuid().ToString("N");
             _ = db.Exec("INSERT INTO p_messages(id,topic,sender,recipient,body,idem,created,expires,status) VALUES(?,?,?,?,?,?,?,?,'queued')", id, topic, session, partner?.SessionId, body, idempotency, Time(), Number(expires));
             _ = db.Exec("UPDATE p_sessions SET last_seen=? WHERE session=?", Time(), session);
-            if (partner is not null)
+            if (partner is not null && IsRemoteSeat(partner.SessionId))
+                EnqueueForPeer(topic, partner.SessionId, id, expires);
+            else if (partner is not null)
                 WakeForNewMessage(partner.SessionId);
-            return new SendOutcome(id, partner);
+            return new SendOutcome(id, partner is null ? null : Shown(partner));
         });
     }
 

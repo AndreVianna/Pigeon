@@ -1,6 +1,6 @@
 # Remote connections: design for 0.6.0-alpha.3
 
-**Status: draft for review (2026-11-04). Nothing here is built.** The release plan requires this design to be reviewed before any code, because it opens Pigeon to the network for the first time.
+**Status: reviewed and accepted by the user on 2026-11-04, with the recommended answers to the open questions (see the end). Being built on `alpha3-remote-connections`.** The release plan required this design to be reviewed before any code, because it opens Pigeon to the network for the first time.
 
 ## Scope
 
@@ -33,7 +33,7 @@ Each service has a long-term key pair, created on first use of any peer command:
 
 Each service also has a human name chosen by its user (for example `ana-laptop`). A name is a label, not an identity; fingerprints decide trust, and each side may name a peer whatever it likes locally.
 
-The private key is stored for the current user only: protected with DPAPI on Windows, in the login Keychain on macOS, and in a file readable only by the user (mode 0600) on Linux. Anyone who can read it can act as this service to its peers, so the key never leaves the machine and is never printed.
+The private key is stored in the current user's certificate store, with no outside package: a non-exportable CNG key protected by DPAPI on Windows, the login Keychain on macOS, and .NET's user-only store under the home folder on Linux. Pigeon remembers its certificate's thumbprint next to its database and never touches other certificates in the store. Anyone who can read it can act as this service to its peers, so the key never leaves the machine and is never printed.
 
 ## Pairing
 
@@ -67,7 +67,7 @@ A peer can:
 
 A peer cannot:
 - join, create or list any other topic, or learn which other topics or peers exist;
-- see local session IDs or tools: it sees the other member as `ana-laptop` (with the tool name, if Ana's side allows it), never the session ID;
+- see local session IDs: it sees the other member as `ana-laptop` with its tool name (unless Ana's side turns that off), never the session ID;
 - read status, start waits or wakes, receive messages for local sessions, or stop the service.
 
 **Limits per peer:** the existing per-topic hourly limit and 16 KiB message cap, plus a per-peer message rate, a cap on stored undelivered messages, a connection limit, and a handshake rate limit. A peer that exceeds them is refused with an error and logged; it is not removed automatically.
@@ -106,15 +106,17 @@ Messages from a peer are stored like local ones: unencrypted in SQLite, subject 
 
 `pigeon status` shows each peer (connected or not, last contact) and each shared topic's outbox. `send` on a shared topic reports "delivered to peer" or "queued for peer".
 
-## Open questions for review
+## Decisions from the review (2026-11-04)
 
-1. **Should Ana have to approve each acceptance as it happens,** in addition to the check code? It is stricter, but needs Ana's command still running while Bruno accepts.
-2. **Should the remote member's tool name be shared** (for example "Claude Code")? It helps agents phrase replies, but is extra information.
-3. **The topic name a remote agent uses:** `<topic>@<peer>` is proposed. The alternative is to share under a name chosen for Bruno.
-4. **Read receipts:** left out of alpha.3. Should they come later?
-5. **Authenticating the local loopback API,** for machines with several users: in alpha.3, or later?
+The user accepted the recommended answer to each open question:
 
-## Implementation outline, after review
+1. **No live approval of each acceptance.** The check code that both people compare already catches a wrong acceptor; requiring the inviter's command to be running would force both people online at the same moment.
+2. **The remote member's tool name is shared by default** (for example "Claude Code"), and the sharing side can turn it off per shared topic. Session IDs are never shared.
+3. **A remote agent joins a shared topic as `<topic>@<peer>`.**
+4. **No read receipts in alpha.3.**
+5. **Authenticating the local loopback API is left for later.** It changes every plugin; alpha.3 documents the multi-user limitation instead.
+
+## Implementation outline
 
 1. Key pair, fingerprint and protected storage per platform.
 2. Peer store (peers, shared topics, outbox) in the existing SQLite database, upgraded on first open.
