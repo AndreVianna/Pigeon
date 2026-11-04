@@ -4,7 +4,7 @@ The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share o
 
 ## 0.6.0-alpha.2 (unreleased)
 
-Adds the Antigravity App, host-tested in the Antigravity App 2.28 on Windows (A1–A8 in `experiments/host-test`), OpenCode 2, host-tested with OpenCode 2.2.5 on Windows (O1–O6), and GitHub Copilot, host-tested in VS Code 1.145 and the GitHub Copilot app on Windows (C1–C6).
+Adds three hosts: the Antigravity App, host-tested in the Antigravity App 2.28 on Windows (A1–A8 in `experiments/host-test`), OpenCode 2, host-tested with OpenCode 2.2.5 on Windows (O1–O6), and GitHub Copilot, host-tested in VS Code 1.145 and the GitHub Copilot app on Windows (C1–C6).
 
 ### Added
 - An Antigravity plugin (`integrations/antigravity-plugin`) with the MCP server, a `connect` skill, hooks and a **Pigeon wake** sidecar.
