@@ -12,16 +12,22 @@ internal sealed class ServiceLock : IDisposable {
         var name = "Pigeon-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(port)));
         if (OperatingSystem.IsWindows()) {
             var held = new Semaphore(1, 1, "Local\\" + name);
-            if (held.WaitOne(0)) return new ServiceLock(held, null);
+            if (held.WaitOne(0))
+                return new ServiceLock(held, null);
             held.Dispose();
             return null;
         }
+
         var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var directory = Path.Combine(string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) ? Path.GetTempPath() : root, "Pigeon");
         _ = Directory.CreateDirectory(directory);
         // FileShare.None takes an exclusive flock on Unix; a second service fails to open it.
-        try { return new ServiceLock(null, new FileStream(Path.Combine(directory, name + ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)); }
-        catch (IOException) { return null; }
+        try {
+            return new ServiceLock(null, new FileStream(Path.Combine(directory, name + ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None));
+        }
+        catch (IOException) {
+            return null;
+        }
     }
 
     public void Dispose() {
@@ -29,6 +35,7 @@ internal sealed class ServiceLock : IDisposable {
             _ = semaphore.Release();
             semaphore.Dispose();
         }
+
         file?.Dispose();
     }
 }

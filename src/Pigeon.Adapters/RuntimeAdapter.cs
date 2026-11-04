@@ -52,7 +52,20 @@ public sealed class ClaudeCodeAdapter : IRuntimeAdapter {
         => new(NotificationOutcome.Unavailable, "Notifications are emitted by the plugin's hook waiter, not by this direct adapter method; no delivery was attempted.");
 }
 
+public sealed class AntigravityAdapter : IRuntimeAdapter {
+    public string Runtime => "antigravity";
+    public AdapterCapabilities Capabilities { get; } = new(
+        new(CapabilityState.Available, "Antigravity names the calling conversation in every MCP tool call, and the plugin's hooks restore it."),
+        new(CapabilityState.NotImplemented, "Pigeon does not launch Antigravity conversations."),
+        new(CapabilityState.NotImplemented, "Live notification is not implemented."),
+        new(CapabilityState.Available, "The plugin's sidecar wakes an idle open conversation with agentapi send-message once its hooks report the turn ended; it needs the sidecar enabled and the Antigravity App running."),
+        new(CapabilityState.Available, "Shared MCP polling through the plugin's MCP server."));
+
+    public NotificationResult Notify(RuntimeSession session, RuntimeMessage message, NotificationMode mode)
+        => new(NotificationOutcome.Unavailable, "Notifications are sent by the plugin's sidecar, not by this direct adapter method; no delivery was attempted.");
+}
+
 // Explicitly bundled adapters only: no dynamic loading or plugin discovery.
 public static class BundledAdapters {
-    public static IReadOnlyList<IRuntimeAdapter> All() => [new CodexAdapter(), new ClaudeCodeAdapter()];
+    public static IReadOnlyList<IRuntimeAdapter> All() => [new CodexAdapter(), new ClaudeCodeAdapter(), new AntigravityAdapter()];
 }

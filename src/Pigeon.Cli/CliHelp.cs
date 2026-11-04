@@ -9,7 +9,7 @@ internal static class CliHelp {
         new("status", "pigeon status", "Show whether the service runs, which sessions are connected, and what is waiting", "Connected means the session's tool is running and reachable; it does not prove that a conversation is active."),
         new("topics", "pigeon topics", "List topics, their members and waiting messages", "A topic is a private conversation between two sessions."),
         new("join", "pigeon join <topic> as <session-id> using <tool>", "Join a topic, creating it if it does not exist",
-            "The first session to join creates the topic and waits for a partner; the second completes it. A third is refused.\n<tool> is the program the session belongs to, for example claude-code or codex. Only those two are woken automatically.\n\nExample:\n  pigeon join parser-review as 01a19407-57ce using codex"),
+            "The first session to join creates the topic and waits for a partner; the second completes it. A third is refused.\n<tool> is the program the session belongs to, for example claude-code, codex or antigravity. Only those three are woken automatically.\n\nExample:\n  pigeon join parser-review as 01a19407-57ce using codex"),
         new("leave", "pigeon leave <topic> as <session-id>", "Leave a topic",
             "Your unread messages wait for whoever takes your place. The last session to leave deletes the topic.\n\nExample:\n  pigeon leave parser-review as 01a19407-57ce"),
         new("send", "pigeon send from <session-id> to <topic> \"<message>\"", "Send a message to the other member of a topic",
@@ -17,9 +17,11 @@ internal static class CliHelp {
         new("receive", "pigeon receive for <session-id> from <topic>", "Read the messages waiting for a session in a topic",
             "Receiving a message removes it from the queue.\n\nExample:\n  pigeon receive for b1f82365-c3a4 from parser-review"),
         new("mcp", "pigeon mcp [--codex-queue]", "Run the MCP server for an agent tool (used by the plugins)",
-            "--codex-queue wakes the joined Codex session through `codex queue`. PIGEON_RUNTIME names the tool, and lets a Claude Code session restore itself on start.", Internal: true),
-        new("hook", "pigeon hook session-start <codex|claude-code>\n       pigeon hook wait claude-code [--timeout <seconds>] [--renew]", "Handle the plugins' session hooks (used by the plugins)",
-            "Both read the host's hook event from standard input and use only its session ID.\nsession-start rebinds a known session and re-arms a wake that gave up. wait keeps a Claude Code conversation reachable: it exits 2 with a fixed wake line when a message arrives.", Internal: true)
+            "--codex-queue wakes the joined Codex session through `codex queue`. PIGEON_RUNTIME names the tool, and lets a Claude Code session restore itself on start. With antigravity, each call acts for the conversation Antigravity names in it.", Internal: true),
+        new("hook", "pigeon hook session-start <codex|claude-code|antigravity>\n       pigeon hook <turn-start|turn-end> antigravity\n       pigeon hook wait claude-code [--timeout <seconds>] [--renew]", "Handle the plugins' session hooks (used by the plugins)",
+            "All read the host's hook event from standard input and use only its session ID.\nsession-start rebinds a known session and re-arms a wake that gave up. turn-start and turn-end report an Antigravity turn, so a wake is sent only while the conversation is idle. wait keeps a Claude Code conversation reachable: it exits 2 with a fixed wake line when a message arrives.", Internal: true),
+        new("sidecar", "pigeon sidecar antigravity", "Wake idle Antigravity conversations (used by the plugin's sidecar)",
+            "Runs inside the Antigravity App as the Pigeon plugin's sidecar and sends the fixed wake instruction with agentapi send-message.", Internal: true)
     ];
 
     // Validate before connecting to a service or reading message input.
@@ -29,11 +31,13 @@ internal static class CliHelp {
             Root(Console.Out);
             return true;
         }
+
         if (args.Length == 1 && args[0] is "--version" or "-V") {
             var version = typeof(CliHelp).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
             Console.WriteLine(version.Split('+')[0]);
             return true;
         }
+
         var command = Commands.FirstOrDefault(c => c.Name == (args[0] == "help" && args.Length == 2 ? args[1] : args[0]));
         if (command is null)
             return Error(args[0] == "help" ? "Expected a command after 'help'." : $"Unknown command '{args[0]}'.", "pigeon --help", out exitCode);
@@ -41,10 +45,13 @@ internal static class CliHelp {
             Console.WriteLine($"{command.Summary}.\n\nUsage: {command.Usage}\n\n{command.Details}");
             return true;
         }
-        if (Valid(args)) return false;
+
+        if (Valid(args))
+            return false;
         // An asyncRewake hook would show exit code 2 and this text to the model as a wake.
         _ = Error($"Invalid arguments for '{args[0]}'.\nUsage: {command.Usage}", $"pigeon {args[0]} --help", out exitCode);
-        if (args[0] == "hook") exitCode = 1;
+        if (args[0] == "hook")
+            exitCode = 1;
         return true;
     }
 
@@ -56,7 +63,9 @@ internal static class CliHelp {
         "send" => a.Length == 6 && a[1] == "from" && a[3] == "to" && Values(a[2], a[4]) && !string.IsNullOrWhiteSpace(a[5]),
         "receive" => a.Length == 5 && a[1] == "for" && a[3] == "from" && Values(a[2], a[4]),
         "mcp" => a.Length == 1 || (a.Length == 2 && a[1] == "--codex-queue"),
-        "hook" => (a.Length == 3 && a[1] == "session-start" && a[2] is "codex" or "claude-code") ||
+        "sidecar" => a.Length == 2 && a[1] == "antigravity",
+        "hook" => (a.Length == 3 && a[1] == "session-start" && a[2] is "codex" or "claude-code" or "antigravity") ||
+            (a.Length == 3 && a[1] is "turn-start" or "turn-end" && a[2] == "antigravity") ||
             (a.Length >= 3 && a[1] == "wait" && a[2] == "claude-code" && (a.Length == 3 || (a.Length == 4 && a[3] == "--renew") || ((a.Length == 5 || (a.Length == 6 && a[5] == "--renew")) && a[3] == "--timeout" && int.TryParse(a[4], out var seconds) && seconds is >= 10 and <= 86400))),
         _ => false
     };

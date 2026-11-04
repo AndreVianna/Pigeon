@@ -1,5 +1,7 @@
 using Pigeon.Core;
+
 using Reqnroll;
+
 using Xunit;
 
 namespace Pigeon.IntegrationTests.Steps;
@@ -28,7 +30,10 @@ public sealed class WakeSteps {
 
     [When("the Codex session sends three messages")]
     public void Burst() {
-        foreach (var text in new[] { "one", "two", "three" }) { Send(text); now++; }
+        foreach (var text in new[] { "one", "two", "three" }) {
+            Send(text);
+            now++;
+        }
     }
 
     [Then("one wake is claimed for the Claude session, a wrong generation receives nothing, and the right one receives all three in order")]
@@ -108,6 +113,7 @@ public sealed class WakeSteps {
             Assert.Null(store.ClaimWake(Claude, "claude-hook"));
             Assert.Equal("exhausted", store.GetWakeStatus(Claude).State);
         }
+
         Exhaust();
         Send("another");
         Assert.Equal(1, Claim().Attempt);
@@ -166,6 +172,7 @@ public sealed class WakeSteps {
     [AfterScenario]
     public void Cleanup() {
         store?.Dispose();
-        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
     }
 }

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pigeon": {
+      "command": "pigeon",
+      "args": ["mcp"],
+      "env": { "PIGEON_RUNTIME": "antigravity" }
+    }
+  }
+}

@@ -1,6 +1,24 @@
 # Known issues and technical debt
 
-This list reflects 0.6.0-alpha.1. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+This list reflects 0.6.0-alpha.2. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+
+## Antigravity
+
+### Not yet tried end to end
+
+0.6.0-alpha.2 builds the Antigravity plugin on what the 2026-11-01 probe of Antigravity 2.28.2 showed (see [host integrations research](host-integrations-research.md#antigravity-probe-results-2026-11-01)), and its parts pass the automated tests, but the plugin has not yet run in the Antigravity App.
+
+### Waking needs the App and the sidecar
+
+Only the Antigravity App runs sidecars; the Antigravity CLI and IDE get messaging and restore but are not woken. The **Pigeon wake** sidecar is off until the user turns it on in Automations. Each Pigeon tool call asks for approval until the tools are allowed, and a wake waits for that approval.
+
+### Turn state is kept in memory
+
+The service learns whether a conversation is idle only from its hooks. After the service restarts, a conversation is not woken until its next turn reports. A conversation whose turn ended abnormally without a `Stop` hook stays marked busy until its next turn.
+
+### Acceptance is not delivery
+
+`agentapi send-message` reports success for a deleted conversation and drops the message. Pigeon's wake retries cover this: an unconfirmed wake is resent after the retry time and gives up after the attempt limit.
 
 ## macOS and Linux
 

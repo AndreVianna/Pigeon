@@ -1,0 +1,13 @@
+{
+  "pigeon": {
+    "SessionStart": [
+      { "type": "command", "command": "pigeon hook session-start antigravity", "timeout": 10 }
+    ],
+    "PreInvocation": [
+      { "type": "command", "command": "pigeon hook turn-start antigravity", "timeout": 10 }
+    ],
+    "Stop": [
+      { "type": "command", "command": "pigeon hook turn-end antigravity", "timeout": 10 }
+    ]
+  }
+}

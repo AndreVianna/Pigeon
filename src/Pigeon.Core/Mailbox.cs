@@ -23,8 +23,11 @@ public sealed partial class Mailbox : IDisposable {
     private readonly long wakeRetryMilliseconds, leaseMilliseconds;
 
     public Mailbox(string path, Func<long>? clock = null, int maxAttempts = 3, int maxMessagesPerHour = 60, int maxWakeAttempts = 3, long wakeRetryMilliseconds = 120000, long leaseMilliseconds = 600000) {
-        if (maxAttempts < 1 || maxMessagesPerHour < 1 || maxWakeAttempts < 1 || wakeRetryMilliseconds < 1 || leaseMilliseconds < 1)
-            throw new ArgumentOutOfRangeException();
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxAttempts, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxMessagesPerHour, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxWakeAttempts, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(wakeRetryMilliseconds, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(leaseMilliseconds, 1);
         this.maxAttempts = maxAttempts;
         this.maxMessagesPerHour = maxMessagesPerHour;
         this.maxWakeAttempts = maxWakeAttempts;
@@ -44,46 +47,60 @@ public sealed partial class Mailbox : IDisposable {
                 "CREATE TABLE IF NOT EXISTS p_wake_attempts(session TEXT NOT NULL, generation TEXT NOT NULL, number INTEGER NOT NULL, attempted_at INTEGER NOT NULL, mode TEXT NOT NULL, outcome TEXT NOT NULL, PRIMARY KEY(session,generation,number))",
                 "CREATE INDEX IF NOT EXISTS p_messages_recipient ON p_messages(recipient,status)",
                 "CREATE INDEX IF NOT EXISTS p_messages_topic ON p_messages(topic,created)"
-            })
+            }) {
                 _ = db.Exec(sql);
+            }
+
             _ = db.Transaction(() => {
                 if (db.Query("SELECT 1 FROM pigeon_metadata WHERE key='schema'").Count == 0) {
                     MigrateEarlierSchema();
                     _ = db.Exec("INSERT INTO pigeon_metadata(key,value) VALUES('schema','3')");
                 }
+
                 return 0;
             });
         }
-        catch { db.Dispose(); throw; }
+        catch {
+            db.Dispose();
+            throw;
+        }
     }
 
     // Earlier versions kept name-based agents and multi-member topics. Their tables are left
     // untouched; only session identities, up to two members per topic (the most recently
     // active), and their pending messages are carried over.
     private void MigrateEarlierSchema() {
-        if (db.Query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_routes'").Count == 0) return;
+        if (db.Query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_routes'").Count == 0)
+            return;
         var sessions = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var route in db.Query("SELECT agent,tool,session FROM session_routes ORDER BY rowid")) {
-            if (db.Query("SELECT 1 FROM p_sessions WHERE session=?", route[2]).Count != 0) continue;
+            if (db.Query("SELECT 1 FROM p_sessions WHERE session=?", route[2]).Count != 0)
+                continue;
             _ = db.Exec("INSERT INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", route[2], ToolName(route[1])!, Time());
             sessions[route[0]!] = route[2]!;
         }
+
         var dropped = new List<string>();
         foreach (var topic in db.Query("SELECT DISTINCT topic FROM subscriptions ORDER BY topic").Select(row => row[0]!)) {
             var members = db.Query("SELECT s.agent, COALESCE((SELECT MAX(created) FROM messages m WHERE m.sender=s.agent OR m.recipient=s.agent),0) AS active FROM subscriptions s WHERE s.topic=? ORDER BY active DESC, s.rowid DESC", topic)
                 .Select(row => row[0]!).Where(sessions.ContainsKey).ToArray();
-            if (members.Length == 0) continue;
+            if (members.Length == 0)
+                continue;
             _ = db.Exec("INSERT INTO p_topics(topic,created) VALUES(?,?)", topic, Time());
             foreach (var agent in members.Take(2))
                 _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", topic, sessions[agent], Time());
             dropped.AddRange(members.Skip(2).Select(agent => topic + ": " + sessions[agent]));
         }
+
         foreach (var m in db.Query("SELECT id,topic,sender,recipient,body,idem,created,expires FROM messages WHERE status IN ('queued','leased') AND topic IS NOT NULL ORDER BY created,rowid")) {
-            if (!sessions.TryGetValue(m[2]!, out var sender) || !sessions.TryGetValue(m[3]!, out var recipient)) continue;
-            if (db.Query("SELECT 1 FROM p_members WHERE topic=? AND session=?", m[1], recipient).Count == 0) continue;
+            if (!sessions.TryGetValue(m[2]!, out var sender) || !sessions.TryGetValue(m[3]!, out var recipient))
+                continue;
+            if (db.Query("SELECT 1 FROM p_members WHERE topic=? AND session=?", m[1], recipient).Count == 0)
+                continue;
             _ = db.Exec("INSERT OR IGNORE INTO p_messages(id,topic,sender,recipient,body,idem,created,expires,status) VALUES(?,?,?,?,?,?,?,?,'queued')", m[0], m[1], sender, recipient, m[4], "migrated:" + m[5], m[6], m[7]);
             EnsureWake(recipient);
         }
+
         if (dropped.Count != 0)
             _ = db.Exec("INSERT OR REPLACE INTO pigeon_metadata(key,value) VALUES('upgrade_removed_members',?)", string.Join("; ", dropped));
     }
@@ -108,10 +125,10 @@ public sealed partial class Mailbox : IDisposable {
     }
     private static string NotMember(string session, string topic) => $"Session {session} is not in topic \"{topic}\".";
 
-    private Member[] MembersOf(string topic) =>
-        [.. db.Query("SELECT s.tool,m.session FROM p_members m JOIN p_sessions s ON s.session=m.session WHERE m.topic=? ORDER BY m.joined,m.rowid", topic).Select(r => new Member(r[0]!, r[1]!))];
-    private string[] TopicsOf(string session) =>
-        [.. db.Query("SELECT topic FROM p_members WHERE session=? ORDER BY topic", session).Select(r => r[0]!)];
+    private Member[] MembersOf(string topic)
+        => [.. db.Query("SELECT s.tool,m.session FROM p_members m JOIN p_sessions s ON s.session=m.session WHERE m.topic=? ORDER BY m.joined,m.rowid", topic).Select(r => new Member(r[0]!, r[1]!))];
+    private string[] TopicsOf(string session)
+        => [.. db.Query("SELECT topic FROM p_members WHERE session=? ORDER BY topic", session).Select(r => r[0]!)];
     private TopicInfo Info(string topic, string? forSession = null) {
         var waiting = forSession is null
             ? db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND status IN ('queued','leased')", topic)
@@ -138,11 +155,14 @@ public sealed partial class Mailbox : IDisposable {
             var known = ToolOf(session);
             if (known is not null && known != tool)
                 throw new InvalidOperationException($"Session {session} already joined using {known}.");
-            if (known is null) _ = db.Exec("INSERT INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", session, tool, Time());
-            else _ = db.Exec("UPDATE p_sessions SET last_seen=? WHERE session=?", Time(), session);
+            _ = known is null
+                ? db.Exec("INSERT INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", session, tool, Time())
+                : db.Exec("UPDATE p_sessions SET last_seen=? WHERE session=?", Time(), session);
             var members = MembersOf(topic);
-            if (members.Any(m => m.SessionId == session)) return Info(topic);
-            if (members.Length >= 2) throw new TopicFullException(Info(topic));
+            if (members.Any(m => m.SessionId == session))
+                return Info(topic);
+            if (members.Length >= 2)
+                throw new TopicFullException(Info(topic));
             _ = db.Exec("INSERT OR IGNORE INTO p_topics(topic,created) VALUES(?,?)", topic, Time());
             _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", topic, session, Time());
             if (db.Exec("UPDATE p_messages SET recipient=? WHERE topic=? AND recipient IS NULL AND sender<>? AND status='queued'", session, topic, session) != 0)
@@ -160,9 +180,11 @@ public sealed partial class Mailbox : IDisposable {
             if (db.Exec("DELETE FROM p_members WHERE topic=? AND session=?", topic, session) == 0)
                 throw new InvalidOperationException(NotMember(session, topic));
             var deleted = db.Query("SELECT 1 FROM p_members WHERE topic=?", topic).Count == 0;
-            if (deleted) DeleteTopicCore(topic);
+            if (deleted)
+                DeleteTopicCore(topic);
             // Unread messages wait for whoever takes the leaver's place.
-            else _ = db.Exec("UPDATE p_messages SET recipient=NULL,status='queued',lease_until=NULL WHERE topic=? AND recipient=? AND status IN ('queued','leased')", topic, session);
+            else
+                _ = db.Exec("UPDATE p_messages SET recipient=NULL,status='queued',lease_until=NULL WHERE topic=? AND recipient=? AND status IN ('queued','leased')", topic, session);
             SettleWake(session);
             return deleted;
         });
@@ -174,13 +196,14 @@ public sealed partial class Mailbox : IDisposable {
         _ = db.Exec("DELETE FROM p_messages WHERE topic=?", topic);
         _ = db.Exec("DELETE FROM p_members WHERE topic=?", topic);
         _ = db.Exec("DELETE FROM p_topics WHERE topic=?", topic);
-        foreach (var session in members.Concat(recipients).Distinct(StringComparer.Ordinal)) SettleWake(session);
+        foreach (var session in members.Concat(recipients).Distinct(StringComparer.Ordinal))
+            SettleWake(session);
     }
 
     public TopicInfo[] Topics(string? session = null) => db.Transaction(() => {
         Sweep();
         var names = session is null
-            ? db.Query("SELECT topic FROM p_topics ORDER BY topic").Select(r => r[0]!).ToArray()
+            ? [.. db.Query("SELECT topic FROM p_topics ORDER BY topic").Select(r => r[0]!)]
             : TopicsOf(session);
         return names.Select(name => Info(name, session)).ToArray();
     });
@@ -196,7 +219,8 @@ public sealed partial class Mailbox : IDisposable {
         Required(session, "session ID");
         var tool = CanonicalTool(toolName);
         return db.Transaction(() => {
-            if (ToolOf(session) != tool) return null;
+            if (ToolOf(session) != tool)
+                return null;
             _ = db.Exec("UPDATE p_sessions SET last_seen=? WHERE session=?", Time(), session);
             Sweep();
             var (queued, _) = PendingCounts(session);
@@ -214,21 +238,26 @@ public sealed partial class Mailbox : IDisposable {
         return db.Transaction(() => {
             Sweep();
             var members = MembersOf(topic);
-            if (!members.Any(m => m.SessionId == session)) throw new InvalidOperationException(NotMember(session, topic));
+            if (!members.Any(m => m.SessionId == session))
+                throw new InvalidOperationException(NotMember(session, topic));
             var partner = members.FirstOrDefault(m => m.SessionId != session);
             var existing = db.Query("SELECT id,topic,body,body_digest FROM p_messages WHERE sender=? AND idem=?", session, idempotency).FirstOrDefault();
-            if (existing is not null)
+            if (existing is not null) {
                 return existing[1] != topic || (existing[3] is null ? existing[2] != body : existing[3] != Digest(body))
                     ? throw new InvalidOperationException("This retry key was already used for a different message.")
                     : new SendOutcome(existing[0]!, partner);
-            if (expires <= now()) throw new InvalidOperationException("The message expiry must be in the future.");
+            }
+
+            if (expires <= now())
+                throw new InvalidOperationException("The message expiry must be in the future.");
             var sent = int.Parse(db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND created>?", topic, Number(checked(now() - 3600000)))[0][0]!, CultureInfo.InvariantCulture);
             if (sent >= maxMessagesPerHour)
                 throw new InvalidOperationException($"Topic \"{topic}\" reached its limit of {maxMessagesPerHour} messages per hour; try again later.");
             var id = Guid.NewGuid().ToString("N");
             _ = db.Exec("INSERT INTO p_messages(id,topic,sender,recipient,body,idem,created,expires,status) VALUES(?,?,?,?,?,?,?,?,'queued')", id, topic, session, partner?.SessionId, body, idempotency, Time(), Number(expires));
             _ = db.Exec("UPDATE p_sessions SET last_seen=? WHERE session=?", Time(), session);
-            if (partner is not null) WakeForNewMessage(partner.SessionId);
+            if (partner is not null)
+                WakeForNewMessage(partner.SessionId);
             return new SendOutcome(id, partner);
         });
     }
@@ -245,7 +274,8 @@ public sealed partial class Mailbox : IDisposable {
             foreach (var row in rows)
                 _ = db.Exec("UPDATE p_messages SET status='acknowledged',attempts=attempts+1,terminal_at=?,lease_until=NULL WHERE id=?", Time(), row[0]);
             _ = db.Exec("UPDATE p_sessions SET last_seen=? WHERE session=?", Time(), session);
-            if (rows.Count != 0) SettleWake(session, progress: true);
+            if (rows.Count != 0)
+                SettleWake(session, progress: true);
             return rows.Select(ToDelivery).ToArray();
         });
     }
@@ -256,20 +286,20 @@ public sealed partial class Mailbox : IDisposable {
     public void TouchAll() => db.Exec("UPDATE p_sessions SET last_seen=?", Time());
 
     // A topic is abandoned when neither member has been seen for the idle period.
-    public string[] DeleteAbandoned(long idleMilliseconds) {
-        if (idleMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(idleMilliseconds));
-        return db.Transaction(() => {
-            var cutoff = Number(checked(now() - idleMilliseconds));
-            var topics = db.Query("SELECT t.topic FROM p_topics t WHERE t.created<=? AND NOT EXISTS (SELECT 1 FROM p_members m JOIN p_sessions s ON s.session=m.session WHERE m.topic=t.topic AND s.last_seen>?)", cutoff, cutoff)
-                .Select(r => r[0]!).ToArray();
-            foreach (var topic in topics) DeleteTopicCore(topic);
-            return topics;
-        });
-    }
+    public string[] DeleteAbandoned(long idleMilliseconds) => idleMilliseconds <= 0
+            ? throw new ArgumentOutOfRangeException(nameof(idleMilliseconds))
+            : db.Transaction(() => {
+                var cutoff = Number(checked(now() - idleMilliseconds));
+                var topics = db.Query("SELECT t.topic FROM p_topics t WHERE t.created<=? AND NOT EXISTS (SELECT 1 FROM p_members m JOIN p_sessions s ON s.session=m.session WHERE m.topic=t.topic AND s.last_seen>?)", cutoff, cutoff)
+                    .Select(r => r[0]!).ToArray();
+                foreach (var topic in topics)
+                    DeleteTopicCore(topic);
+                return topics;
+            });
 
     // Keep identifiers and digests so retention cannot reopen a retry key.
     public int RedactTerminalBodies(long retentionMilliseconds) {
-        if (retentionMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(retentionMilliseconds));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(retentionMilliseconds);
         var cutoff = Number(checked(now() - retentionMilliseconds));
         return db.Transaction(() => {
             Sweep();

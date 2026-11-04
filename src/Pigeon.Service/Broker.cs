@@ -1,4 +1,5 @@
 using System.Text.Json;
+
 using Pigeon.Core;
 
 namespace Pigeon.Service;
@@ -18,8 +19,16 @@ public sealed class Broker : IDisposable {
     private readonly Dictionary<string, long> superseded = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Mode, string Reason, long At)> released = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> lastTouch = new(StringComparer.Ordinal);
+    // Antigravity has no busy state of its own: a message sent during a turn joins it and
+    // derails the agent. Its hooks report turns here, and a wake is sent only to a session
+    // known to be idle. Kept only in memory, so after a restart a session waits for its next turn.
+    // Woken marks a wake sent since the last hook report: if no turn starts, the wake's own
+    // retry time decides when to send again, so a lost wake is retried and eventually gives up.
+    private readonly Dictionary<string, (bool Busy, long Since, bool Woken)> turns = new(StringComparer.Ordinal);
     private long lastMaintenance, lastRequest;
     private const long BridgeTimeoutMilliseconds = 15000, OwnerTimeoutMilliseconds = 15000;
+    // A Stop hook runs before the host finishes the turn, so a wake waits for the turn to settle.
+    public const long IdleSettleMilliseconds = 2000;
     // Clients treat this error as a temporary service outage, not a rejected request.
     public const string StorageUnavailable = "storage unavailable";
 
@@ -30,8 +39,14 @@ public sealed class Broker : IDisposable {
         this.abandonedTopicMilliseconds = abandonedTopicMilliseconds;
         this.clock = clock ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         mailbox = new Mailbox(databasePath, clock, maxAttempts, maxMessagesPerHour, maxWakeAttempts, wakeRetryMilliseconds, leaseMilliseconds);
-        try { mailbox.TouchAll(); }
-        catch { mailbox.Dispose(); throw; }
+        try {
+            mailbox.TouchAll();
+        }
+        catch {
+            mailbox.Dispose();
+            throw;
+        }
+
         lastMaintenance = lastRequest = this.clock();
     }
 
@@ -56,6 +71,7 @@ public sealed class Broker : IDisposable {
                     "wake_owner" => WakeOwner(args),
                     "wake_owner_check" => WakeOwnerCheck(args),
                     "wake_owner_release" => WakeOwnerRelease(args),
+                    "turn_state" => TurnState(args),
                     "wake_claim" => ClaimWake(args),
                     "wake_result" => mailbox.RecordWakeResult(Str(args, "sessionId"), Str(args, "generation"), checked((int)(OptionalNumber(args, "attempt") ?? throw new ArgumentException())), Str(args, "outcome")),
                     "wake_receive" => mailbox.ReceiveForWake(Str(args, "sessionId"), Str(args, "generation")),
@@ -86,12 +102,15 @@ public sealed class Broker : IDisposable {
     // fresh grace period before any topic counts as abandoned.
     private void Maintain() {
         var now = clock();
-        if (now - lastRequest > 300000) mailbox.TouchAll();
+        if (now - lastRequest > 300000)
+            mailbox.TouchAll();
         lastRequest = now;
-        if (now - lastMaintenance < 60000) return;
+        if (now - lastMaintenance < 60000)
+            return;
         lastMaintenance = now;
         _ = mailbox.DeleteAbandoned(abandonedTopicMilliseconds);
-        if (bodyRetentionMilliseconds is long retention) _ = mailbox.RedactTerminalBodies(retention);
+        if (bodyRetentionMilliseconds is long retention)
+            _ = mailbox.RedactTerminalBodies(retention);
     }
 
     private bool Connected(string session) {
@@ -111,25 +130,30 @@ public sealed class Broker : IDisposable {
         var mode = Str(args, "mode");
         var session = Optional(args, "sessionId");
         var restoration = Optional(args, "restoration");
-        if (!Guid.TryParseExact(id, "N", out _) || mode is not ("mcp" or "codex-queue" or "claude-hook"))
+        if (!Guid.TryParseExact(id, "N", out _) || mode is not ("mcp" or "codex-queue" or "claude-hook" or "antigravity-agentapi"))
             throw new ArgumentException();
-        if (restoration is not (null or "pending" or "bound" or "missing-session" or "not-configured" or "conflict")) throw new ArgumentException();
+        if (restoration is not (null or "pending" or "bound" or "missing-session" or "not-configured" or "conflict"))
+            throw new ArgumentException();
         var now = clock();
-        foreach (var stale in bridges.Where(pair => pair.Value.Seen < now - BridgeTimeoutMilliseconds).Select(pair => pair.Key).ToArray()) bridges.Remove(stale);
-        if (!bridges.ContainsKey(id) && bridges.Count >= 1024) throw new InvalidOperationException("Too many connected bridges.");
+        foreach (var stale in bridges.Where(pair => pair.Value.Seen < now - BridgeTimeoutMilliseconds).Select(pair => pair.Key).ToArray())
+            bridges.Remove(stale);
+        if (!bridges.ContainsKey(id) && bridges.Count >= 1024)
+            throw new InvalidOperationException("Too many connected bridges.");
         bridges[id] = (session, mode, restoration, now);
         // Record that the session is alive, at most once a minute.
         if (session is not null && now - lastTouch.GetValueOrDefault(session, long.MinValue / 2) >= 60000) {
             mailbox.Touch(session);
             lastTouch[session] = now;
         }
+
         return new { recorded = true };
     }
 
     private object ActiveBridges() {
         var now = clock();
         PruneOwners(now);
-        foreach (var id in bridges.Where(pair => pair.Value.Seen < now - BridgeTimeoutMilliseconds).Select(pair => pair.Key).ToArray()) bridges.Remove(id);
+        foreach (var id in bridges.Where(pair => pair.Value.Seen < now - BridgeTimeoutMilliseconds).Select(pair => pair.Key).ToArray())
+            bridges.Remove(id);
         return bridges.Values.Select(value => {
             var session = value.Session is null ? null : mailbox.Session(value.Session);
             return new { sessionId = value.Session, tool = session?.Tool, mode = value.Mode, restoration = value.Restoration, lastSeenUnixMs = value.Seen, topics = session?.Topics ?? [], wake = session is null ? null : mailbox.GetWakeStatus(session.SessionId), notifier = session is null ? null : Notifier(session.SessionId) };
@@ -163,8 +187,10 @@ public sealed class Broker : IDisposable {
         var session = Str(args, "sessionId");
         var holder = Str(args, "holderId");
         var mode = Str(args, "mode");
-        if (!Guid.TryParseExact(holder, "N", out _) || mode != "claude-hook") throw new ArgumentException();
-        if (mailbox.Session(session) is null) throw new InvalidOperationException($"Session {session} is not known.");
+        if (!Guid.TryParseExact(holder, "N", out _) || mode != "claude-hook")
+            throw new ArgumentException();
+        if (mailbox.Session(session) is null)
+            throw new InvalidOperationException($"Session {session} is not known.");
         var now = clock();
         PruneOwners(now);
         if (owners.TryGetValue(session, out var current) && current.Holder != holder) {
@@ -172,11 +198,14 @@ public sealed class Broker : IDisposable {
                 superseded[holder] = now;
                 return new { owner = false, active = current.Mode };
             }
-            if (superseded.Count >= 1024) throw new InvalidOperationException("Too many notifiers.");
+
+            if (superseded.Count >= 1024)
+                throw new InvalidOperationException("Too many notifiers.");
             superseded[current.Holder] = now;
             released[session] = (current.Mode, "superseded", now);
         }
-        else if (!owners.ContainsKey(session) && owners.Count >= 1024) throw new InvalidOperationException("Too many notifiers.");
+        else if (!owners.ContainsKey(session) && owners.Count >= 1024)
+            throw new InvalidOperationException("Too many notifiers.");
         _ = superseded.Remove(holder);
         owners[session] = (holder, mode, now);
         return new { owner = true, active = mode };
@@ -186,7 +215,8 @@ public sealed class Broker : IDisposable {
         var session = Str(args, "sessionId");
         var holder = Str(args, "holderId");
         PruneOwners(clock());
-        if (!owners.TryGetValue(session, out var owner) || owner.Holder != holder) return new { owner = false };
+        if (!owners.TryGetValue(session, out var owner) || owner.Holder != holder)
+            return new { owner = false };
         // A session in no topic and with nothing waiting has nothing to watch.
         var status = mailbox.GetWakeStatus(session);
         return new { owner = mailbox.Session(session)?.Topics.Length > 0 || status.Queued + status.Leased > 0 };
@@ -196,11 +226,34 @@ public sealed class Broker : IDisposable {
         var session = Str(args, "sessionId");
         var holder = Str(args, "holderId");
         var reason = Str(args, "reason");
-        if (reason is not ("woke" or "renewed" or "expired" or "orphaned" or "stopped")) throw new ArgumentException();
-        if (!owners.TryGetValue(session, out var owner) || owner.Holder != holder) return new { released = false };
+        if (reason is not ("woke" or "renewed" or "expired" or "orphaned" or "stopped"))
+            throw new ArgumentException();
+        if (!owners.TryGetValue(session, out var owner) || owner.Holder != holder)
+            return new { released = false };
         _ = owners.Remove(session);
         released[session] = (owner.Mode, reason, clock());
         return new { released = true };
+    }
+
+    // The first report of a new turn also restores the session, since Antigravity has no
+    // prompt hook that could do it and may not run SessionStart when a conversation is reopened.
+    private object TurnState(JsonElement args) {
+        var tool = Mailbox.ToolName(Str(args, "tool"));
+        var session = Str(args, "sessionId");
+        var state = Str(args, "state");
+        if (tool != "antigravity" || state is not ("busy" or "idle") || session.Length > 256 || session.Any(char.IsControl))
+            throw new ArgumentException();
+        var busy = state == "busy";
+        var started = busy && !(turns.TryGetValue(session, out var previous) && previous.Busy);
+        if (!turns.ContainsKey(session) && turns.Count >= 1024) {
+            // Forget the oldest idle sessions rather than refuse a live one.
+            foreach (var key in turns.OrderBy(pair => pair.Value.Since).Take(256).Select(pair => pair.Key).ToArray())
+                _ = turns.Remove(key);
+        }
+
+        turns[session] = (busy, clock(), false);
+        var restored = started && mailbox.Restore(tool, session) is not null;
+        return new { recorded = true, restored };
     }
 
     private WakeClaim? ClaimWake(JsonElement args) {
@@ -209,8 +262,20 @@ public sealed class Broker : IDisposable {
         if (mode == "claude-hook") {
             PruneOwners(clock());
             var holder = Optional(args, "holderId");
-            if (holder is null || !owners.TryGetValue(session, out var owner) || owner.Holder != holder) return null;
+            if (holder is null || !owners.TryGetValue(session, out var owner) || owner.Holder != holder)
+                return null;
         }
+
+        if (mode == "antigravity-agentapi") {
+            var now = clock();
+            if (!turns.TryGetValue(session, out var turn) || (!turn.Woken && (turn.Busy || now - turn.Since < IdleSettleMilliseconds)))
+                return null;
+            var claim = mailbox.ClaimWake(session, mode);
+            if (claim is not null)
+                turns[session] = (true, now, true);
+            return claim;
+        }
+
         return mailbox.ClaimWake(session, mode);
     }
 

@@ -135,10 +135,21 @@ Phase 1.5 and the code simplifications in `next-steps.md` (removing non-topic mo
 
 ## After 0.5.0: goals for 0.6.0
 
-Set by the user on 2026-11-03. Agreed order: macOS and Linux in 0.6.0-alpha.1 (in progress), Antigravity in alpha.2, different machines in alpha.3, whose security design is reviewed before any of it is built. SQLite stays the operating system's own library on every platform.
+Set by the user on 2026-11-03. Agreed order: macOS and Linux in 0.6.0-alpha.1 (done), new host adapters in alpha.2, different machines in alpha.3, whose security design is reviewed before any of it is built. SQLite stays the operating system's own library on every platform.
 
 **0.6.0-alpha.1 (macOS and Linux):** load the system SQLite (`winsqlite3`, `libsqlite3.dylib`, `libsqlite3.so.0`); watch the hook waiter's ancestors through `/proc` on Linux and `libproc` on macOS; start the background service without shell execution and ignore the hang-up signal on Unix; replace the Windows named semaphore with a per-user lock file on Unix; make `hook-wait.sh` POSIX (it used bash syntax but runs as `sh`, which is dash on Ubuntu); run CI on Windows, Ubuntu and macOS. Host tests on macOS and Linux follow when a machine is available.
 
-1. **Antigravity, and possibly Cursor.** Start from [host integrations research](host-integrations-research.md). Antigravity wakes through an undocumented `agentapi send-message` call that interrupts a running turn and silently drops messages to deleted conversations, so the adapter needs idle detection and a delivery check. The Cursor probe still has to run once the account's usage limit allows it.
+1. **New host adapters.** Start from [host integrations research](host-integrations-research.md) and [coding-agent hosts for 0.6.0](host-adapters-research.md). Approved by the user on 2026-11-03 for 0.6.0-alpha.2:
+   1. **Antigravity**, with wake. It wakes through an undocumented `agentapi send-message` call that interrupts a running turn and silently drops messages to deleted conversations, so the adapter needs idle detection and a delivery check. Built on 2026-11-03 (hook-reported turns, a two-second idle settle, wake retries as the delivery check); the host test in the Antigravity App is pending.
+   2. **Cursor**, messaging and restore without idle wake. The Cursor probe still has to run once the account's usage limit allows it.
+   3. **GitHub Copilot** (agent mode in VS Code).
+   4. **Antigravity CLI**, in place of Gemini CLI, whose free, Pro and Ultra users Google moved to Antigravity CLI on 2026-06-18 (changed by the user on 2026-11-03). It uses the App's plugin format, so one Pigeon plugin may serve both.
+   5. **Windsurf**, renamed Devin Desktop on 2026-06-02.
+   6. **Cline.**
+   7. **OpenCode.**
+
+   For 3 to 7, the wake path is still being researched. A host without a supported idle wake ships as messaging and restore only, like Cursor, and the docs say so.
+
+   Deferred to a later version: GitHub Copilot CLI and Copilot in Visual Studio, Sourcegraph Amp, Factory Droid, Qwen Code, Charm Crush, Aider, Block Goose, Augment (Auggie CLI and IDE), Kilo Code, Gemini CLI (now only for Code Assist Standard and Enterprise and paid API keys), AWS Kiro, JetBrains Junie and AI Assistant, Zed, Warp and Trae. Roo Code and Continue were dropped: both are discontinued.
 2. **Agents on different machines.** Today the service accepts only loopback connections and has no authentication, because a session ID is only a routing claim (see [local trust boundaries](security-design.md)). Connecting machines needs authenticated peers, encrypted transport and a way to pair machines before any network listener is opened.
-3. **Release builds for macOS and Linux.** Pigeon is Windows-only today: storage calls the Windows `winsqlite3` library directly (`src/Pigeon.Core/Sqlite.cs`), the Claude hook waiter watches its launcher chain through Windows process APIs (`src/Pigeon.Cli/MonitorParent.cs`), and the docs assume Git Bash and PowerShell. Each platform needs a SQLite library it ships with or bundles, a process-ancestry check of its own, the hook scripts checked under its shell, and a CI job.
+3. **Release builds for macOS and Linux.** Done in 0.6.0-alpha.1 (above): CI passes on Windows, Ubuntu and macOS. Still open: host tests with Claude Code and Codex on a Mac and a Linux machine.

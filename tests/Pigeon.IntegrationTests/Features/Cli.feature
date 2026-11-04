@@ -31,7 +31,8 @@ Feature: Command line
       | receive --help  | Usage: pigeon receive for <session-id> from <topic>        |
       | help receive    | Usage: pigeon receive for <session-id> from <topic>        |
       | mcp --help      | Usage: pigeon mcp [--codex-queue]                          |
-      | hook --help     | Usage: pigeon hook session-start <codex\|claude-code>      |
+      | hook --help     | Usage: pigeon hook session-start <codex\|claude-code\|antigravity> |
+      | sidecar --help  | Usage: pigeon sidecar antigravity                          |
 
   Scenario: The version is printed without starting a service
     When I run Pigeon with arguments "--version"
@@ -61,6 +62,22 @@ Feature: Command line
       | send from x to design                         |
       | receive for x                                 |
       | receive x from design                         |
+      | sidecar                                       |
+      | sidecar codex                                 |
+
+  Scenario Outline: Antigravity hooks always answer, even without a service
+    When I run Pigeon with arguments "<arguments>"
+    Then the command succeeds and prints exactly '<reply>'
+
+    Examples:
+      | arguments                          | reply                 |
+      | hook turn-start antigravity        | {}                    |
+      | hook session-start antigravity     | {}                    |
+      | hook turn-end antigravity          | {"decision":"allow"}  |
+
+  Scenario: The Antigravity sidecar refuses to run outside Antigravity
+    When I run Pigeon with arguments "sidecar antigravity"
+    Then the command fails and says it runs inside the Antigravity App
 
   Scenario: A conversation through the command line survives a service restart
     Given an isolated background service

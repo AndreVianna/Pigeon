@@ -13,27 +13,40 @@ public static class McpStdio {
                 await output.WriteLineAsync(line.AsMemory(), token);
                 await output.FlushAsync(token);
             }
-            finally { _ = writeGate.Release(); }
+            finally {
+                _ = writeGate.Release();
+            }
         }
+
         async Task NotificationsAsync() {
             while (!stopped.IsCancellationRequested) {
                 await Task.Delay(500, stopped.Token);
                 if (!session.IsReady || nextNotification is null)
                     continue;
                 McpOutboundNotification? notification;
-                try { notification = await nextNotification(stopped.Token); }
-                catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException) { continue; }
-                catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { continue; }
+                try {
+                    notification = await nextNotification(stopped.Token);
+                }
+                catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException) {
+                    continue;
+                }
+                catch (OperationCanceledException) when (!stopped.IsCancellationRequested) {
+                    continue;
+                }
+
                 if (notification is null)
                     continue;
                 await WriteAsync(notification.Json, stopped.Token);
                 if (notification.Written is not null) {
-                    try { await notification.Written(stopped.Token); }
+                    try {
+                        await notification.Written(stopped.Token);
+                    }
                     catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException) { }
                     catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { }
                 }
             }
         }
+
         var bridgeId = Guid.NewGuid().ToString("N");
         async Task HeartbeatAsync() {
             while (!stopped.IsCancellationRequested) {
@@ -45,9 +58,11 @@ public static class McpStdio {
                     catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
                     catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { }
                 }
+
                 await Task.Delay(3000, stopped.Token);
             }
         }
+
         var heartbeat = HeartbeatAsync();
         var notifications = nextNotification is null ? Task.CompletedTask : NotificationsAsync();
         try {
@@ -62,10 +77,16 @@ public static class McpStdio {
         }
         finally {
             stopped.Cancel();
-            try { await notifications; }
+            try {
+                await notifications;
+            }
             catch (OperationCanceledException) when (stopped.IsCancellationRequested) { }
-            try { await heartbeat; }
+
+            try {
+                await heartbeat;
+            }
             catch (OperationCanceledException) when (stopped.IsCancellationRequested) { }
+
             try {
                 using var disconnectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
                 _ = await session.BridgeAsync("bridge_disconnect", new { id = bridgeId }, disconnectTimeout.Token);

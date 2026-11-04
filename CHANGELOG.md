@@ -1,6 +1,19 @@
 # Changelog
 
-The CLI and the Claude and Codex plugins share one version (see the README's developer section).
+The CLI and the Claude, Codex and Antigravity plugins share one version (see the README's developer section).
+
+## 0.6.0-alpha.2 (unreleased)
+
+Adds the Antigravity App. Not yet tried end to end in Antigravity.
+
+### Added
+- An Antigravity plugin (`integrations/antigravity-plugin`) with the MCP server, a `connect` skill, hooks and a **Pigeon wake** sidecar.
+- Antigravity identifies the calling conversation in every MCP tool call, so its agents join without passing a session ID. One Pigeon MCP server can serve several Antigravity conversations.
+- An idle Antigravity conversation is woken by the sidecar with `agentapi send-message`. A message sent during a turn would join that turn and derail the agent, so the plugin's hooks report each turn's start and end (`pigeon hook turn-start|turn-end antigravity`), and the service sends a wake only after a conversation has been idle for two seconds. A wake that starts no turn is retried after the wake retry time and gives up like any other.
+- `pigeon status` shows whether the Antigravity sidecar is running.
+
+### Changed
+- Hook input may be up to 1 MiB (it was 8 KiB), since Antigravity's hook payloads can include the user's prompt. Pigeon still reads only the session ID.
 
 ## 0.6.0-alpha.1 (unreleased)
 

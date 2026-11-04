@@ -12,7 +12,7 @@ Everything stays on your computer. Pigeon runs a small background service that o
 - The [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0), release candidate 3 or later. Installing Pigeon builds it from this repository, and the SDK includes the runtime it needs.
 - On Windows, [Git for Windows](https://git-scm.com/download/win) if you use Claude Code: the Claude plugin's hook runs under Git Bash. macOS and Linux use their own `sh`.
 - On Linux, the SQLite library (`libsqlite3`), which nearly every distribution includes. Windows and macOS have it built in.
-- Claude Code (including Claude Desktop) and/or Codex (including the ChatGPT desktop app).
+- Claude Code (including Claude Desktop), Codex (including the ChatGPT desktop app) and/or the Antigravity App 2.28 or later. Antigravity support is new in 0.6.0-alpha.2 and has not yet been tried end to end.
 
 ## Install
 
@@ -20,7 +20,7 @@ Everything stays on your computer. Pigeon runs a small background service that o
 
 ```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.1 --source ./artifacts
+dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.2 --source ./artifacts
 ```
 
 The agent tools start `pigeon` by name, so the .NET tools folder (`~/.dotnet/tools` on macOS and Linux) must be on the `PATH` they see; `dotnet` says how to add it the first time. To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.
@@ -33,16 +33,17 @@ pigeon start
 
 It runs in the background until you stop it or restart the computer. `pigeon status` tells you whether it is running.
 
-**3. Add the plugin to your agent tools.** This repository is a plugin marketplace named `pigeon` for both tools.
+**3. Add the plugin to your agent tools.** This repository is a plugin marketplace named `pigeon` for Claude and Codex, and holds the Antigravity plugin.
 
 - **Claude Code / Claude Desktop:** in Claude Code run `/plugin install pigeon --marketplace AndreVianna/Pigeon`, or in Claude Desktop add `AndreVianna/Pigeon` as a marketplace in the plugin settings and install **pigeon**.
 - **Codex / ChatGPT desktop app:** run `codex plugin marketplace add AndreVianna/Pigeon`, or add the repository in the app's Marketplace tab, then install **pigeon** and approve its hooks when asked. If you added Pigeon earlier as a plain MCP server, remove that server first.
+- **Antigravity App:** from this repository's folder run `agy plugin install ./integrations/antigravity-plugin`, or copy `integrations/antigravity-plugin` to `~/.gemini/config/plugins/pigeon`. Install it globally: Antigravity runs plugin sidecars only from the global plugin folder. Then turn on **Pigeon wake** in the Automations dashboard, which is what wakes an idle conversation, and allow the Pigeon tools for the project or always, so a wake does not wait for your approval.
 
 Install the plugin, not just an MCP server: the plugin also brings the hooks that wake the agent and the `connect` skill.
 
 ## Connect two agents
 
-1. In the first agent, ask it to connect to a topic. In Claude, type `/pigeon:connect parser-review`. In Codex, ask: *"Connect to Pigeon topic parser-review."* The agent joins and reports that it is waiting for a partner.
+1. In the first agent, ask it to connect to a topic. In Claude, type `/pigeon:connect parser-review`. In Codex or Antigravity, ask: *"Connect to Pigeon topic parser-review."* The agent joins and reports that it is waiting for a partner.
 2. Do the same in the second agent with the same topic name. It joins as the partner.
 3. Ask either agent to send something to the other, for example *"Ask Codex to review the parser changes."*
 
@@ -127,7 +128,7 @@ dotnet test Pigeon.slnx
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
 ```
 
-Versions move in lockstep: the CLI (`<Version>` in `src/Pigeon.Cli/Pigeon.Cli.csproj`), the Claude plugin and the Codex plugin always share one version, and a release bumps all three together even when a plugin is unchanged. A unit test fails if they differ.
+Versions move in lockstep: the CLI (`<Version>` in `src/Pigeon.Cli/Pigeon.Cli.csproj`), the Claude, Codex and Antigravity plugins always share one version, and a release bumps them all together even when a plugin is unchanged. A unit test fails if they differ.
 
 The design is described in [architecture](docs/architecture.md), [session recovery](docs/session-recovery.md) and [local trust boundaries](docs/security-design.md); planned work is in the [release plan](docs/release-plan.md). Dated research, plans and test reports are kept in [docs/history](docs/history) and may describe earlier behavior. Host-test fixtures are indexed in [experiments](experiments/README.md).
 

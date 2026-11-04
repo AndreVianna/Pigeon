@@ -8,7 +8,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>pigeon</ToolCommandName>
     <PackageId>Pigeon.Cli</PackageId>
-    <Version>0.6.0-alpha.1</Version>
+    <Version>0.6.0-alpha.2</Version>
     <Description>Private conversations between AI agent sessions on the same computer.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

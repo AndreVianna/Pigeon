@@ -1,10 +1,11 @@
 using System.Text.Json;
 using System.Xml.Linq;
+
 using Xunit;
 
 namespace Pigeon.UnitTests;
 
-// The CLI and both plugins are versioned in lockstep: bump all three together.
+// The CLI and the plugins are versioned in lockstep: bump them all together.
 public class VersionTests {
     private static readonly string Root = FindRoot();
 
@@ -15,8 +16,8 @@ public class VersionTests {
         throw new InvalidOperationException("Repository root not found.");
     }
 
-    private static string CliVersion() =>
-        XDocument.Load(Path.Combine(Root, "src", "Pigeon.Cli", "Pigeon.Cli.csproj"))
+    private static string CliVersion()
+        => XDocument.Load(Path.Combine(Root, "src", "Pigeon.Cli", "Pigeon.Cli.csproj"))
             .Descendants("Version").Single().Value;
 
     private static string PluginVersion(params string[] manifest) {
@@ -25,10 +26,14 @@ public class VersionTests {
     }
 
     [Fact]
-    public void The_Claude_plugin_has_the_CLI_version() =>
-        Assert.Equal(CliVersion(), PluginVersion("integrations", "claude-plugin", ".claude-plugin", "plugin.json"));
+    public void The_Claude_plugin_has_the_CLI_version()
+        => Assert.Equal(CliVersion(), PluginVersion("integrations", "claude-plugin", ".claude-plugin", "plugin.json"));
 
     [Fact]
-    public void The_Codex_plugin_has_the_CLI_version() =>
-        Assert.Equal(CliVersion(), PluginVersion("integrations", "codex-plugin", ".codex-plugin", "plugin.json"));
+    public void The_Codex_plugin_has_the_CLI_version()
+        => Assert.Equal(CliVersion(), PluginVersion("integrations", "codex-plugin", ".codex-plugin", "plugin.json"));
+
+    [Fact]
+    public void The_Antigravity_plugin_has_the_CLI_version()
+        => Assert.Equal(CliVersion(), PluginVersion("integrations", "antigravity-plugin", "plugin.json"));
 }

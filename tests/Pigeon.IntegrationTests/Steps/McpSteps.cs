@@ -1,6 +1,9 @@
 using System.Text.Json;
+
 using Pigeon.Service;
+
 using Reqnroll;
+
 using Xunit;
 
 namespace Pigeon.IntegrationTests.Steps;
@@ -47,6 +50,109 @@ public sealed class McpSteps {
         await host.Ready.WaitAsync(TimeSpan.FromSeconds(10));
         codex = await Connect("codex");
         claude = await Connect("claude-code");
+    }
+
+    private long now = 1_000_000;
+
+    [Given("a running service with a test clock")]
+    public async Task RunningWithClock() {
+        Directory.CreateDirectory(directory);
+        broker = new Broker(Path.Combine(directory, "messages.db"), () => now, wakeRetryMilliseconds: 60000);
+        stop = new CancellationTokenSource();
+        var host = new LocalHttpServer(port, broker);
+        server = host.RunAsync(stop.Token);
+        await host.Ready.WaitAsync(TimeSpan.FromSeconds(10));
+        codex = await Connect("codex");
+    }
+
+    private async Task<(bool Error, string Text)> CallAs(McpSession session, string? conversation, string tool, object args) {
+        var meta = new Dictionary<string, string>();
+        if (conversation is not null)
+            meta[McpSession.AntigravityConversationKey] = conversation;
+        var request = JsonSerializer.Serialize(new { jsonrpc = "2.0", id = ++id, method = "tools/call", @params = new { name = tool, arguments = args, _meta = meta } });
+        using var response = JsonDocument.Parse((await session.HandleAsync(request))!);
+        var result = response.RootElement.GetProperty("result");
+        return (result.GetProperty("isError").GetBoolean(), result.GetProperty("content")[0].GetProperty("text").GetString()!);
+    }
+
+    private async Task<JsonElement> OkAs(McpSession session, string conversation, string tool, object args) {
+        var (error, text) = await CallAs(session, conversation, tool, args);
+        Assert.False(error, text);
+        return JsonDocument.Parse(text).RootElement.Clone();
+    }
+
+    private const string FirstConversation = "3f0d8a51-6c2e-4d8b-9a77-0b1c2d3e4f50", SecondConversation = "7a9b0c1d-2e3f-4a5b-8c6d-9e0f1a2b3c4d";
+
+    [Then("an Antigravity connection joins without a session ID, acts for each calling conversation, restores a joined one, and refuses a call that names none")]
+    public async Task AntigravityIdentity() {
+        var antigravity = await Connect("antigravity");
+        using (var list = JsonDocument.Parse((await antigravity.HandleAsync("{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"tools/list\"}"))!)) {
+            var tools = list.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray().ToArray();
+            Assert.DoesNotContain(tools, t => t.GetProperty("name").GetString() == "pigeon_session_restore");
+            var join = tools.Single(t => t.GetProperty("name").GetString() == "pigeon_join");
+            Assert.Equal(["topic"], join.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(r => r.GetString()));
+        }
+
+        var (error, text) = await CallAs(antigravity, null, "pigeon_join", new { topic = "review" });
+        Assert.True(error);
+        Assert.Contains("did not identify this conversation", text);
+        // A session ID passed by the agent is ignored in favor of the one Antigravity names.
+        var joined = await OkAs(antigravity, FirstConversation, "pigeon_join", new { topic = "review", sessionId = "guessed" });
+        Assert.Equal(("antigravity", FirstConversation), (joined.GetProperty("Members")[0].GetProperty("Tool").GetString(), joined.GetProperty("Members")[0].GetProperty("SessionId").GetString()));
+        _ = await OkAs(antigravity, SecondConversation, "pigeon_join", new { topic = "design" });
+        Assert.Equal(["design"], (await OkAs(antigravity, SecondConversation, "pigeon_topics", new { })).EnumerateArray().Select(t => t.GetProperty("Topic").GetString()));
+        Assert.Equal(["review"], (await OkAs(antigravity, FirstConversation, "pigeon_topics", new { })).EnumerateArray().Select(t => t.GetProperty("Topic").GetString()));
+        // A new server process restores a conversation that joined before, on its first call.
+        var restarted = await Connect("antigravity");
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(codex, "pigeon_send", new { topic = "review", message = "hello antigravity" });
+        Assert.Equal(1, (await OkAs(restarted, FirstConversation, "pigeon_topics", new { }))[0].GetProperty("Waiting").GetInt32());
+        Assert.Equal(FirstConversation, restarted.SessionId);
+        (error, text) = await CallAs(restarted, "never-joined", "pigeon_send", new { topic = "review", message = "x" });
+        Assert.True(error);
+        Assert.Equal("Join a topic first with pigeon_join.", text);
+    }
+
+    [Then("a wake is claimed only after the conversation's hooks report it idle for two seconds, never during a turn, and a lost wake is retried after its retry time")]
+    public async Task AntigravityWake() {
+        var antigravity = await Connect("antigravity");
+        _ = await OkAs(antigravity, FirstConversation, "pigeon_join", new { topic = "review" });
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(codex, "pigeon_send", new { topic = "review", message = "wake up" });
+        async Task<string?> Claim() {
+            var claim = await codex.BridgeAsync("wake_claim", new { sessionId = FirstConversation, mode = "antigravity-agentapi" }, CancellationToken.None);
+            Assert.True(claim.GetProperty("Ok").GetBoolean(), claim.ToString());
+            return claim.GetProperty("Value").ValueKind == JsonValueKind.Null ? null : claim.GetProperty("Value").GetProperty("Generation").GetString();
+        }
+
+        Task<JsonElement> Turn(string state) => codex.BridgeAsync("turn_state", new { tool = "antigravity", sessionId = FirstConversation, state }, CancellationToken.None);
+        // No hook has reported yet: the state is unknown, so nothing is sent.
+        Assert.Null(await Claim());
+        Assert.True((await Turn("busy")).GetProperty("Value").GetProperty("restored").GetBoolean());
+        Assert.False((await Turn("busy")).GetProperty("Value").GetProperty("restored").GetBoolean());
+        now += 10000;
+        Assert.Null(await Claim());
+        _ = await Turn("idle");
+        now += 1999;
+        Assert.Null(await Claim());
+        now += 1;
+        var generation = await Claim();
+        Assert.NotNull(generation);
+        // The wake was accepted but no turn started: it is retried only after its retry time.
+        Assert.Null(await Claim());
+        now += 60000;
+        var retry = await Claim();
+        Assert.NotNull(retry);
+        // The woken turn starts and ends; a confirmed wake is not sent again.
+        _ = await Turn("busy");
+        Assert.Equal("wake up", (await OkAs(antigravity, FirstConversation, "pigeon_receive", new { generation = retry })).GetProperty("Messages")[0].GetProperty("Body").GetString());
+        Assert.True((await OkAs(antigravity, FirstConversation, "pigeon_wake_complete", new { generation = retry })).GetBoolean());
+        _ = await Turn("idle");
+        now += 120000;
+        Assert.Null(await Claim());
+        // Other tools' sessions cannot report Antigravity turns.
+        var refused = await codex.BridgeAsync("turn_state", new { tool = "codex", sessionId = CodexSession, state = "idle" }, CancellationToken.None);
+        Assert.False(refused.GetProperty("Ok").GetBoolean());
     }
 
     [Given("a connection to a service that is not running")]
@@ -135,8 +241,10 @@ public sealed class McpSteps {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{port}/broker");
             request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
             request.Headers.Add("X-Pigeon-Client", "1");
-            if (badHost) request.Headers.Host = "attacker.example";
-            else request.Headers.Add("Origin", "https://attacker.example");
+            if (badHost)
+                request.Headers.Host = "attacker.example";
+            else
+                request.Headers.Add("Origin", "https://attacker.example");
             using var response = await client.SendAsync(request);
             Assert.Equal(System.Net.HttpStatusCode.Forbidden, response.StatusCode);
         }
@@ -153,10 +261,16 @@ public sealed class McpSteps {
     public async Task Cleanup() {
         if (stop is not null) {
             stop.Cancel();
-            try { await server!; } catch (OperationCanceledException) { }
+            try {
+                await server!;
+            }
+            catch (OperationCanceledException) { }
+
             stop.Dispose();
         }
+
         broker?.Dispose();
-        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
     }
 }

@@ -22,6 +22,14 @@ Feature: Agent tools
     Given a running service with two agent connections
     Then a new connection configured for claude-code with a joined session ID is bound without calling join
 
+  Scenario: An Antigravity connection acts for the conversation named in each call
+    Given a running service with two agent connections
+    Then an Antigravity connection joins without a session ID, acts for each calling conversation, restores a joined one, and refuses a call that names none
+
+  Scenario: An Antigravity wake waits until the conversation has been idle
+    Given a running service with a test clock
+    Then a wake is claimed only after the conversation's hooks report it idle for two seconds, never during a turn, and a lost wake is retried after its retry time
+
   Scenario: The local endpoint rejects browser and rebinding requests
     Given a running service with two agent connections
     Then the HTTP endpoint rejects browser origins and non-loopback hostnames

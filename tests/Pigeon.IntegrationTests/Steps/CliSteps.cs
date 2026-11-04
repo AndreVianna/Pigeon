@@ -1,5 +1,7 @@
 using System.Diagnostics;
+
 using Reqnroll;
+
 using Xunit;
 
 namespace Pigeon.IntegrationTests.Steps;
@@ -15,10 +17,15 @@ public sealed class CliSteps {
 
     private async Task<(int ExitCode, string Output, string Error)> Run(params string[] arguments) {
         var info = new ProcessStartInfo(TestTools.Pigeon) {
-            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
-            RedirectStandardInput = true, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
         };
-        foreach (var argument in arguments) info.ArgumentList.Add(argument);
+        foreach (var argument in arguments)
+            info.ArgumentList.Add(argument);
         info.Environment["PIGEON_PORT"] = port;
         info.Environment["PIGEON_DATABASE"] = Path.Combine(directory, "messages.db");
         using var process = Process.Start(info) ?? throw new InvalidOperationException("Could not start Pigeon");
@@ -30,7 +37,8 @@ public sealed class CliSteps {
             return (process.ExitCode, await output, await error);
         }
         finally {
-            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
         }
     }
 
@@ -41,8 +49,8 @@ public sealed class CliSteps {
     }
 
     [When("I run Pigeon with arguments {string}")]
-    public async Task RunArguments(string arguments) =>
-        (exitCode, stdout, stderr) = await Run(arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    public async Task RunArguments(string arguments)
+        => (exitCode, stdout, stderr) = await Run(arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
     [Then("the command succeeds and writes help to standard output")]
     public void HelpSucceeded() {
@@ -57,6 +65,19 @@ public sealed class CliSteps {
             Assert.Contains(usage, stdout);
         foreach (var removed in new[] { "pigeon messages", "pigeon sessions", "subscribe", "pigeon ack", "pigeon get" })
             Assert.DoesNotContain(removed, stdout);
+    }
+
+    [Then("the command succeeds and prints exactly {string}")]
+    public void PrintsExactly(string reply) {
+        Assert.Equal(0, exitCode);
+        Assert.Equal(reply, stdout.TrimEnd());
+        Assert.Equal("", stderr);
+    }
+
+    [Then("the command fails and says it runs inside the Antigravity App")]
+    public void SidecarRefused() {
+        Assert.Equal(1, exitCode);
+        Assert.Contains("ANTIGRAVITY_AGENTAPI_EXE is not set", stderr);
     }
 
     [Then("the help contains {string}")]
@@ -139,10 +160,15 @@ public sealed class CliSteps {
 
     [AfterScenario]
     public async Task Cleanup() {
-        if (serviceStarted) _ = await Run("stop");
+        if (serviceStarted)
+            _ = await Run("stop");
         for (var i = 0; i < 20 && Directory.Exists(directory); i++) {
-            try { Directory.Delete(directory, recursive: true); }
-            catch (IOException) { await Task.Delay(200); }
+            try {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException) {
+                await Task.Delay(200);
+            }
         }
     }
 }

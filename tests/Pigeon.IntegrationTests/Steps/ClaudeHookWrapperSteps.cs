@@ -1,5 +1,7 @@
 using System.Diagnostics;
+
 using Reqnroll;
+
 using Xunit;
 
 namespace Pigeon.IntegrationTests.Steps;
@@ -16,7 +18,8 @@ public sealed class ClaudeHookWrapperSteps {
         sh = TestTools.Sh;
         Assert.True(File.Exists(sh), $"{sh} is required to test the Claude hook wrapper; on Windows it comes with Git Bash (see PIGEON_TEST_BASH).");
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Pigeon.slnx"))) root = root.Parent;
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Pigeon.slnx")))
+            root = root.Parent;
         Assert.NotNull(root);
         wrapper = Path.Combine(root.FullName, "integrations", "claude-plugin", "scripts", "hook-wait.sh");
         Directory.CreateDirectory(directory);
@@ -33,7 +36,8 @@ public sealed class ClaudeHookWrapperSteps {
             esac
             exit 0
             """.ReplaceLineEndings("\n"));
-        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(fake, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(fake, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
     [Then("valid wakes and renewals pass through and CLI errors remain silent")]
@@ -41,7 +45,8 @@ public sealed class ClaudeHookWrapperSteps {
         foreach (var mode in new[] { "wake", "renew", "crlf", "invalid", "multiline", "failure", "empty" }) {
             var start = new ProcessStartInfo(sh) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
             start.ArgumentList.Add(wrapper);
-            foreach (var value in new[] { "--timeout", "43200", "--renew" }) start.ArgumentList.Add(value);
+            foreach (var value in new[] { "--timeout", "43200", "--renew" })
+                start.ArgumentList.Add(value);
             start.Environment["PIGEON_EXE"] = fake;
             start.Environment["PIGEON_TEST_MODE"] = mode;
             using var process = Process.Start(start)!;
@@ -54,13 +59,16 @@ public sealed class ClaudeHookWrapperSteps {
             Assert.Equal(valid ? 2 : 0, process.ExitCode);
             Assert.Equal("", await output);
             var text = await errors;
-            if (valid) Assert.StartsWith(mode == "wake" ? "Pigeon wake generation " : "Pigeon notification waiter needs renewal. ", text);
-            else Assert.Equal("", text);
+            if (valid)
+                Assert.StartsWith(mode == "wake" ? "Pigeon wake generation " : "Pigeon notification waiter needs renewal. ", text);
+            else
+                Assert.Equal("", text);
         }
     }
 
     [AfterScenario]
     public void Cleanup() {
-        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
     }
 }

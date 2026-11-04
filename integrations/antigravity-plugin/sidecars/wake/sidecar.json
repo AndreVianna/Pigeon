@@ -1,0 +1,7 @@
+{
+  "command": "pigeon",
+  "args": ["sidecar", "antigravity"],
+  "restart_policy": "always",
+  "display_name": "Pigeon wake",
+  "description": "Wakes an idle Antigravity conversation when a Pigeon message arrives for it, by sending Pigeon's fixed wake instruction."
+}
