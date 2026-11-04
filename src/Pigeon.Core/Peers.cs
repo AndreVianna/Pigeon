@@ -42,6 +42,8 @@ public sealed partial class Mailbox {
             throw new ArgumentException("Invalid peer fingerprint");
     }
 
+    public static bool IsValidPeerName(string name) => PeerNamePattern().IsMatch(name);
+
     private static void ValidPeerName(string name) {
         if (!PeerNamePattern().IsMatch(name))
             throw new ArgumentException("A peer name uses lowercase letters, digits and hyphens, up to 64 characters.");

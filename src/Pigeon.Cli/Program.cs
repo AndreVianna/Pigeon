@@ -83,6 +83,8 @@ internal static class ServiceCommands {
 
         if (args[0] == "start" && args.Length == 1)
             return await StartAsync(port);
+        if (args[0] is "peer" or "topic")
+            return await PeerCommands.RunAsync(port, args);
         if (args[0] == "stop") {
             var stopped = await LocalHttpClient.ExecuteAsync(port, "service_stop", new { });
             if (!stopped.GetProperty("Ok").GetBoolean())
@@ -147,7 +149,17 @@ internal static class ServiceCommands {
                 e.Cancel = true;
                 stop.Cancel();
             };
-            var host = new LocalHttpServer(port, broker, stop.Cancel);
+            // The identity toward peers lives in the user's certificate store; PIGEON_IDENTITY_DIR
+            // keeps it in a folder instead, for tests and isolated runs.
+            var identityDirectory = Environment.GetEnvironmentVariable("PIGEON_IDENTITY_DIR");
+            if (identityDirectory is not null && !Path.IsPathFullyQualified(identityDirectory))
+                throw new ArgumentException("PIGEON_IDENTITY_DIR must be a full path.");
+            Pigeon.Service.Peers.IIdentityStore identityStore = identityDirectory is not null
+                ? new Pigeon.Service.Peers.FileIdentityStore(identityDirectory)
+                : new Pigeon.Service.Peers.UserCertificateStore(Path.Combine(parent, "identity.thumbprint"));
+            using var peers = new Pigeon.Service.Peers.PeerHost(broker, identityStore);
+            var host = new LocalHttpServer(port, broker, stop.Cancel, peers);
+            var peerWork = peers.RunAsync(stop.Token);
             var server = host.RunAsync(stop.Token);
             if (await Task.WhenAny(server, host.Ready) == server)
                 await server;
@@ -159,6 +171,8 @@ internal static class ServiceCommands {
             }
 
             await server;
+            await stop.CancelAsync();
+            await peerWork;
 
             return 0;
         }
@@ -297,6 +311,21 @@ internal static class ServiceCommands {
             var nextText = next.ValueKind == JsonValueKind.Null ? "none" : DateTimeOffset.FromUnixTimeMilliseconds(next.GetInt64()).ToString("u");
             var waiting = wake.GetProperty("Queued").GetInt32() + wake.GetProperty("Leased").GetInt32();
             Console.WriteLine($"  {item.GetProperty("Tool").GetString()} {item.GetProperty("SessionId").GetString()} | waiting: {waiting} | wake: {wake.GetProperty("State").GetString()} | attempts since progress: {wake.GetProperty("Attempts").GetInt32()} | last transport: {wake.GetProperty("LastOutcome").GetString() ?? "none"} | next attempt: {nextText}");
+        }
+
+        // Peers appear only once they are used; 'pigeon peer list' has the details.
+        var peers = await LocalHttpClient.ExecuteAsync(port, "peer_status", new { });
+        if (peers.GetProperty("Ok").GetBoolean()) {
+            var overview = peers.GetProperty("Value");
+            var paired = overview.GetProperty("peers").EnumerateArray().ToArray();
+            var listen = overview.GetProperty("listen").GetString();
+            if (paired.Length != 0 || listen is not null) {
+                Console.WriteLine($"Peers: {paired.Length} | listening: {listen ?? "off"}");
+                foreach (var peer in paired) {
+                    var contact = peer.GetProperty("LastContactUnixMs");
+                    Console.WriteLine($"  {peer.GetProperty("Name").GetString()} | last contact: {(contact.ValueKind == JsonValueKind.Number ? DateTimeOffset.FromUnixTimeMilliseconds(contact.GetInt64()).ToString("u") : "never")} | waiting to send: {peer.GetProperty("outbox").GetInt32()}");
+                }
+            }
         }
 
         return 0;

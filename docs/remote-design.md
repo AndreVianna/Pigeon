@@ -1,6 +1,6 @@
 # Remote connections: design for 0.6.0-alpha.3
 
-**Status: reviewed and accepted by the user on 2026-11-04, with the recommended answers to the open questions (see the end). Being built on `alpha3-remote-connections`.** The release plan required this design to be reviewed before any code, because it opens Pigeon to the network for the first time.
+**Status: reviewed and accepted by the user on 2026-11-04, with the recommended answers to the open questions (see the end). Built on `alpha3-remote-connections`; not yet tried across two real machines.** The release plan required this design to be reviewed before any code, because it opens Pigeon to the network for the first time.
 
 ## Scope
 

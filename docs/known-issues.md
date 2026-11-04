@@ -1,6 +1,20 @@
 # Known issues and technical debt
 
-This list reflects 0.6.0-alpha.2. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+This list reflects 0.6.0-alpha.3. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+
+## Other machines
+
+### Not yet tried across two machines
+
+0.6.0-alpha.3 is tested with two services on one machine, over real TLS on loopback, but not yet across two machines on a LAN or a Tailscale network.
+
+### The local API is still unauthenticated
+
+Another user account on a machine can use that machine's Pigeon service, including sending on its shared topics as its user. Share topics only from single-user machines. Authenticating the local API is planned for later.
+
+### Addresses are fixed
+
+Peers are reached at the address given when pairing (or set with `pigeon peer address`); there is no discovery, so a machine whose address changes must be updated on the other side. Both machines need their peer listener open for messages to flow both ways.
 
 ## Antigravity
 

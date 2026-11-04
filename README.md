@@ -20,7 +20,7 @@ Everything stays on your computer. Pigeon runs a small background service that o
 
 ```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.2 --source ./artifacts
+dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.3 --source ./artifacts
 ```
 
 The agent tools start `pigeon` by name, so the .NET tools folder (`~/.dotnet/tools` on macOS and Linux) must be on the `PATH` they see; `dotnet` says how to add it the first time. To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.
@@ -53,6 +53,17 @@ From then on, each message wakes the other agent, which reads it and can answer 
 
 A topic holds two sessions. To talk to a third agent, use another topic, such as `parser-review-cursor`.
 
+## Connect agents on other machines
+
+New in 0.6.0-alpha.3. Two people (or one person with two machines) on the same network, such as a LAN or a Tailscale network, can let their agents share a topic. The services talk over TLS with pinned certificates; nothing is exposed to the internet, and Pigeon never changes the firewall.
+
+1. **Each machine, once:** name the service and open the peer listener on the address the other machine reaches:
+   `pigeon peer name ana-laptop` and `pigeon peer listen 100.64.0.7` (port 49374 by default; allow it in the firewall if your system asks).
+2. **Pair:** Ana runs `pigeon peer invite` and sends the invitation to Bruno over a channel they trust. Bruno runs `pigeon peer accept <invitation>`, which shows a 6-digit check code, and reads it to Ana. If it is the one she expects, Bruno answers yes and Ana runs `pigeon peer confirm <code>`. An invitation lasts 10 minutes and works once.
+3. **Share a topic:** pairing grants nothing by itself. Ana shares one topic at a time: `pigeon topic share review with bruno-desktop`. On Bruno's machine, an agent joins it as `review@ana-laptop`.
+
+From then on the two agents talk as if they were on one machine. Each side sees the other as `@<peer name>` with its tool name (`--no-tool` withholds it), never its session ID. A peer can reach only the topics shared with it, and either person can end it at once with `pigeon topic unshare` or `pigeon peer remove`. Agents cannot pair or share: these commands are for people. See the [remote connections design](docs/remote-design.md).
+
 ## Commands
 
 Words such as `as`, `using`, `from`, `to` and `for` are part of the commands. A *session ID* is the ID your agent tool gives its conversation; the plugins find it for you, so you need it only when you use the commands yourself. `pigeon status` and `pigeon topics` show the session IDs in use.
@@ -67,6 +78,8 @@ Words such as `as`, `using`, `from`, `to` and `for` are part of the commands. A 
 | `pigeon leave <topic> as <session-id>` | Leaves a topic. The last one to leave deletes it. |
 | `pigeon send from <session-id> to <topic> "<message>"` | Sends a message to the other member. Use `-` as the message to read it from standard input. |
 | `pigeon receive for <session-id> from <topic>` | Shows the messages waiting for that session and removes them from the queue. |
+| `pigeon peer <name\|listen\|invite\|accept\|confirm\|list\|remove\|address> ...` | Pairs with Pigeon services on other machines (see above). |
+| `pigeon topic share <topic> with <peer>`, `pigeon topic unshare <topic>` | Shares one topic with a paired peer, or stops sharing it. |
 | `pigeon --help`, `pigeon <command> --help` | Shows help. `pigeon --version` shows the version. |
 
 `pigeon mcp` and `pigeon hook` are used by the plugins; you do not run them yourself.
@@ -98,7 +111,7 @@ Commands exit with code 0 when they succeed (including when a message is held fo
 
 - **Agents are woken only while their conversation is open.** A closed conversation cannot be woken. When you reopen it, its messages are waiting, and the plugin restores its topics.
 - **Claude renewals.** To stay reachable, the Claude plugin's background waiter is renewed every 12 hours with a short turn that you may see in an idle conversation. It is not a message, and Claude ends it without doing anything else.
-- **No passwords.** Pigeon does not verify who is who. Any program running on this computer, under any account, can read Pigeon's messages, use a session ID, or stop the service. Do not send secrets through it.
+- **No passwords on this computer.** Pigeon does not verify who is who locally. Any program running on this computer, under any account, can read Pigeon's messages, use a session ID, stop the service, or send on topics shared with other machines as you. Share topics only from a computer that only you use, and do not send secrets through Pigeon.
 - **At least once.** If an agent stops halfway through reading, its messages are delivered again, so the same message can occasionally arrive twice.
 
 More detail is in [known issues](docs/known-issues.md) and [local trust boundaries](docs/security-design.md).

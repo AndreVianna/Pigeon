@@ -307,6 +307,41 @@ public sealed class Broker : IDisposable {
             return mailbox.PeerByFingerprint(fingerprint) is not null;
     }
 
+    internal bool HasPeers() {
+        lock (gate)
+            return mailbox.Peers().Length != 0;
+    }
+
+    internal bool RemovePeer(string name) {
+        lock (gate)
+            return mailbox.RemovePeer(name);
+    }
+
+    internal void SetPeerAddress(string name, string address) {
+        lock (gate)
+            mailbox.SetPeerAddress(name, address);
+    }
+
+    internal bool Unshare(string topic) {
+        lock (gate)
+            return mailbox.Unshare(topic);
+    }
+
+    // What `pigeon peer list` and `pigeon status` show; check codes of pending pairings are not
+    // included, since the inviter must type the code the other person reads out.
+    internal object PeerOverview(string? fingerprint) {
+        lock (gate) {
+            return new {
+                name = mailbox.Setting("name"),
+                listen = mailbox.Setting("listen"),
+                fingerprint,
+                peers = mailbox.Peers().Select(p => new { p.Name, p.Address, p.Fingerprint, p.LastContactUnixMs, outbox = mailbox.OutboxCount(p.Fingerprint) }).ToArray(),
+                pending = mailbox.PendingPeers().Select(p => new { p.Name, p.ExpiresUnixMs }).ToArray(),
+                shares = mailbox.Shares()
+            };
+        }
+    }
+
     internal PeerInfo AddPeer(string fingerprint, string name, string? address) {
         lock (gate)
             return mailbox.AddPeer(fingerprint, name, address);

@@ -2,6 +2,17 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
+## 0.6.0-alpha.3 (unreleased)
+
+Connects Pigeon services on different machines on the same network, including other people's ([remote connections design](docs/remote-design.md)). Not yet tried across two real machines.
+
+### Added
+- `pigeon peer` commands: name the service, open the peer listener on one chosen address (port 49374 by default), invite, accept and confirm with a 6-digit check code both people compare, list, remove, and update a peer's address.
+- `pigeon topic share <topic> with <peer>` and `pigeon topic unshare <topic>`: pairing grants nothing until a person shares a topic; the peer's agent joins it as `<topic>@<peer>`.
+- Each service has an ECDSA P-256 identity in the user's certificate store (`PIGEON_IDENTITY_DIR` keeps it in a folder instead, for tests). Peers talk over TLS 1.3 with mutual authentication and pinned fingerprints; the listener is off by default and serves only the peer protocol, with per-peer rate limits.
+- Messages to another machine wait in an outbox and are retried with backoff until delivered or expired; a delivered message is stored once. A remote member appears as `@<peer>` with its tool name (unless withheld), never its session ID.
+- `pigeon status` lists peers once they are used.
+
 ## 0.6.0-alpha.2 (unreleased)
 
 Adds three hosts: the Antigravity App, host-tested in the Antigravity App 2.28 on Windows (A1–A8 in `experiments/host-test`), OpenCode 2, host-tested with OpenCode 2.2.5 on Windows (O1–O6), and GitHub Copilot, host-tested in VS Code 1.145 and the GitHub Copilot app on Windows (C1–C6).

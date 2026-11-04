@@ -16,6 +16,10 @@ internal static class CliHelp {
             "The message waits in order until the recipient reads it, for up to 24 hours, also while nobody else is in the topic yet.\nUse - as the message to read it from standard input.\n\nExample:\n  pigeon send from 01a19407-57ce to parser-review \"Ready for review\""),
         new("receive", "pigeon receive for <session-id> from <topic>", "Read the messages waiting for a session in a topic",
             "Receiving a message removes it from the queue.\n\nExample:\n  pigeon receive for b1f82365-c3a4 from parser-review"),
+        new("peer", "pigeon peer <name|listen|invite|accept|confirm|list|remove|address> ...", "Pair with Pigeon services on other machines",
+            "Usage:\n  pigeon peer name [<name>]                     Name this service for its peers, for example ana-laptop\n  pigeon peer listen <address>[:<port>] | off   Accept paired peers on one address (port 49374 by default)\n  pigeon peer invite                            Create a one-time invitation (10 minutes)\n  pigeon peer accept <invitation> [as <name>]   Accept an invitation and compare the check code\n  pigeon peer confirm <code> [as <name>]        Finish pairing with the code the other person reads you\n  pigeon peer list                              Show peers, pairings waiting for you, and shared topics\n  pigeon peer remove <name>                     Remove a peer; its shared topics end at once\n  pigeon peer address <name> <address>[:<port>] Update where a peer is reached\n\nPeers talk over TLS with pinned certificates. Pairing grants nothing by itself: share topics one at a time with 'pigeon topic share'. Agents cannot pair or share."),
+        new("topic", "pigeon topic <share|unshare> ...", "Share a topic with a paired peer, or stop sharing it",
+            "Usage:\n  pigeon topic share <topic> with <peer> [--no-tool]   Offer one topic to one peer; its second seat becomes the peer's\n  pigeon topic unshare <topic>                         Stop sharing; the peer's copy ends\n\nOn the peer's machine an agent joins the topic as <topic>@<this service's name>. --no-tool withholds your member's tool name; session IDs are never shared."),
         new("mcp", "pigeon mcp [--codex-queue]", "Run the MCP server for an agent tool (used by the plugins)",
             "--codex-queue wakes the joined Codex session through `codex queue`. PIGEON_RUNTIME names the tool, and lets a Claude Code session restore itself on start. With antigravity or opencode, each call acts for the conversation or session the host names in it; with copilot, for the session in COPILOT_AGENT_SESSION_ID, or else the chat VS Code names in the call.", Internal: true),
         new("hook", "pigeon hook session-start <codex|claude-code|antigravity>\n       pigeon hook <turn-start|turn-end> antigravity\n       pigeon hook wait claude-code [--timeout <seconds>] [--renew]", "Handle the plugins' session hooks (used by the plugins)",
@@ -63,6 +67,17 @@ internal static class CliHelp {
         "send" => a.Length == 6 && a[1] == "from" && a[3] == "to" && Values(a[2], a[4]) && !string.IsNullOrWhiteSpace(a[5]),
         "receive" => a.Length == 5 && a[1] == "for" && a[3] == "from" && Values(a[2], a[4]),
         "mcp" => a.Length == 1 || (a.Length == 2 && a[1] == "--codex-queue"),
+        "peer" => a.Length >= 2 && a[1] switch {
+            "name" => a.Length is 2 or 3 && Values(a[2..]),
+            "listen" => a.Length == 3 && Values(a[2]),
+            "invite" or "list" => a.Length == 2,
+            "accept" or "confirm" => (a.Length == 3 && Values(a[2])) || (a.Length == 5 && a[3] == "as" && Values(a[2], a[4])),
+            "remove" => a.Length == 3 && Values(a[2]),
+            "address" => a.Length == 4 && Values(a[2], a[3]),
+            _ => false
+        },
+        "topic" => (a.Length is 5 or 6 && a[1] == "share" && a[3] == "with" && Values(a[2], a[4]) && (a.Length == 5 || a[5] == "--no-tool")) ||
+            (a.Length == 3 && a[1] == "unshare" && Values(a[2])),
         "sidecar" => a.Length == 2 && a[1] == "antigravity",
         "hook" => (a.Length == 3 && a[1] == "session-start" && a[2] is "codex" or "claude-code" or "antigravity") ||
             (a.Length == 3 && a[1] is "turn-start" or "turn-end" && a[2] == "antigravity") ||
@@ -86,6 +101,6 @@ internal static class CliHelp {
         foreach (var c in Commands.Where(c => c.Internal))
             writer.WriteLine($"  {"pigeon " + c.Name,-56} {c.Summary.Replace(" (used by the plugins)", "")}");
         writer.WriteLine("\nOptions:\n  -h, --help      Show help (also 'pigeon <command> --help')\n  -V, --version   Show the version");
-        writer.WriteLine("\nA topic is a private conversation between two sessions. A session ID is the one your\nagent tool assigned; Pigeon does not verify it, and any program on this computer can use Pigeon.");
+        writer.WriteLine("\nA topic is a private conversation between two sessions. A session ID is the one your\nagent tool assigned; Pigeon does not verify it, and any program on this computer can use Pigeon.\nTo reach agents on other machines, pair with 'pigeon peer' and share topics with 'pigeon topic share'.");
     }
 }

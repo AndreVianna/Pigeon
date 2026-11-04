@@ -1,5 +1,7 @@
 # Local trust and operational boundaries
 
+> 0.6.0-alpha.3 adds connections to paired services on other machines; their own boundaries are in the [remote connections design](remote-design.md). What follows still holds for everything on one machine, and the unauthenticated local API matters more once a topic is shared: another local user can send on it as you.
+
 For the one-machine MVP, Pigeon has no application-level authentication or per-agent credentials. A topic name and session ID are caller-supplied routing labels. They do not prove identity, session ownership, runtime liveness, or permission to perform work. The user explicitly chose this model for the MVP.
 
 The HTTP endpoint binds to 127.0.0.1 only. Any local process that can connect, including one under another user account, can join a topic, use any session ID, send and retrieve messages, control the service, or impersonate the local endpoint. Requests require JSON and a custom header, and browser Origin headers and non-loopback hostnames are rejected; these checks reduce browser attacks but do not authenticate clients. Topic routing is not a security boundary. SQLite history, WAL files, HTTP message bodies, and backups are not encrypted. Do not expose the service over the network.

@@ -1,6 +1,6 @@
 {
   "name": "pigeon",
-  "version": "0.6.0-alpha.2",
+  "version": "0.6.0-alpha.3",
   "license": "MIT",
   "description": "Private conversations between AI agent sessions on this computer.",
   "author": { "name": "Andre Vianna" },
