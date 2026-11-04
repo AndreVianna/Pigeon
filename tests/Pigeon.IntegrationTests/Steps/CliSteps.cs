@@ -80,6 +80,66 @@ public sealed class CliSteps {
         Assert.Contains("ANTIGRAVITY_AGENTAPI_EXE is not set", stderr);
     }
 
+    // PreInvocation runs before every Antigravity model call. On Windows a refused connection to
+    // 127.0.0.1 takes about 2 seconds, so the hook first checks that a service holds the lock.
+    [Then("an Antigravity turn hook with a conversation ID answers within a second when no service runs")]
+    public async Task TurnHookIsFastWithoutService() {
+        var info = new ProcessStartInfo(TestTools.Pigeon) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        foreach (var argument in new[] { "hook", "turn-start", "antigravity" })
+            info.ArgumentList.Add(argument);
+        info.Environment["PIGEON_PORT"] = port;
+        info.Environment["PIGEON_DATABASE"] = Path.Combine(directory, "messages.db");
+        // Warm up once, so the timing measures the hook rather than a cold start of the runtime.
+        for (var run = 0; run < 2; run++) {
+            var clock = Stopwatch.StartNew();
+            using var process = Process.Start(info)!;
+            await process.StandardInput.WriteAsync("{\"conversationId\":\"3f0d8a51-6c2e-4d8b-9a77-0b1c2d3e4f50\"}");
+            process.StandardInput.Close();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Equal((0, "{}"), (process.ExitCode, output.Trim()));
+            if (run == 1)
+                Assert.True(clock.ElapsedMilliseconds < 1000, $"The hook took {clock.ElapsedMilliseconds} ms.");
+        }
+    }
+
+    // Antigravity leaves its sidecars running when it quits, so the sidecar watches its launcher.
+    // The shell prints the sidecar's process ID (Git Bash maps it to the Windows one) so a sidecar
+    // that does not stop can be killed; the pipe closes only when the sidecar and its shell exit.
+    [Then("a sidecar under two Git Bash shells exits when only the outer shell is killed")]
+    public async Task SidecarStopsWithItsLauncher() {
+        Assert.True(File.Exists(TestTools.Bash), "bash (Git Bash on Windows) is required for this scenario; set PIGEON_TEST_BASH to its executable.");
+        var start = new ProcessStartInfo(TestTools.Bash) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add($"\"{TestTools.Pigeon.Replace('\\', '/')}\" sidecar antigravity & cat /proc/$!/winpid 2>/dev/null || echo $!; wait $!; exit $?");
+        start.Environment["PIGEON_PORT"] = port;
+        start.Environment["PIGEON_DATABASE"] = Path.Combine(directory, "messages.db");
+        // Any existing file passes the check; with no service and no session nothing is sent.
+        start.Environment["ANTIGRAVITY_AGENTAPI_EXE"] = TestTools.Pigeon;
+        using var outer = Process.Start(start)!;
+        outer.StandardInput.Close();
+        _ = outer.StandardError.ReadToEndAsync();
+        var sidecar = int.Parse((await outer.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10)))!.Trim());
+        var output = outer.StandardOutput.ReadToEndAsync();
+        try {
+            await Task.Delay(2000);
+            Assert.False(output.IsCompleted, "The sidecar exited before its launcher was killed.");
+            outer.Kill(entireProcessTree: false);
+            await output.WaitAsync(TimeSpan.FromSeconds(15));
+        }
+        finally {
+            if (!outer.HasExited)
+                outer.Kill(entireProcessTree: true);
+            try {
+                using var left = Process.GetProcessById(sidecar);
+                // Git Bash's $! names the forked subshell that runs pigeon, so its whole tree goes.
+                if (left.ProcessName is "pigeon" or "bash" or "sh")
+                    left.Kill(entireProcessTree: true);
+            }
+            catch (ArgumentException) { }
+        }
+    }
+
     [Then("the help contains {string}")]
     public void ContainsUsage(string usage) => Assert.Contains(usage, stdout);
 

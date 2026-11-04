@@ -63,6 +63,20 @@ Same plugin format as the App, so one Pigeon plugin may serve both. Whether the 
 - Hooks: `SessionStart`, `UserPromptSubmit`, `Stop` and others, synchronous with a 30 s default; input includes an optional `session_id`; `SessionStart` can return `additionalContext` and `Stop` can block ([hooks reference](https://code.visualstudio.com/docs/agents/reference/hooks-reference)). No async hooks, so `asyncRewake` will not work.
 - Wake candidate: a companion VS Code extension calling `workbench.action.chat.open` with a query submits it, but to the last-focused chat, with no way to name a session. Whether that chat is the one Pigeon bound is **unverified** and needs a probe.
 
+**Update 2026-11-04** (source of microsoft/vscode `main`, VS Code and GitHub docs):
+- VS Code has two chat harnesses. **Copilot** (Copilot SDK in the Agent Host process) is the default for new chats and is shared with the GitHub Copilot app and Copilot CLI; **Local** is the older in-window harness. Copilot Chat's source now lives in the VS Code repository.
+- Identity: in Local sessions every MCP `tools/call` carries `_meta["vscode.conversationId"]`, the same ID the hooks get as `session_id` (`mcpServer.ts`, `chatHookService.ts`). In Copilot sessions the SDK makes the calls, and whether `_meta` carries a session ID is **unverified**.
+- Hooks: Copilot uses the Copilot CLI format (`.github/hooks/*.json`, `version: 1`, camelCase events, `sessionId`); its `agentStop` can return `decision: "block"` with a `reason` that becomes the next prompt (at most 8 in a row). VS Code's plugin-hook converter for the Copilot harness has no Stop entry, and its `sessionStart` output is discarded, so whether `agentStop` runs from `.github/hooks` in VS Code is **unverified**. Claude `async`/`asyncRewake` fields are ignored.
+- Wake: no extension API, command or `code chat` option targets a specific chat; `workbench.action.chat.open` uses the last-focused chat (and queues while it is busy). The Copilot harness's Agent Host Protocol can queue a message into a named chat and starts a turn when it is idle, but it is internal and needs the connection token VS Code writes under its user data; using it needs a security review first.
+- **Probe results (2026-11-04, VS Code 1.145.0)** ([experiments/copilot-probe](../experiments/copilot-probe/README.md)): Local calls carry `vscode.conversationId`, equal to the hooks' `session_id`, through one shared MCP process. Copilot calls carry no session ID, but the Copilot runtime starts one MCP process per session with `COPILOT_AGENT_SESSION_ID` set to the session's hook `sessionId`, so identity works like Claude Code's `CLAUDE_CODE_SESSION_ID`. `agentStop` runs in VS Code's Copilot harness. **Wake works:** a Copilot extension (`.github/extensions/NAME/extension.mjs`), forked per session with `SESSION_ID`, joined the session and its `session.send({prompt, mode: "enqueue"})` started a turn in the idle chat within 2 s, with no setting changed. This should apply to the GitHub Copilot app and Copilot CLI, which share the runtime (to be confirmed). **Tool approval:** VS Code asks to allow MCP tools once per chat; the extension's `onPermissionRequest` handler can approve only Pigeon's own tools (named `<server>-<tool>`) and leave every other request to the user, which made a wake in a new chat run with no prompt. A `preToolUse` hook is riskier: it is fail-closed, the runtime runs its `command` through PowerShell and reads backslash escapes in it.
+
+### GitHub Copilot app: identity solved, wake candidate (2026-11-04)
+
+From public docs and the `github/copilot-sdk` source; nothing run yet.
+- The app runs the Copilot CLI runtime and shares its configuration and session store with Copilot CLI, so the VS Code probe's identity result applies: one MCP server per session with `COPILOT_AGENT_SESSION_ID`.
+- **Wake candidate: a Copilot extension.** An extension is a Node process the runtime forks (`.github/extensions/NAME/extension.mjs`, `~/.copilot/extensions/NAME/`, or shipped in a plugin). It calls `joinSession()` from `@github/copilot-sdk/extension`, which attaches to the foreground session (`SESSION_ID`), can watch events such as `session.idle`, and can call `session.send({prompt, mode: "enqueue"})`, which queues on a busy session and starts a turn on an idle one. Extensions are experimental (`--experimental` or `/experimental on`); whether the app forks one per open session and shows the turn live is **unverified**.
+- Other routes: an experimental session-management `message` API ("wakes an idle agent and safely queues delivery to a busy agent"; off by default, both sides opt in); `agentStop` `block` at turn end. Not usable: a second runtime on the same session (`--resume`, SDK `resumeSession`), whose concurrent access the docs call undefined, and deep links (no prompt to an existing session).
+
 ### Devin Desktop (Windsurf): B
 
 - Plugins use `.devin-plugin/plugin.json` and fall back to `.claude-plugin/plugin.json`; they carry `.mcp.json`, `hooks.json` and skills.
@@ -77,7 +91,13 @@ Same plugin format as the App, so one Pigeon plugin may serve both. Whether the 
 
 ### Cursor: B (probe pending)
 
-Unchanged from the earlier research.
+**Update 2026-11-04** (Cursor docs, changelog, forum and third-party extension source; nothing run):
+- No documented way to start a turn in an idle IDE chat. The extension API (`cursor.com/docs/extension-api`) offers only MCP and plugin registration; Cursor's private `vscode.cursor.*` proposals are for built-in extensions only. Deeplinks "never trigger automatic execution".
+- An extension can open a chat by ID with the internal `composer.openComposer(id)` (reported working on 3.22), but no command that submits a prompt is verified; third parties submit with keystrokes or by driving the UI over the Chrome DevTools protocol (Cursor relaunched with `--remote-debugging-port`), which is fragile and a security exposure.
+- Stop-hook `followup_message` auto-submits at turn end (`loop_limit` default 5, `null` removes the cap; default timeout about 30–40 s); a Windows bug that dropped hook output was reported in March 2026 with no confirmed fix.
+- Identity: MCP `_meta` carries only `progressToken`, and there is no per-chat environment variable; hooks carry `conversation_id`, including `beforeMCPExecution`, which could link a Pigeon tool call to its chat.
+- Cursor CLI `--resume`, ACP and the SDK use separate session stores and cannot reach IDE chats (staff, July and October 2026). Remote Control (October 2026) reaches local chats but only from the iOS app, with no API.
+- So Cursor's ceiling is messaging, restore and delivery at turn end; the Copilot-extension wake being probed for VS Code does not apply, because it lives in Copilot's runtime.
 
 ## Deferred hosts
 
@@ -104,10 +124,11 @@ Unchanged from the earlier research.
 
 ## Proposed build order for alpha.2
 
-1. **Antigravity App**, the only host already probed to A.
-2. **OpenCode**, the clearest documented A path.
-3. **Copilot in VS Code** and **Devin Desktop** as B, starting from the Claude plugin, then probe the Copilot companion-extension wake.
-4. **Cursor** and **Antigravity CLI** as B, with their probes.
-5. **Cline** last, after a probe of `ClineAPI.sendMessage`, because its runtime is changing.
+1. **Antigravity App**, the only host already probed to A. Done and host-tested 2026-11-03.
+2. **OpenCode**, the clearest documented A path. Done and host-tested 2026-11-04.
+3. **Cursor**, first priority among the rest (set by the user on 2026-11-04), finishing its probe and looking for an idle wake; then apply what works to VS Code.
+4. **GitHub Copilot app** (replacing Copilot in VS Code, 2026-11-04): identity is solved; the wake candidate is a Copilot extension calling `session.send` (experimental), to be probed.
+5. **Devin Desktop** and **Antigravity CLI** as B.
+6. **Cline** last, after a probe of `ClineAPI.sendMessage`, because its runtime is changing.
 
 Each needs a host test with the user before the PR. Hosts that stay B are documented as delivering at session start and turn end, not unattended.

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "pigeon-dev": {
+      "command": "C:\\Projects\\Pigeon\\artifacts\\host-test\\bin\\pigeon.exe",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "PIGEON_RUNTIME": "antigravity",
+        "PIGEON_PORT": "49473",
+        "PIGEON_DATABASE": "C:\\Projects\\Pigeon\\artifacts\\host-test\\data\\messages.db"
+      }
+    }
+  }
+}

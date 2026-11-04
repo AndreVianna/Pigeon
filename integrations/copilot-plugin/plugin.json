@@ -1,0 +1,13 @@
+{
+  "name": "pigeon",
+  "description": "Private conversations between agent sessions on this computer. Adds the Pigeon MCP server, a connect skill, and an extension that wakes an idle session when a message arrives.",
+  "version": "0.6.0-alpha.2",
+  "author": {
+    "name": "Andre Vianna"
+  },
+  "homepage": "https://github.com/AndreVianna/Pigeon",
+  "license": "MIT",
+  "mcpServers": ".mcp.json",
+  "extensions": "extensions",
+  "skills": "skills"
+}

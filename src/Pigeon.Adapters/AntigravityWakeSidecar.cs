@@ -50,7 +50,8 @@ public sealed class AntigravityWakeSidecar {
     // Keeps running while the service is down; Antigravity restarts the sidecar if it exits.
     public async Task RunAsync(CancellationToken cancellation) {
         var bridgeId = Guid.NewGuid().ToString("N");
-        var lastHeartbeat = long.MinValue;
+        // Due at once; long.MinValue would overflow the subtraction below and never be due.
+        var lastHeartbeat = Environment.TickCount64 - 3000;
         while (!cancellation.IsCancellationRequested) {
             try {
                 if (Environment.TickCount64 - lastHeartbeat >= 3000) {

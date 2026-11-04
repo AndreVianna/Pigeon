@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "pigeon-probe": {
+      "command": "python",
+      "args": [
+        "C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\mcp_server.py"
+      ]
+    }
+  }
+}

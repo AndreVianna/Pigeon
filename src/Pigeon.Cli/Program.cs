@@ -58,15 +58,25 @@ internal static class ServiceCommands {
             var agentApi = Environment.GetEnvironmentVariable("ANTIGRAVITY_AGENTAPI_EXE");
             if (string.IsNullOrWhiteSpace(agentApi) || !Path.IsPathFullyQualified(agentApi) || !File.Exists(agentApi))
                 throw new InvalidOperationException("ANTIGRAVITY_AGENTAPI_EXE is not set. This command runs as the Pigeon plugin's sidecar inside the Antigravity App.");
+            // Antigravity does not stop its sidecars when it quits (seen in the 0.6.0-alpha.2 host
+            // test), so the sidecar stops when the language server that started it exits.
+            using var parent = MonitorParent.Capture();
             using var stop = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => {
                 e.Cancel = true;
                 stop.Cancel();
             };
+            var watch = Task.Run(async () => {
+                while (!stop.IsCancellationRequested && parent.IsAlive)
+                    await Task.Delay(1000);
+                stop.Cancel();
+            });
             try {
                 await new AntigravityWakeSidecar(port, agentApi).RunAsync(stop.Token);
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+
+            await watch;
 
             return 0;
         }
@@ -155,11 +165,16 @@ internal static class ServiceCommands {
 
         if (args[0] == "mcp") {
             var runtime = Environment.GetEnvironmentVariable("PIGEON_RUNTIME");
-            if (runtime is not (null or "codex" or "claude-code" or "antigravity"))
-                throw new ArgumentException("PIGEON_RUNTIME must be codex, claude-code or antigravity.");
+            if (runtime is not (null or "codex" or "claude-code" or "antigravity" or "opencode" or "copilot"))
+                throw new ArgumentException("PIGEON_RUNTIME must be codex, claude-code, antigravity, opencode or copilot.");
             // The isolated Codex app-server did not provide a thread ID to its MCP child.
             // Do not trust a potentially inherited ID from some other Codex session.
-            var autoSession = runtime == "claude-code" ? Environment.GetEnvironmentVariable("CLAUDE_CODE_SESSION_ID") : null;
+            var autoSession = runtime switch {
+                "claude-code" => Environment.GetEnvironmentVariable("CLAUDE_CODE_SESSION_ID"),
+                // Set by the Copilot runtime for each session's own MCP server (seen in VS Code 1.145).
+                "copilot" => Environment.GetEnvironmentVariable("COPILOT_AGENT_SESSION_ID"),
+                _ => null
+            };
             var session = new McpSession(port, runtime, autoSession);
             var codexQueue = args.Length == 2 ? new CodexQueueNotifier(port, () => session.SessionId) : null;
             await McpStdio.RunAsync(Console.In, Console.Out, session, nextNotification: codexQueue is null ? null : codexQueue.TickAsync);
@@ -245,6 +260,8 @@ internal static class ServiceCommands {
 
         var all = (await Call(port, "bridges", new { })).EnumerateArray().ToArray();
         var sidecar = all.Any(b => b.GetProperty("mode").GetString() == AntigravityWakeSidecar.Mode);
+        var openCodeWaker = all.Any(b => b.GetProperty("mode").GetString() == "opencode-prompt");
+        bool CopilotExtension(string? session) => all.Any(b => b.GetProperty("mode").GetString() == "copilot-extension" && b.GetProperty("sessionId").ValueKind == JsonValueKind.String && b.GetProperty("sessionId").GetString() == session);
         var bridges = all.Where(b => b.GetProperty("mode").GetString() is "mcp" or "codex-queue").ToArray();
         var joined = bridges.Where(b => b.GetProperty("sessionId").ValueKind == JsonValueKind.String).ToArray();
         Console.WriteLine($"Connected sessions: {joined.Length} (and {bridges.Length - joined.Length} agent connections not in a topic)");
@@ -265,6 +282,10 @@ internal static class ServiceCommands {
             }
             else if (tool == "antigravity")
                 notification = sidecar ? " | notification: Antigravity sidecar" : " | notification: none (the Pigeon wake sidecar is not running; enable it in Antigravity's Automations)";
+            else if (tool == "copilot")
+                notification = CopilotExtension(bridge.GetProperty("sessionId").GetString()) ? " | notification: Copilot extension" : " | notification: none (the Pigeon Copilot extension is not reporting for this session; check that the plugin is installed)";
+            else if (tool == "opencode")
+                notification = openCodeWaker ? " | notification: OpenCode plugin" : " | notification: none (the Pigeon OpenCode plugin is not reporting; check that it is installed and OpenCode is running)";
             Console.WriteLine($"  {tool} {bridge.GetProperty("sessionId").GetString()} | topics: {topics} | wake: {bridge.GetProperty("wake").GetProperty("State").GetString()}{notification}");
         }
 

@@ -33,6 +33,8 @@ internal static class SessionHook {
             return await TurnAsync(port, tool, "busy", "{}");
         try {
             var sessionId = await ReadSessionIdAsync();
+            if (!ServiceLock.MayBeHeld(port))
+                throw new IOException("Pigeon service is not running");
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             var result = await LocalHttpClient.ExecuteAsync(port, "session_restore", new { tool, sessionId }, timeout.Token);
             if (!result.GetProperty("Ok").GetBoolean())
@@ -53,6 +55,8 @@ internal static class SessionHook {
     public static async Task<int> TurnAsync(string port, string tool, string state, string reply) {
         try {
             var sessionId = await ReadSessionIdAsync(IdField(tool));
+            if (!ServiceLock.MayBeHeld(port))
+                throw new IOException("Pigeon service is not running");
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             _ = await LocalHttpClient.ExecuteAsync(port, "turn_state", new { tool, sessionId, state }, timeout.Token);
         }

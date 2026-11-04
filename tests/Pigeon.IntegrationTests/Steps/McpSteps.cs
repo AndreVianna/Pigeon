@@ -65,18 +65,18 @@ public sealed class McpSteps {
         codex = await Connect("codex");
     }
 
-    private async Task<(bool Error, string Text)> CallAs(McpSession session, string? conversation, string tool, object args) {
+    private async Task<(bool Error, string Text)> CallAs(McpSession session, string? conversation, string tool, object args, string key = McpSession.AntigravityConversationKey) {
         var meta = new Dictionary<string, string>();
         if (conversation is not null)
-            meta[McpSession.AntigravityConversationKey] = conversation;
+            meta[key] = conversation;
         var request = JsonSerializer.Serialize(new { jsonrpc = "2.0", id = ++id, method = "tools/call", @params = new { name = tool, arguments = args, _meta = meta } });
         using var response = JsonDocument.Parse((await session.HandleAsync(request))!);
         var result = response.RootElement.GetProperty("result");
         return (result.GetProperty("isError").GetBoolean(), result.GetProperty("content")[0].GetProperty("text").GetString()!);
     }
 
-    private async Task<JsonElement> OkAs(McpSession session, string conversation, string tool, object args) {
-        var (error, text) = await CallAs(session, conversation, tool, args);
+    private async Task<JsonElement> OkAs(McpSession session, string conversation, string tool, object args, string key = McpSession.AntigravityConversationKey) {
+        var (error, text) = await CallAs(session, conversation, tool, args, key);
         Assert.False(error, text);
         return JsonDocument.Parse(text).RootElement.Clone();
     }
@@ -111,6 +111,39 @@ public sealed class McpSteps {
         (error, text) = await CallAs(restarted, "never-joined", "pigeon_send", new { topic = "review", message = "x" });
         Assert.True(error);
         Assert.Equal("Join a topic first with pigeon_join.", text);
+    }
+
+    // Found in the 0.6.0-alpha.2 host test: one server serves every conversation in a workspace,
+    // and only the last caller showed as connected.
+    [Then("one Antigravity server process shows both of its conversations as connected, and a message to either is delivered as sent")]
+    public async Task AntigravityConversationsConnected() {
+        var antigravity = new McpSession(port, "antigravity");
+        using var pipe = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.Out);
+        using var input = new StreamReader(new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, pipe.ClientSafePipeHandle));
+        await using var writer = new StreamWriter(pipe) { AutoFlush = true };
+        using var output = new StringWriter();
+        var running = McpStdio.RunAsync(input, output, antigravity);
+        await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\"}}");
+        await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+        foreach (var (conversation, topic) in new[] { (FirstConversation, "review"), (SecondConversation, "design") }) {
+            var meta = new Dictionary<string, string> { [McpSession.AntigravityConversationKey] = conversation };
+            await writer.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = ++id, method = "tools/call", @params = new { name = "pigeon_join", arguments = new { topic }, _meta = meta } }));
+        }
+
+        string[] connected = [];
+        for (var i = 0; i < 40 && connected.Length < 2; i++) {
+            await Task.Delay(250);
+            var bridges = await LocalHttpClient.ExecuteAsync(port, "bridges", new { });
+            connected = [.. bridges.GetProperty("Value").EnumerateArray().Where(b => b.GetProperty("tool").GetString() == "antigravity").Select(b => b.GetProperty("sessionId").GetString()!).Order()];
+        }
+
+        Assert.Equal(new[] { FirstConversation, SecondConversation }.Order(), connected);
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(claude, "pigeon_join", new { topic = "design", sessionId = ClaudeSession });
+        Assert.Equal("sent", (await Ok(codex, "pigeon_send", new { topic = "review", message = "to the first" })).GetProperty("delivery").GetString());
+        Assert.Equal("sent", (await Ok(claude, "pigeon_send", new { topic = "design", message = "to the second" })).GetProperty("delivery").GetString());
+        writer.Close();
+        await running.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Then("a wake is claimed only after the conversation's hooks report it idle for two seconds, never during a turn, and a lost wake is retried after its retry time")]
@@ -153,6 +186,87 @@ public sealed class McpSteps {
         // Other tools' sessions cannot report Antigravity turns.
         var refused = await codex.BridgeAsync("turn_state", new { tool = "codex", sessionId = CodexSession, state = "idle" }, CancellationToken.None);
         Assert.False(refused.GetProperty("Ok").GetBoolean());
+    }
+
+    [Then("an OpenCode connection joins for the session in the call's metadata, and a wake is claimed only after the plugin reports the session idle for two seconds, also when it repeats that report")]
+    public async Task OpenCodeWake() {
+        const string session = "ses_7a9b0c1d2e3f4a5b8c6d9e0f";
+        var opencode = await Connect("opencode");
+        var (error, text) = await CallAs(opencode, null, "pigeon_join", new { topic = "review" }, McpSession.OpenCodeSessionKey);
+        Assert.True(error);
+        Assert.Contains("OpenCode did not identify this session", text);
+        // Antigravity's key means nothing to an OpenCode connection.
+        (error, _) = await CallAs(opencode, session, "pigeon_join", new { topic = "review" });
+        Assert.True(error);
+        (error, text) = await CallAs(opencode, session, "pigeon_join", new { topic = "review" }, McpSession.OpenCodeSessionKey);
+        Assert.False(error, text);
+        Assert.Equal(("opencode", session), (JsonDocument.Parse(text).RootElement.GetProperty("Members")[0].GetProperty("Tool").GetString(), JsonDocument.Parse(text).RootElement.GetProperty("Members")[0].GetProperty("SessionId").GetString()));
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(codex, "pigeon_send", new { topic = "review", message = "wake up" });
+        async Task<string?> Claim() {
+            var claim = await codex.BridgeAsync("wake_claim", new { sessionId = session, mode = "opencode-prompt" }, CancellationToken.None);
+            Assert.True(claim.GetProperty("Ok").GetBoolean(), claim.ToString());
+            return claim.GetProperty("Value").ValueKind == JsonValueKind.Null ? null : claim.GetProperty("Value").GetProperty("Generation").GetString();
+        }
+
+        Task<JsonElement> Status(string state) => codex.BridgeAsync("turn_state", new { tool = "opencode", sessionId = session, state }, CancellationToken.None);
+        Assert.Null(await Claim());
+        _ = await Status("busy");
+        now += 10000;
+        Assert.Null(await Claim());
+        _ = await Status("idle");
+        now += 1500;
+        // The plugin repeats every known status; a repeat must not restart the two seconds.
+        _ = await Status("idle");
+        now += 499;
+        Assert.Null(await Claim());
+        now += 1;
+        var generation = await Claim();
+        Assert.NotNull(generation);
+        var received = await CallAs(opencode, session, "pigeon_receive", new { generation }, McpSession.OpenCodeSessionKey);
+        Assert.Contains("wake up", received.Text);
+    }
+
+    [Then("a Copilot connection joins for the session the runtime named in its environment, falls back to VS Code's chat ID without it, and a wake is claimed only after the extension reports the session idle for two seconds")]
+    public async Task CopilotWake() {
+        const string session = "09da179d-fe71-48c8-9d66-e52f1838fdce", chat = "51934ddf-3a1e-4a64-a889-fb3b49027637";
+        // The Copilot runtime gives each session's server COPILOT_AGENT_SESSION_ID; any call metadata is ignored.
+        var copilot = await Connect("copilot", session);
+        using (var list = JsonDocument.Parse((await copilot.HandleAsync("{\"jsonrpc\":\"2.0\",\"id\":98,\"method\":\"tools/list\"}"))!)) {
+            var join = list.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray().Single(t => t.GetProperty("name").GetString() == "pigeon_join");
+            Assert.Equal(["topic"], join.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(r => r.GetString()));
+        }
+
+        var joined = await OkAs(copilot, chat, "pigeon_join", new { topic = "review" }, McpSession.VsCodeConversationKey);
+        Assert.Equal(("copilot", session), (joined.GetProperty("Members")[0].GetProperty("Tool").GetString(), joined.GetProperty("Members")[0].GetProperty("SessionId").GetString()));
+        // Without the environment variable (VS Code's Local chats), the chat VS Code names in the call is used.
+        var local = await Connect("copilot");
+        (bool error, string text) = await CallAs(local, null, "pigeon_join", new { topic = "local" }, McpSession.VsCodeConversationKey);
+        Assert.True(error);
+        Assert.Contains("Copilot did not identify this session", text);
+        var localJoin = await OkAs(local, chat, "pigeon_join", new { topic = "local" }, McpSession.VsCodeConversationKey);
+        Assert.Equal(chat, localJoin.GetProperty("Members")[0].GetProperty("SessionId").GetString());
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(codex, "pigeon_send", new { topic = "review", message = "wake up" });
+        async Task<string?> Claim() {
+            var claim = await codex.BridgeAsync("wake_claim", new { sessionId = session, mode = "copilot-extension" }, CancellationToken.None);
+            Assert.True(claim.GetProperty("Ok").GetBoolean(), claim.ToString());
+            return claim.GetProperty("Value").ValueKind == JsonValueKind.Null ? null : claim.GetProperty("Value").GetProperty("Generation").GetString();
+        }
+
+        Task<JsonElement> Turn(string state) => codex.BridgeAsync("turn_state", new { tool = "copilot", sessionId = session, state }, CancellationToken.None);
+        Assert.Null(await Claim());
+        _ = await Turn("busy");
+        now += 10000;
+        Assert.Null(await Claim());
+        _ = await Turn("idle");
+        now += 1999;
+        Assert.Null(await Claim());
+        now += 1;
+        var generation = await Claim();
+        Assert.NotNull(generation);
+        var received = await Ok(copilot, "pigeon_receive", new { generation });
+        Assert.Equal("wake up", received.GetProperty("Messages")[0].GetProperty("Body").GetString());
     }
 
     [Given("a connection to a service that is not running")]

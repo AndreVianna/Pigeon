@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "pigeon-dev": {
+      "type": "stdio",
+      "command": "C:\\Projects\\Pigeon\\artifacts\\host-test\\bin\\pigeon.exe",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "PIGEON_RUNTIME": "copilot",
+        "PIGEON_PORT": "49473",
+        "PIGEON_DATABASE": "C:\\Projects\\Pigeon\\artifacts\\host-test\\data\\messages.db"
+      }
+    }
+  }
+}

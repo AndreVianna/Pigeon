@@ -1,0 +1,14 @@
+{
+  "command": "C:\\Projects\\Pigeon\\artifacts\\host-test\\bin-sidecar\\pigeon.exe",
+  "args": [
+    "sidecar",
+    "antigravity"
+  ],
+  "env": {
+    "PIGEON_PORT": "49473",
+    "PIGEON_DATABASE": "C:\\Projects\\Pigeon\\artifacts\\host-test\\data\\messages.db"
+  },
+  "restart_policy": "always",
+  "display_name": "Pigeon dev wake",
+  "description": "Pigeon host test: wakes idle test conversations that have messages on the isolated test service (port 49473)."
+}

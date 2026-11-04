@@ -8,8 +8,27 @@ internal sealed class ServiceLock : IDisposable {
     private readonly FileStream? file;
     private ServiceLock(Semaphore? semaphore, FileStream? file) => (this.semaphore, this.file) = (semaphore, file);
 
+    private static string Name(string port) => "Pigeon-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(port)));
+
+    // On Windows a refused connection to 127.0.0.1 takes about 2 seconds, which a hook that runs
+    // before every model call cannot afford, so hooks first check whether a service holds the
+    // lock, without taking it. Elsewhere a refused connection fails at once and this says true.
+    public static bool MayBeHeld(string port) {
+        if (!OperatingSystem.IsWindows())
+            return true;
+        try {
+            if (!Semaphore.TryOpenExisting("Local\\" + Name(port), out var held))
+                return false;
+            held.Dispose();
+            return true;
+        }
+        catch (UnauthorizedAccessException) {
+            return true;
+        }
+    }
+
     public static ServiceLock? TryAcquire(string port) {
-        var name = "Pigeon-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(port)));
+        var name = Name(port);
         if (OperatingSystem.IsWindows()) {
             var held = new Semaphore(1, 1, "Local\\" + name);
             if (held.WaitOne(0))

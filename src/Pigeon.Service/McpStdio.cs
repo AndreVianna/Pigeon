@@ -53,7 +53,12 @@ public static class McpStdio {
                 if (session.IsReady) {
                     try {
                         await session.TryRestoreAsync(stopped.Token);
-                        _ = await session.BridgeAsync("bridge_heartbeat", new { id = bridgeId, mode = nextNotification is null ? "mcp" : notificationMode, sessionId = session.SessionId, restoration = session.RestoreState }, stopped.Token);
+                        var conversations = session.Conversations;
+                        if (conversations.Count == 0)
+                            _ = await session.BridgeAsync("bridge_heartbeat", new { id = bridgeId, mode = nextNotification is null ? "mcp" : notificationMode, sessionId = session.SessionId, restoration = session.RestoreState }, stopped.Token);
+                        // An Antigravity connection reports each conversation it serves as connected.
+                        foreach (var (id, conversation) in conversations)
+                            _ = await session.BridgeAsync("bridge_heartbeat", new { id, mode = "mcp", sessionId = conversation, restoration = "bound" }, stopped.Token);
                     }
                     catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
                     catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { }

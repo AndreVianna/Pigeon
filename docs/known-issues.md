@@ -4,13 +4,13 @@ This list reflects 0.6.0-alpha.2. A topic is a private conversation between two 
 
 ## Antigravity
 
-### Not yet tried end to end
+### Tried only with a development copy
 
-0.6.0-alpha.2 builds the Antigravity plugin on what the 2026-11-01 probe of Antigravity 2.28.2 showed (see [host integrations research](host-integrations-research.md#antigravity-probe-results-2026-11-01)), and its parts pass the automated tests, but the plugin has not yet run in the Antigravity App.
+The 0.6.0-alpha.2 host test (A1–A8 in `experiments/host-test`) ran a development copy of the plugin installed in a test workspace, with the sidecar installed on its own. Installing the production plugin globally (`agy plugin install`, with the plugin's own **Pigeon wake** sidecar) has not been tried. Antigravity CLI conversations have not been tried.
 
 ### Waking needs the App and the sidecar
 
-Only the Antigravity App runs sidecars; the Antigravity CLI and IDE get messaging and restore but are not woken. The **Pigeon wake** sidecar is off until the user turns it on in Automations. Each Pigeon tool call asks for approval until the tools are allowed, and a wake waits for that approval.
+Only the Antigravity App runs sidecars; the Antigravity CLI and IDE get messaging and restore but are not woken. The **Pigeon wake** sidecar is off until the user turns it on in Automations. Antigravity asks for approval once per tool, not once per server: allowing `pigeon_join` does not allow `pigeon_receive`, so the first wake waits until each tool it uses is allowed (seen in the 0.6.0-alpha.2 host test).
 
 ### Turn state is kept in memory
 
@@ -19,6 +19,34 @@ The service learns whether a conversation is idle only from its hooks. After the
 ### Acceptance is not delivery
 
 `agentapi send-message` reports success for a deleted conversation and drops the message. Pigeon's wake retries cover this: an unconfirmed wake is resent after the retry time and gives up after the attempt limit.
+
+## OpenCode
+
+### Tried only with a development copy
+
+The 0.6.0-alpha.2 host test (O1–O6 in `experiments/host-test`, OpenCode 2.2.5 on Windows) ran a development copy of the plugin installed in one test project. Installing the production plugin in `~/.config/opencode/plugins` has not been tried, and neither has macOS or Linux.
+
+### OpenCode 2 only
+
+OpenCode 1.x plugins use a different API, and OpenCode 2 does not run them. The Pigeon plugin is for OpenCode 2; OpenCode 1.x is not supported.
+
+### Waking needs OpenCode's server
+
+The plugin runs inside OpenCode's shared background server, which the CLI and Desktop start. In the host test that server kept running after OpenCode Desktop was quit and woke a session with no window or terminal open; a reopened session then shows what it did meanwhile. While no OpenCode server runs, nothing wakes an OpenCode session. A session that has not reported its status since OpenCode started is treated as idle; its wake is queued, so it cannot interrupt a turn that is in fact running.
+
+## GitHub Copilot
+
+### Tried only with a development copy
+
+The 0.6.0-alpha.2 host test (C1–C6 in `experiments/host-test`) ran a development copy of the plugin, installed with `copilot plugin install` from a local path, in VS Code 1.145 and the GitHub Copilot app on Windows. Copilot CLI has not been tried. The CLI warns that installs from a local path are deprecated in favour of `plugin@marketplace`, so a release should publish the plugin through a marketplace.
+
+### Local chats in VS Code are not woken
+
+VS Code's older Local chats run outside the Copilot runtime: Pigeon identifies them from the chat ID VS Code puts in each call, but nothing can wake them.
+
+### Copilot extensions are new
+
+The wake depends on Copilot extensions, which the documentation calls experimental. The runtime also outlives a VS Code restart, so a changed plugin may need the runtime (`copilot-runtime.exe`) to end before it reloads.
 
 ## macOS and Linux
 

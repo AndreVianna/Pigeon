@@ -58,6 +58,8 @@ public sealed partial class Mailbox {
             "codex-queue" => "codex",
             "claude-hook" => "claude-code",
             "antigravity-agentapi" => "antigravity",
+            "opencode-prompt" => "opencode",
+            "copilot-extension" => "copilot",
             _ => throw new ArgumentException("Invalid wake mode")
         };
         return db.Transaction(() => {

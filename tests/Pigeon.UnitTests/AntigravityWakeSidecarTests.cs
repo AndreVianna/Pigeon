@@ -46,6 +46,22 @@ public sealed class AntigravityWakeSidecarTests {
         Assert.Equal(0, calls);
     }
 
+    [Fact]
+    public async Task Run_reports_the_sidecar_before_its_first_tick() {
+        var operations = new List<string>();
+        using var stop = new CancellationTokenSource();
+        var sidecar = new AntigravityWakeSidecar((operation, args, _) => {
+            operations.Add(operation);
+            if (operation == "bridge_heartbeat")
+                Assert.Equal(AntigravityWakeSidecar.Mode, JsonSerializer.SerializeToElement(args).GetProperty("mode").GetString());
+            if (operation == "wake_states")
+                stop.Cancel();
+            return Task.FromResult(JsonSerializer.SerializeToElement(new { Ok = true, Value = Array.Empty<object>() }));
+        }, (_, _, _) => Task.FromResult(true));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sidecar.RunAsync(stop.Token));
+        Assert.Equal(["bridge_heartbeat", "wake_states"], operations);
+    }
+
     private static AntigravityWakeSidecar Create(bool claimable, Func<string, string, CancellationToken, Task<bool>> send, List<string> outcomes, List<string> claims)
         => new((operation, args, _) => {
             var a = JsonSerializer.SerializeToElement(args);

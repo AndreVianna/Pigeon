@@ -1,19 +1,22 @@
 # Changelog
 
-The CLI and the Claude, Codex and Antigravity plugins share one version (see the README's developer section).
+The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
 ## 0.6.0-alpha.2 (unreleased)
 
-Adds the Antigravity App. Not yet tried end to end in Antigravity.
+Adds the Antigravity App, host-tested in the Antigravity App 2.28 on Windows (A1–A8 in `experiments/host-test`), OpenCode 2, host-tested with OpenCode 2.2.5 on Windows (O1–O6), and GitHub Copilot, host-tested in VS Code 1.145 and the GitHub Copilot app on Windows (C1–C6).
 
 ### Added
 - An Antigravity plugin (`integrations/antigravity-plugin`) with the MCP server, a `connect` skill, hooks and a **Pigeon wake** sidecar.
-- Antigravity identifies the calling conversation in every MCP tool call, so its agents join without passing a session ID. One Pigeon MCP server can serve several Antigravity conversations.
+- Antigravity identifies the calling conversation in every MCP tool call, so its agents join without passing a session ID. One Pigeon MCP server can serve several Antigravity conversations, and each shows as connected.
 - An idle Antigravity conversation is woken by the sidecar with `agentapi send-message`. A message sent during a turn would join that turn and derail the agent, so the plugin's hooks report each turn's start and end (`pigeon hook turn-start|turn-end antigravity`), and the service sends a wake only after a conversation has been idle for two seconds. A wake that starts no turn is retried after the wake retry time and gives up like any other.
-- `pigeon status` shows whether the Antigravity sidecar is running.
+- An OpenCode 2 plugin (`integrations/opencode-plugin/pigeon`). It registers Pigeon's MCP server, whose tools act for the session OpenCode names in each call (`_meta["ai.opencode/sessionID"]`), so OpenCode agents also join without a session ID. The plugin reports each session's turns to the service (OpenCode 2.2.5 publishes them to plugins as `session.execution.*` events) and wakes an idle session with a queued prompt, which runs after any turn in progress rather than joining it. Its wake logic has its own tests (`node --test`), run in CI.
+- A GitHub Copilot plugin (`integrations/copilot-plugin`) for the Copilot runtime that the Copilot app, Copilot CLI and VS Code's Copilot chats share. The runtime starts one MCP server per session with `COPILOT_AGENT_SESSION_ID`, so Copilot agents join without a session ID (without it, as in VS Code's Local chats, the `vscode.conversationId` VS Code puts in each call is used). The plugin's Copilot extension, which the runtime starts for each session, reports the session's turns, wakes it with a queued prompt (`session.send`, `enqueue`) once it has been idle for two seconds, and allows Pigeon's own tools without a prompt, so a wake never waits for approval. Its tests run with `node --test` in CI.
+- `pigeon status` shows whether the Antigravity sidecar is running. The sidecar stops when the Antigravity language server that started it exits, since Antigravity leaves its sidecars running when it quits.
 
 ### Changed
 - Hook input may be up to 1 MiB (it was 8 KiB), since Antigravity's hook payloads can include the user's prompt. Pigeon still reads only the session ID.
+- On Windows, hooks return at once when no Pigeon service is running, instead of after the 2 seconds a refused local connection takes there. The Antigravity turn hook runs before every model call.
 
 ## 0.6.0-alpha.1 (unreleased)
 

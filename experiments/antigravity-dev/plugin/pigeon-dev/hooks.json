@@ -1,0 +1,25 @@
+{
+  "pigeon-dev": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "C:\\Projects\\Pigeon\\experiments\\antigravity-dev\\hook.cmd session-start",
+        "timeout": 10
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "C:\\Projects\\Pigeon\\experiments\\antigravity-dev\\hook.cmd turn-start",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "C:\\Projects\\Pigeon\\experiments\\antigravity-dev\\hook.cmd turn-end",
+        "timeout": 10
+      }
+    ]
+  }
+}

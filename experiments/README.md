@@ -4,10 +4,14 @@ Development fixtures for the live host tests. They are not product code. Every t
 
 | Path | Purpose | Write-up |
 |---|---|---|
-| `host-test/` | Runbook, helper and results for release host tests (alpha.19 H1–H3 and beta.2 E1–E6 passed; H4–H6 passed, run by the user) | [runbook](host-test/README.md), [release plan](../docs/release-plan.md) |
+| `host-test/` | Runbook, helper and results for release host tests (alpha.19 H1–H3 and beta.2 E1–E6 passed; H4–H6 passed, run by the user; alpha.2 Antigravity A1–A8 passed; OpenCode O1–O6 passed; Copilot C1–C6 prepared) | [runbook](host-test/README.md), [release plan](../docs/release-plan.md) |
 | `claude-hook-waiter-dev/` | Development Claude plugin: production hooks with an isolated port, the frozen test build and a short renewal deadline | [README](claude-hook-waiter-dev/README.md) |
+| `antigravity-dev/` | Development Antigravity plugin (workspace), hook wrapper and wake sidecar: isolated port and the frozen test build | [runbook](host-test/README.md) |
+| `opencode-dev/` | Generator and generated development copy of the OpenCode plugin: isolated port and the frozen test build | [runbook](host-test/README.md) |
 | `codex-plugin-dev/` | Development Codex marketplace and plugin: isolated port and the frozen test build | [runbook](host-test/README.md) |
 | `antigravity-probe/` | Probe plugin, sidecar, runbook and results for the open Antigravity questions (run on 2026-11-01) | [runbook](antigravity-probe/README.md), [research](../docs/host-integrations-research.md) |
+| `copilot-dev/` | Generator and generated development copy of the Copilot plugin: isolated port and the frozen test build | [runbook](host-test/README.md) |
+| `copilot-probe/` | Probe MCP server, hooks and runbook for the open GitHub Copilot questions (VS Code Copilot and Local harnesses, Copilot app; prepared 2026-11-04) | [runbook](copilot-probe/README.md) |
 | `cursor-probe/` | Probe project config, hooks and runbook for the open Cursor questions (partly run on 2026-11-01; blocked by the account usage limit) | [runbook](cursor-probe/README.md), [research](../docs/host-integrations-research.md) |
 
 ## Removed probes

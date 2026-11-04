@@ -21,7 +21,7 @@ public sealed class Broker : IDisposable {
     private readonly Dictionary<string, long> lastTouch = new(StringComparer.Ordinal);
     // Antigravity has no busy state of its own: a message sent during a turn joins it and
     // derails the agent. Its hooks report turns here, and a wake is sent only to a session
-    // known to be idle. Kept only in memory, so after a restart a session waits for its next turn.
+    // known to be idle. The OpenCode plugin and the Copilot extension report their sessions' turns the same way. Kept only in memory, so after a restart a session waits for its next turn.
     // Woken marks a wake sent since the last hook report: if no turn starts, the wake's own
     // retry time decides when to send again, so a lost wake is retried and eventually gives up.
     private readonly Dictionary<string, (bool Busy, long Since, bool Woken)> turns = new(StringComparer.Ordinal);
@@ -130,7 +130,7 @@ public sealed class Broker : IDisposable {
         var mode = Str(args, "mode");
         var session = Optional(args, "sessionId");
         var restoration = Optional(args, "restoration");
-        if (!Guid.TryParseExact(id, "N", out _) || mode is not ("mcp" or "codex-queue" or "claude-hook" or "antigravity-agentapi"))
+        if (!Guid.TryParseExact(id, "N", out _) || mode is not ("mcp" or "codex-queue" or "claude-hook" or "antigravity-agentapi" or "opencode-prompt" or "copilot-extension"))
             throw new ArgumentException();
         if (restoration is not (null or "pending" or "bound" or "missing-session" or "not-configured" or "conflict"))
             throw new ArgumentException();
@@ -241,7 +241,7 @@ public sealed class Broker : IDisposable {
         var tool = Mailbox.ToolName(Str(args, "tool"));
         var session = Str(args, "sessionId");
         var state = Str(args, "state");
-        if (tool != "antigravity" || state is not ("busy" or "idle") || session.Length > 256 || session.Any(char.IsControl))
+        if (tool is not ("antigravity" or "opencode" or "copilot") || state is not ("busy" or "idle") || session.Length > 256 || session.Any(char.IsControl))
             throw new ArgumentException();
         var busy = state == "busy";
         var started = busy && !(turns.TryGetValue(session, out var previous) && previous.Busy);
@@ -251,7 +251,10 @@ public sealed class Broker : IDisposable {
                 _ = turns.Remove(key);
         }
 
-        turns[session] = (busy, clock(), false);
+        // A repeated report keeps the time the state began, so a reporter may repeat its state
+        // (the OpenCode plugin does, to restore it after a service restart) without delaying a wake.
+        if (!(turns.TryGetValue(session, out var same) && same.Busy == busy && !same.Woken))
+            turns[session] = (busy, clock(), false);
         var restored = started && mailbox.Restore(tool, session) is not null;
         return new { recorded = true, restored };
     }
@@ -266,7 +269,7 @@ public sealed class Broker : IDisposable {
                 return null;
         }
 
-        if (mode == "antigravity-agentapi") {
+        if (mode is "antigravity-agentapi" or "opencode-prompt" or "copilot-extension") {
             var now = clock();
             if (!turns.TryGetValue(session, out var turn) || (!turn.Woken && (turn.Busy || now - turn.Since < IdleSettleMilliseconds)))
                 return null;
