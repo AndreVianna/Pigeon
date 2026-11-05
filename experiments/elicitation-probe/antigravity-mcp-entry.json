@@ -1,0 +1,1 @@
+{ "elicitation-probe": { "command": "python", "args": ["-I", "C:/Projects/Pigeon/experiments/elicitation-probe/mcp_server.py"], "env": { "PROBE_HOST": "antigravity" } } }

@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "elicitation-probe": { "type": "local", "command": "python", "args": ["-I", "C:/Projects/Pigeon/experiments/elicitation-probe/mcp_server.py"], "env": { "PROBE_HOST": "copilot" }, "tools": ["*"] }
+  }
+}

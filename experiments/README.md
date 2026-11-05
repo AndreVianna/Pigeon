@@ -12,6 +12,7 @@ Development fixtures for the live host tests. They are not product code. Every t
 | `antigravity-probe/` | Probe plugin, sidecar, runbook and results for the open Antigravity questions (run on 2026-11-01) | [runbook](antigravity-probe/README.md), [research](../docs/host-integrations-research.md) |
 | `copilot-dev/` | Generator and generated development copy of the Copilot plugin: isolated port and the frozen test build | [runbook](host-test/README.md) |
 | `copilot-probe/` | Probe MCP server, hooks and runbook for the open GitHub Copilot questions (VS Code Copilot and Local harnesses, Copilot app; prepared 2026-11-04) | [runbook](copilot-probe/README.md) |
+| `elicitation-probe/` | Probe MCP server, per-host configs and runbook for MCP elicitation in each host (step 1 of the remote connections design; prepared 2026-11-04) | [runbook](elicitation-probe/README.md), [design](../docs/remote-design.md) |
 | `cursor-probe/` | Probe project config, hooks and runbook for the open Cursor questions (partly run on 2026-11-01; blocked by the account usage limit) | [runbook](cursor-probe/README.md), [research](../docs/host-integrations-research.md) |
 
 ## Removed probes
