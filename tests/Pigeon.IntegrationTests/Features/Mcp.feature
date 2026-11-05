@@ -22,6 +22,26 @@ Feature: Agent tools
     Given a running service with two agent connections
     Then a new connection configured for claude-code with a joined session ID is bound without calling join
 
+  Scenario: An Antigravity connection acts for the conversation named in each call
+    Given a running service with two agent connections
+    Then an Antigravity connection joins without a session ID, acts for each calling conversation, restores a joined one, and refuses a call that names none
+
+  Scenario: An Antigravity server reports every conversation it serves as connected
+    Given a running service with two agent connections
+    Then one Antigravity server process shows both of its conversations as connected, and a message to either is delivered as sent
+
+  Scenario: An Antigravity wake waits until the conversation has been idle
+    Given a running service with a test clock
+    Then a wake is claimed only after the conversation's hooks report it idle for two seconds, never during a turn, and a lost wake is retried after its retry time
+
+  Scenario: An OpenCode connection acts for the session named in each call, and its plugin's status reports gate wakes
+    Given a running service with a test clock
+    Then an OpenCode connection joins for the session in the call's metadata, and a wake is claimed only after the plugin reports the session idle for two seconds, also when it repeats that report
+
+  Scenario: A Copilot connection acts for the session in its environment, and its extension's turn reports gate wakes
+    Given a running service with a test clock
+    Then a Copilot connection joins for the session the runtime named in its environment, falls back to VS Code's chat ID without it, and a wake is claimed only after the extension reports the session idle for two seconds
+
   Scenario: The local endpoint rejects browser and rebinding requests
     Given a running service with two agent connections
     Then the HTTP endpoint rejects browser origins and non-loopback hostnames

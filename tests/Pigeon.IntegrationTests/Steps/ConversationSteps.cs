@@ -1,5 +1,7 @@
 using Pigeon.Core;
+
 using Reqnroll;
+
 using Xunit;
 
 namespace Pigeon.IntegrationTests.Steps;
@@ -14,8 +16,8 @@ public sealed class ConversationSteps {
     private int key;
 
     private const long Hour = 3_600_000;
-    private string Send(string session, string topic, string text, string? retryKey = null) =>
-        store.Send(session, topic, text, retryKey ?? "key-" + ++key, now + 24 * Hour).MessageId;
+    private string Send(string session, string topic, string text, string? retryKey = null)
+        => store.Send(session, topic, text, retryKey ?? "key-" + ++key, now + 24 * Hour).MessageId;
     private string[] Receive(string session, string topic) => [.. store.Take(session, topic).Select(m => m.Body)];
 
     [Given("a fresh message store")]
@@ -72,6 +74,7 @@ public sealed class ConversationSteps {
             Assert.Equal(new Member("claude-code", "B"), store.Send("A", "review", text, text, now + Hour).Recipient);
             now++;
         }
+
         var received = store.Take("B", "review");
         Assert.Equal(["one", "two", "three"], received.Select(m => m.Body));
         Assert.All(received, m => Assert.Equal(("review", "codex", "A"), (m.Topic, m.SenderTool, m.SenderSessionId)));
@@ -136,7 +139,8 @@ public sealed class ConversationSteps {
     public void HourlyLimit() {
         _ = store.Join("codex", "A", "review");
         _ = store.Join("claude-code", "B", "review");
-        for (var i = 0; i < 3; i++) _ = Send(i % 2 == 0 ? "A" : "B", "review", "message " + i);
+        for (var i = 0; i < 3; i++)
+            _ = Send(i % 2 == 0 ? "A" : "B", "review", "message " + i);
         Assert.Contains("limit of 3 messages per hour", Assert.Throws<InvalidOperationException>(() => Send("A", "review", "one too many")).Message);
         now += Hour + 1;
         _ = Send("A", "review", "later");
@@ -216,12 +220,14 @@ public sealed class ConversationSteps {
             Assert.Throws<StorageUnavailableException>(() => store.Join("claude-code", "B", "review"));
             _ = other.Exec("ROLLBACK");
         }
+
         Assert.Equal(2, store.Join("claude-code", "B", "review").Members.Length);
     }
 
     [AfterScenario]
     public void Cleanup() {
         store?.Dispose();
-        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
     }
 }

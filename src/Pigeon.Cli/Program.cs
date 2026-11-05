@@ -48,8 +48,39 @@ internal static class ServiceCommands {
             var timeout = args.Length >= 5 ? int.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture) : renew ? ClaudeHookWait.DefaultRenewalSeconds : ClaudeHookWait.DefaultTimeoutSeconds;
             return await ClaudeHookWait.RunAsync(port, timeout, renew);
         }
+
+        if (args[0] == "hook" && args[1] is "turn-start" or "turn-end")
+            return await SessionHook.TurnAsync(port, args[2], args[1] == "turn-start" ? "busy" : "idle", args[1] == "turn-start" ? "{}" : "{\"decision\":\"allow\"}");
         if (args[0] == "hook")
             return await SessionHook.RunAsync(port, args[2]);
+        if (args[0] == "sidecar") {
+            // Antigravity gives its sidecars the language server binary that serves agentapi.
+            var agentApi = Environment.GetEnvironmentVariable("ANTIGRAVITY_AGENTAPI_EXE");
+            if (string.IsNullOrWhiteSpace(agentApi) || !Path.IsPathFullyQualified(agentApi) || !File.Exists(agentApi))
+                throw new InvalidOperationException("ANTIGRAVITY_AGENTAPI_EXE is not set. This command runs as the Pigeon plugin's sidecar inside the Antigravity App.");
+            // Antigravity does not stop its sidecars when it quits (seen in the 0.6.0-alpha.2 host
+            // test), so the sidecar stops when the language server that started it exits.
+            using var parent = MonitorParent.Capture();
+            using var stop = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) => {
+                e.Cancel = true;
+                stop.Cancel();
+            };
+            var watch = Task.Run(async () => {
+                while (!stop.IsCancellationRequested && parent.IsAlive)
+                    await Task.Delay(1000);
+                stop.Cancel();
+            });
+            try {
+                await new AntigravityWakeSidecar(port, agentApi).RunAsync(stop.Token);
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+
+            await watch;
+
+            return 0;
+        }
+
         if (args[0] == "start" && args.Length == 1)
             return await StartAsync(port);
         if (args[0] == "stop") {
@@ -66,16 +97,20 @@ internal static class ServiceCommands {
                     Console.WriteLine("Pigeon service stopped.");
                     return 0;
                 }
+
                 await Task.Delay(100);
             }
+
             throw new TimeoutException();
         }
+
         if (args[0] == "start") {
             var background = args[^1] == "--background";
             if (background) {
                 Console.SetOut(TextWriter.Null);
                 Console.SetError(TextWriter.Null);
             }
+
             var defaultRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var configuredDatabase = Environment.GetEnvironmentVariable("PIGEON_DATABASE");
             if (configuredDatabase is null && (string.IsNullOrWhiteSpace(defaultRoot) || !Path.IsPathFullyQualified(defaultRoot)))
@@ -90,6 +125,7 @@ internal static class ServiceCommands {
                     throw new ArgumentException();
                 retention = checked(days * 86400000L);
             }
+
             var maxAttempts = ConfiguredLimit("PIGEON_MAX_ATTEMPTS", 3, 1, 100);
             var maxPerHour = ConfiguredLimit("PIGEON_MAX_MESSAGES_PER_HOUR", 60, 1, 10000);
             var abandonedMinutes = ConfiguredLimit("PIGEON_ABANDONED_TOPIC_MINUTES", 60, 1, 525600);
@@ -121,6 +157,7 @@ internal static class ServiceCommands {
                 if (await Task.WhenAny(server, input) == input)
                     stop.Cancel();
             }
+
             await server;
 
             return 0;
@@ -128,27 +165,37 @@ internal static class ServiceCommands {
 
         if (args[0] == "mcp") {
             var runtime = Environment.GetEnvironmentVariable("PIGEON_RUNTIME");
-            if (runtime is not (null or "codex" or "claude-code")) throw new ArgumentException("PIGEON_RUNTIME must be codex or claude-code.");
+            if (runtime is not (null or "codex" or "claude-code" or "antigravity" or "opencode" or "copilot"))
+                throw new ArgumentException("PIGEON_RUNTIME must be codex, claude-code, antigravity, opencode or copilot.");
             // The isolated Codex app-server did not provide a thread ID to its MCP child.
             // Do not trust a potentially inherited ID from some other Codex session.
-            var autoSession = runtime == "claude-code" ? Environment.GetEnvironmentVariable("CLAUDE_CODE_SESSION_ID") : null;
+            var autoSession = runtime switch {
+                "claude-code" => Environment.GetEnvironmentVariable("CLAUDE_CODE_SESSION_ID"),
+                // Set by the Copilot runtime for each session's own MCP server (seen in VS Code 1.145).
+                "copilot" => Environment.GetEnvironmentVariable("COPILOT_AGENT_SESSION_ID"),
+                _ => null
+            };
             var session = new McpSession(port, runtime, autoSession);
             var codexQueue = args.Length == 2 ? new CodexQueueNotifier(port, () => session.SessionId) : null;
             await McpStdio.RunAsync(Console.In, Console.Out, session, nextNotification: codexQueue is null ? null : codexQueue.TickAsync);
             return 0;
         }
+
         if (args[0] == "status")
             return await StatusAsync(port);
         if (args[0] == "topics") {
             var topics = (await Call(port, "topics", new { })).EnumerateArray().ToArray();
-            if (topics.Length == 0) Console.WriteLine("No topics.");
+            if (topics.Length == 0)
+                Console.WriteLine("No topics.");
             foreach (var topic in topics) {
                 var members = topic.GetProperty("Members").EnumerateArray().Select(m => $"{m.GetProperty("Tool").GetString()} {m.GetProperty("SessionId").GetString()}").ToArray();
                 var partnerText = members.Length < 2 ? " (waiting for a partner)" : "";
                 Console.WriteLine($"{topic.GetProperty("Topic").GetString()}: {string.Join(" and ", members)}{partnerText} | {topic.GetProperty("Waiting").GetInt32()} waiting");
             }
+
             return 0;
         }
+
         if (args[0] == "join") {
             var topic = await Call(port, "join", new { topic = args[1], sessionId = args[3], tool = args[5] });
             var partner = topic.GetProperty("Members").EnumerateArray().FirstOrDefault(m => m.GetProperty("SessionId").GetString() != args[3]);
@@ -157,26 +204,32 @@ internal static class ServiceCommands {
                 : $"Joined {args[1]}. Waiting for a partner.");
             return 0;
         }
+
         if (args[0] == "leave") {
             var left = await Call(port, "leave", new { topic = args[1], sessionId = args[3] });
             Console.WriteLine(left.GetProperty("deleted").GetBoolean() ? $"Left {args[1]}. Nobody is left, so the topic was deleted." : $"Left {args[1]}.");
             return 0;
         }
+
         if (args[0] == "send") {
             var message = args[5] == "-" ? await ReadBodyAsync() : args[5];
             var sent = await Call(port, "send", new { sessionId = args[2], topic = args[4], message, retryKey = Guid.NewGuid().ToString("N") });
             Console.WriteLine(sent.GetProperty("text").GetString());
             return 0;
         }
+
         if (args[0] == "receive") {
             var messages = (await Call(port, "take", new { sessionId = args[2], topic = args[4] })).EnumerateArray().ToArray();
-            if (messages.Length == 0) Console.WriteLine("No new messages.");
+            if (messages.Length == 0)
+                Console.WriteLine("No new messages.");
             foreach (var m in messages) {
                 var sentAt = DateTimeOffset.FromUnixTimeMilliseconds(m.GetProperty("SentAtUnixMs").GetInt64());
                 Console.WriteLine($"[{sentAt:u}] {m.GetProperty("SenderTool").GetString()} {m.GetProperty("SenderSessionId").GetString()}: {m.GetProperty("Body").GetString()}");
             }
+
             return 0;
         }
+
         return 2;
     }
 
@@ -187,6 +240,7 @@ internal static class ServiceCommands {
             var error = result.GetProperty("Error").GetString();
             throw new CommandException(error is null or "invalid request" ? "The service rejected the request." : error);
         }
+
         return result.GetProperty("Value");
     }
 
@@ -203,7 +257,12 @@ internal static class ServiceCommands {
             Console.Error.WriteLine($"Pigeon service: not running on 127.0.0.1:{port}.");
             return 1;
         }
-        var bridges = (await Call(port, "bridges", new { })).EnumerateArray().Where(b => b.GetProperty("mode").GetString() is "mcp" or "codex-queue").ToArray();
+
+        var all = (await Call(port, "bridges", new { })).EnumerateArray().ToArray();
+        var sidecar = all.Any(b => b.GetProperty("mode").GetString() == AntigravityWakeSidecar.Mode);
+        var openCodeWaker = all.Any(b => b.GetProperty("mode").GetString() == "opencode-prompt");
+        bool CopilotExtension(string? session) => all.Any(b => b.GetProperty("mode").GetString() == "copilot-extension" && b.GetProperty("sessionId").ValueKind == JsonValueKind.String && b.GetProperty("sessionId").GetString() == session);
+        var bridges = all.Where(b => b.GetProperty("mode").GetString() is "mcp" or "codex-queue").ToArray();
         var joined = bridges.Where(b => b.GetProperty("sessionId").ValueKind == JsonValueKind.String).ToArray();
         Console.WriteLine($"Connected sessions: {joined.Length} (and {bridges.Length - joined.Length} agent connections not in a topic)");
         foreach (var bridge in joined) {
@@ -221,8 +280,15 @@ internal static class ServiceCommands {
                     // The plugin's hook may not be running, or the installed CLI may not support its arguments.
                     : " | notification: none (no notifier seen since the service started; check the Pigeon plugin and that the CLI supports its hook)";
             }
+            else if (tool == "antigravity")
+                notification = sidecar ? " | notification: Antigravity sidecar" : " | notification: none (the Pigeon wake sidecar is not running; enable it in Antigravity's Automations)";
+            else if (tool == "copilot")
+                notification = CopilotExtension(bridge.GetProperty("sessionId").GetString()) ? " | notification: Copilot extension" : " | notification: none (the Pigeon Copilot extension is not reporting for this session; check that the plugin is installed)";
+            else if (tool == "opencode")
+                notification = openCodeWaker ? " | notification: OpenCode plugin" : " | notification: none (the Pigeon OpenCode plugin is not reporting; check that it is installed and OpenCode is running)";
             Console.WriteLine($"  {tool} {bridge.GetProperty("sessionId").GetString()} | topics: {topics} | wake: {bridge.GetProperty("wake").GetProperty("State").GetString()}{notification}");
         }
+
         var pending = (await Call(port, "wake_states", new { })).EnumerateArray().ToArray();
         Console.WriteLine($"Sessions with waiting messages: {pending.Length}");
         foreach (var item in pending) {
@@ -232,6 +298,7 @@ internal static class ServiceCommands {
             var waiting = wake.GetProperty("Queued").GetInt32() + wake.GetProperty("Leased").GetInt32();
             Console.WriteLine($"  {item.GetProperty("Tool").GetString()} {item.GetProperty("SessionId").GetString()} | waiting: {waiting} | wake: {wake.GetProperty("State").GetString()} | attempts since progress: {wake.GetProperty("Attempts").GetInt32()} | last transport: {wake.GetProperty("LastOutcome").GetString() ?? "none"} | next attempt: {nextText}");
         }
+
         return 0;
     }
 
@@ -252,8 +319,11 @@ internal static class ServiceCommands {
         // terminal's input and output.
         var windows = OperatingSystem.IsWindows();
         var info = new ProcessStartInfo(executable) {
-            UseShellExecute = windows, WindowStyle = ProcessWindowStyle.Hidden,
-            RedirectStandardInput = !windows, RedirectStandardOutput = !windows, RedirectStandardError = !windows,
+            UseShellExecute = windows,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardInput = !windows,
+            RedirectStandardOutput = !windows,
+            RedirectStandardError = !windows,
             WorkingDirectory = Environment.CurrentDirectory
         };
         if (string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))
@@ -264,6 +334,7 @@ internal static class ServiceCommands {
             if (!Path.IsPathFullyQualified(database))
                 throw new ArgumentException();
         }
+
         info.ArgumentList.Add("--background");
         using var process = Process.Start(info) ?? throw new InvalidOperationException();
         try {
@@ -278,8 +349,10 @@ internal static class ServiceCommands {
                 }
                 catch (IOException) { }
                 catch (OperationCanceledException) when (!ready.IsCancellationRequested) { }
+
                 await Task.Delay(100, ready.Token);
             }
+
             throw new InvalidOperationException("Pigeon service did not start.");
         }
         catch {
@@ -287,6 +360,7 @@ internal static class ServiceCommands {
                 process.Kill(entireProcessTree: true);
                 await process.WaitForExitAsync();
             }
+
             throw;
         }
     }
@@ -303,6 +377,7 @@ internal static class ServiceCommands {
                 throw new ArgumentException("Message body is too long.");
             _ = body.Append(buffer, 0, count);
         }
+
         return body.ToString();
     }
     private static int ConfiguredLimit(string name, int fallback, int min, int max) {

@@ -1,6 +1,9 @@
 using System.Text.Json;
+
 using Pigeon.Service;
+
 using Reqnroll;
+
 using Xunit;
 
 namespace Pigeon.IntegrationTests.Steps;
@@ -47,6 +50,223 @@ public sealed class McpSteps {
         await host.Ready.WaitAsync(TimeSpan.FromSeconds(10));
         codex = await Connect("codex");
         claude = await Connect("claude-code");
+    }
+
+    private long now = 1_000_000;
+
+    [Given("a running service with a test clock")]
+    public async Task RunningWithClock() {
+        Directory.CreateDirectory(directory);
+        broker = new Broker(Path.Combine(directory, "messages.db"), () => now, wakeRetryMilliseconds: 60000);
+        stop = new CancellationTokenSource();
+        var host = new LocalHttpServer(port, broker);
+        server = host.RunAsync(stop.Token);
+        await host.Ready.WaitAsync(TimeSpan.FromSeconds(10));
+        codex = await Connect("codex");
+    }
+
+    private async Task<(bool Error, string Text)> CallAs(McpSession session, string? conversation, string tool, object args, string key = McpSession.AntigravityConversationKey) {
+        var meta = new Dictionary<string, string>();
+        if (conversation is not null)
+            meta[key] = conversation;
+        var request = JsonSerializer.Serialize(new { jsonrpc = "2.0", id = ++id, method = "tools/call", @params = new { name = tool, arguments = args, _meta = meta } });
+        using var response = JsonDocument.Parse((await session.HandleAsync(request))!);
+        var result = response.RootElement.GetProperty("result");
+        return (result.GetProperty("isError").GetBoolean(), result.GetProperty("content")[0].GetProperty("text").GetString()!);
+    }
+
+    private async Task<JsonElement> OkAs(McpSession session, string conversation, string tool, object args, string key = McpSession.AntigravityConversationKey) {
+        var (error, text) = await CallAs(session, conversation, tool, args, key);
+        Assert.False(error, text);
+        return JsonDocument.Parse(text).RootElement.Clone();
+    }
+
+    private const string FirstConversation = "3f0d8a51-6c2e-4d8b-9a77-0b1c2d3e4f50", SecondConversation = "7a9b0c1d-2e3f-4a5b-8c6d-9e0f1a2b3c4d";
+
+    [Then("an Antigravity connection joins without a session ID, acts for each calling conversation, restores a joined one, and refuses a call that names none")]
+    public async Task AntigravityIdentity() {
+        var antigravity = await Connect("antigravity");
+        using (var list = JsonDocument.Parse((await antigravity.HandleAsync("{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"tools/list\"}"))!)) {
+            var tools = list.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray().ToArray();
+            Assert.DoesNotContain(tools, t => t.GetProperty("name").GetString() == "pigeon_session_restore");
+            var join = tools.Single(t => t.GetProperty("name").GetString() == "pigeon_join");
+            Assert.Equal(["topic"], join.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(r => r.GetString()));
+        }
+
+        var (error, text) = await CallAs(antigravity, null, "pigeon_join", new { topic = "review" });
+        Assert.True(error);
+        Assert.Contains("did not identify this conversation", text);
+        // A session ID passed by the agent is ignored in favor of the one Antigravity names.
+        var joined = await OkAs(antigravity, FirstConversation, "pigeon_join", new { topic = "review", sessionId = "guessed" });
+        Assert.Equal(("antigravity", FirstConversation), (joined.GetProperty("Members")[0].GetProperty("Tool").GetString(), joined.GetProperty("Members")[0].GetProperty("SessionId").GetString()));
+        _ = await OkAs(antigravity, SecondConversation, "pigeon_join", new { topic = "design" });
+        Assert.Equal(["design"], (await OkAs(antigravity, SecondConversation, "pigeon_topics", new { })).EnumerateArray().Select(t => t.GetProperty("Topic").GetString()));
+        Assert.Equal(["review"], (await OkAs(antigravity, FirstConversation, "pigeon_topics", new { })).EnumerateArray().Select(t => t.GetProperty("Topic").GetString()));
+        // A new server process restores a conversation that joined before, on its first call.
+        var restarted = await Connect("antigravity");
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(codex, "pigeon_send", new { topic = "review", message = "hello antigravity" });
+        Assert.Equal(1, (await OkAs(restarted, FirstConversation, "pigeon_topics", new { }))[0].GetProperty("Waiting").GetInt32());
+        Assert.Equal(FirstConversation, restarted.SessionId);
+        (error, text) = await CallAs(restarted, "never-joined", "pigeon_send", new { topic = "review", message = "x" });
+        Assert.True(error);
+        Assert.Equal("Join a topic first with pigeon_join.", text);
+    }
+
+    // Found in the 0.6.0-alpha.2 host test: one server serves every conversation in a workspace,
+    // and only the last caller showed as connected.
+    [Then("one Antigravity server process shows both of its conversations as connected, and a message to either is delivered as sent")]
+    public async Task AntigravityConversationsConnected() {
+        var antigravity = new McpSession(port, "antigravity");
+        using var pipe = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.Out);
+        using var input = new StreamReader(new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, pipe.ClientSafePipeHandle));
+        await using var writer = new StreamWriter(pipe) { AutoFlush = true };
+        using var output = new StringWriter();
+        var running = McpStdio.RunAsync(input, output, antigravity);
+        await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\"}}");
+        await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+        foreach (var (conversation, topic) in new[] { (FirstConversation, "review"), (SecondConversation, "design") }) {
+            var meta = new Dictionary<string, string> { [McpSession.AntigravityConversationKey] = conversation };
+            await writer.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = ++id, method = "tools/call", @params = new { name = "pigeon_join", arguments = new { topic }, _meta = meta } }));
+        }
+
+        string[] connected = [];
+        for (var i = 0; i < 40 && connected.Length < 2; i++) {
+            await Task.Delay(250);
+            var bridges = await LocalHttpClient.ExecuteAsync(port, "bridges", new { });
+            connected = [.. bridges.GetProperty("Value").EnumerateArray().Where(b => b.GetProperty("tool").GetString() == "antigravity").Select(b => b.GetProperty("sessionId").GetString()!).Order()];
+        }
+
+        Assert.Equal(new[] { FirstConversation, SecondConversation }.Order(), connected);
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(claude, "pigeon_join", new { topic = "design", sessionId = ClaudeSession });
+        Assert.Equal("sent", (await Ok(codex, "pigeon_send", new { topic = "review", message = "to the first" })).GetProperty("delivery").GetString());
+        Assert.Equal("sent", (await Ok(claude, "pigeon_send", new { topic = "design", message = "to the second" })).GetProperty("delivery").GetString());
+        writer.Close();
+        await running.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Then("a wake is claimed only after the conversation's hooks report it idle for two seconds, never during a turn, and a lost wake is retried after its retry time")]
+    public async Task AntigravityWake() {
+        var antigravity = await Connect("antigravity");
+        _ = await OkAs(antigravity, FirstConversation, "pigeon_join", new { topic = "review" });
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(codex, "pigeon_send", new { topic = "review", message = "wake up" });
+        async Task<string?> Claim() {
+            var claim = await codex.BridgeAsync("wake_claim", new { sessionId = FirstConversation, mode = "antigravity-agentapi" }, CancellationToken.None);
+            Assert.True(claim.GetProperty("Ok").GetBoolean(), claim.ToString());
+            return claim.GetProperty("Value").ValueKind == JsonValueKind.Null ? null : claim.GetProperty("Value").GetProperty("Generation").GetString();
+        }
+
+        Task<JsonElement> Turn(string state) => codex.BridgeAsync("turn_state", new { tool = "antigravity", sessionId = FirstConversation, state }, CancellationToken.None);
+        // No hook has reported yet: the state is unknown, so nothing is sent.
+        Assert.Null(await Claim());
+        Assert.True((await Turn("busy")).GetProperty("Value").GetProperty("restored").GetBoolean());
+        Assert.False((await Turn("busy")).GetProperty("Value").GetProperty("restored").GetBoolean());
+        now += 10000;
+        Assert.Null(await Claim());
+        _ = await Turn("idle");
+        now += 1999;
+        Assert.Null(await Claim());
+        now += 1;
+        var generation = await Claim();
+        Assert.NotNull(generation);
+        // The wake was accepted but no turn started: it is retried only after its retry time.
+        Assert.Null(await Claim());
+        now += 60000;
+        var retry = await Claim();
+        Assert.NotNull(retry);
+        // The woken turn starts and ends; a confirmed wake is not sent again.
+        _ = await Turn("busy");
+        Assert.Equal("wake up", (await OkAs(antigravity, FirstConversation, "pigeon_receive", new { generation = retry })).GetProperty("Messages")[0].GetProperty("Body").GetString());
+        Assert.True((await OkAs(antigravity, FirstConversation, "pigeon_wake_complete", new { generation = retry })).GetBoolean());
+        _ = await Turn("idle");
+        now += 120000;
+        Assert.Null(await Claim());
+        // Other tools' sessions cannot report Antigravity turns.
+        var refused = await codex.BridgeAsync("turn_state", new { tool = "codex", sessionId = CodexSession, state = "idle" }, CancellationToken.None);
+        Assert.False(refused.GetProperty("Ok").GetBoolean());
+    }
+
+    [Then("an OpenCode connection joins for the session in the call's metadata, and a wake is claimed only after the plugin reports the session idle for two seconds, also when it repeats that report")]
+    public async Task OpenCodeWake() {
+        const string session = "ses_7a9b0c1d2e3f4a5b8c6d9e0f";
+        var opencode = await Connect("opencode");
+        var (error, text) = await CallAs(opencode, null, "pigeon_join", new { topic = "review" }, McpSession.OpenCodeSessionKey);
+        Assert.True(error);
+        Assert.Contains("OpenCode did not identify this session", text);
+        // Antigravity's key means nothing to an OpenCode connection.
+        (error, _) = await CallAs(opencode, session, "pigeon_join", new { topic = "review" });
+        Assert.True(error);
+        (error, text) = await CallAs(opencode, session, "pigeon_join", new { topic = "review" }, McpSession.OpenCodeSessionKey);
+        Assert.False(error, text);
+        Assert.Equal(("opencode", session), (JsonDocument.Parse(text).RootElement.GetProperty("Members")[0].GetProperty("Tool").GetString(), JsonDocument.Parse(text).RootElement.GetProperty("Members")[0].GetProperty("SessionId").GetString()));
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(codex, "pigeon_send", new { topic = "review", message = "wake up" });
+        async Task<string?> Claim() {
+            var claim = await codex.BridgeAsync("wake_claim", new { sessionId = session, mode = "opencode-prompt" }, CancellationToken.None);
+            Assert.True(claim.GetProperty("Ok").GetBoolean(), claim.ToString());
+            return claim.GetProperty("Value").ValueKind == JsonValueKind.Null ? null : claim.GetProperty("Value").GetProperty("Generation").GetString();
+        }
+
+        Task<JsonElement> Status(string state) => codex.BridgeAsync("turn_state", new { tool = "opencode", sessionId = session, state }, CancellationToken.None);
+        Assert.Null(await Claim());
+        _ = await Status("busy");
+        now += 10000;
+        Assert.Null(await Claim());
+        _ = await Status("idle");
+        now += 1500;
+        // The plugin repeats every known status; a repeat must not restart the two seconds.
+        _ = await Status("idle");
+        now += 499;
+        Assert.Null(await Claim());
+        now += 1;
+        var generation = await Claim();
+        Assert.NotNull(generation);
+        var received = await CallAs(opencode, session, "pigeon_receive", new { generation }, McpSession.OpenCodeSessionKey);
+        Assert.Contains("wake up", received.Text);
+    }
+
+    [Then("a Copilot connection joins for the session the runtime named in its environment, falls back to VS Code's chat ID without it, and a wake is claimed only after the extension reports the session idle for two seconds")]
+    public async Task CopilotWake() {
+        const string session = "09da179d-fe71-48c8-9d66-e52f1838fdce", chat = "51934ddf-3a1e-4a64-a889-fb3b49027637";
+        // The Copilot runtime gives each session's server COPILOT_AGENT_SESSION_ID; any call metadata is ignored.
+        var copilot = await Connect("copilot", session);
+        using (var list = JsonDocument.Parse((await copilot.HandleAsync("{\"jsonrpc\":\"2.0\",\"id\":98,\"method\":\"tools/list\"}"))!)) {
+            var join = list.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray().Single(t => t.GetProperty("name").GetString() == "pigeon_join");
+            Assert.Equal(["topic"], join.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(r => r.GetString()));
+        }
+
+        var joined = await OkAs(copilot, chat, "pigeon_join", new { topic = "review" }, McpSession.VsCodeConversationKey);
+        Assert.Equal(("copilot", session), (joined.GetProperty("Members")[0].GetProperty("Tool").GetString(), joined.GetProperty("Members")[0].GetProperty("SessionId").GetString()));
+        // Without the environment variable (VS Code's Local chats), the chat VS Code names in the call is used.
+        var local = await Connect("copilot");
+        (bool error, string text) = await CallAs(local, null, "pigeon_join", new { topic = "local" }, McpSession.VsCodeConversationKey);
+        Assert.True(error);
+        Assert.Contains("Copilot did not identify this session", text);
+        var localJoin = await OkAs(local, chat, "pigeon_join", new { topic = "local" }, McpSession.VsCodeConversationKey);
+        Assert.Equal(chat, localJoin.GetProperty("Members")[0].GetProperty("SessionId").GetString());
+        _ = await Ok(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
+        _ = await Ok(codex, "pigeon_send", new { topic = "review", message = "wake up" });
+        async Task<string?> Claim() {
+            var claim = await codex.BridgeAsync("wake_claim", new { sessionId = session, mode = "copilot-extension" }, CancellationToken.None);
+            Assert.True(claim.GetProperty("Ok").GetBoolean(), claim.ToString());
+            return claim.GetProperty("Value").ValueKind == JsonValueKind.Null ? null : claim.GetProperty("Value").GetProperty("Generation").GetString();
+        }
+
+        Task<JsonElement> Turn(string state) => codex.BridgeAsync("turn_state", new { tool = "copilot", sessionId = session, state }, CancellationToken.None);
+        Assert.Null(await Claim());
+        _ = await Turn("busy");
+        now += 10000;
+        Assert.Null(await Claim());
+        _ = await Turn("idle");
+        now += 1999;
+        Assert.Null(await Claim());
+        now += 1;
+        var generation = await Claim();
+        Assert.NotNull(generation);
+        var received = await Ok(copilot, "pigeon_receive", new { generation });
+        Assert.Equal("wake up", received.GetProperty("Messages")[0].GetProperty("Body").GetString());
     }
 
     [Given("a connection to a service that is not running")]
@@ -135,8 +355,10 @@ public sealed class McpSteps {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{port}/broker");
             request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
             request.Headers.Add("X-Pigeon-Client", "1");
-            if (badHost) request.Headers.Host = "attacker.example";
-            else request.Headers.Add("Origin", "https://attacker.example");
+            if (badHost)
+                request.Headers.Host = "attacker.example";
+            else
+                request.Headers.Add("Origin", "https://attacker.example");
             using var response = await client.SendAsync(request);
             Assert.Equal(System.Net.HttpStatusCode.Forbidden, response.StatusCode);
         }
@@ -153,10 +375,16 @@ public sealed class McpSteps {
     public async Task Cleanup() {
         if (stop is not null) {
             stop.Cancel();
-            try { await server!; } catch (OperationCanceledException) { }
+            try {
+                await server!;
+            }
+            catch (OperationCanceledException) { }
+
             stop.Dispose();
         }
+
         broker?.Dispose();
-        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
     }
 }

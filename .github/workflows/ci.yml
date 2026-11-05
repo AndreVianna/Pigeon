@@ -38,6 +38,17 @@ jobs:
       - name: Test
         run: dotnet test Pigeon.slnx --configuration Release --no-build
 
+      # The OpenCode plugin's wake logic is TypeScript; Node runs it with type stripping.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test the OpenCode plugin
+        run: node --test integrations/opencode-plugin/waker.test.ts
+
+      - name: Test the Copilot extension
+        run: node --test integrations/copilot-plugin/waker.test.mjs
+
       # The tool package is the same on every platform, so one runner publishes it.
       - name: Pack
         if: runner.os == 'Windows'

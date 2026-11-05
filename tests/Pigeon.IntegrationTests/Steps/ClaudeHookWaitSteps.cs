@@ -1,8 +1,11 @@
 using System.Diagnostics;
 using System.Text.Json;
+
 using Pigeon.Core;
 using Pigeon.Service;
+
 using Reqnroll;
+
 using Xunit;
 
 namespace Pigeon.IntegrationTests.Steps;
@@ -30,8 +33,8 @@ public sealed class ClaudeHookWaitSteps {
         return result.GetProperty("Value");
     }
 
-    private Task Publish(string body = "synthetic") =>
-        Call("send", new { sessionId = Sender, topic = "test", message = body, retryKey = "key-" + ++key });
+    private Task Publish(string body = "synthetic")
+        => Call("send", new { sessionId = Sender, topic = "test", message = body, retryKey = "key-" + ++key });
     private Task<JsonElement> WakeStatus() => Call("wake_status", new { sessionId = Reader });
 
     private async Task StartService() {
@@ -51,7 +54,8 @@ public sealed class ClaudeHookWaitSteps {
 
     private Process Pigeon(params string[] args) {
         var start = new ProcessStartInfo(TestTools.Pigeon) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
-        foreach (var arg in args) start.ArgumentList.Add(arg);
+        foreach (var arg in args)
+            start.ArgumentList.Add(arg);
         start.Environment["PIGEON_PORT"] = port;
         var process = Process.Start(start)!;
         processes.Add(process);
@@ -68,11 +72,12 @@ public sealed class ClaudeHookWaitSteps {
             process.StandardInput.Close();
         }
         catch (IOException) { }
+
         return new Waiter(process, output, errors);
     }
 
-    private Task<Waiter> StartWaiter(string session = "reader-session", params string[] extra) =>
-        StartWaiterWithInput(JsonSerializer.Serialize(new { session_id = session, hook_event_name = "Stop", prompt = "untrusted-extra-data" }), extra);
+    private Task<Waiter> StartWaiter(string session = "reader-session", params string[] extra)
+        => StartWaiterWithInput(JsonSerializer.Serialize(new { session_id = session, hook_event_name = "Stop", prompt = "untrusted-extra-data" }), extra);
 
     private static async Task<int> Exit(Waiter waiter, int seconds = 10) {
         await waiter.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(seconds));
@@ -86,9 +91,11 @@ public sealed class ClaudeHookWaitSteps {
 
     private async Task WaitForOwner(string mode) {
         for (var i = 0; i < 30; i++) {
-            if ((await Notifier()).GetProperty("active").GetString() == mode) return;
+            if ((await Notifier()).GetProperty("active").GetString() == mode)
+                return;
             await Task.Delay(300);
         }
+
         Assert.Fail("No " + mode + " owner appeared.");
     }
 
@@ -102,9 +109,14 @@ public sealed class ClaudeHookWaitSteps {
         heartbeat = new CancellationTokenSource();
         heartbeats = Task.Run(async () => {
             while (!heartbeat.IsCancellationRequested) {
-                try { _ = await LocalHttpClient.ExecuteAsync(port, "bridge_heartbeat", new { id = bridgeId, mode = "mcp", sessionId = Reader }, heartbeat.Token); }
+                try {
+                    _ = await LocalHttpClient.ExecuteAsync(port, "bridge_heartbeat", new { id = bridgeId, mode = "mcp", sessionId = Reader }, heartbeat.Token);
+                }
                 catch (Exception e) when (e is IOException or TimeoutException or OperationCanceledException) { }
-                try { await Task.Delay(1000, heartbeat.Token); }
+
+                try {
+                    await Task.Delay(1000, heartbeat.Token);
+                }
                 catch (OperationCanceledException) { }
             }
         });
@@ -279,10 +291,12 @@ public sealed class ClaudeHookWaitSteps {
             Assert.Equal(0, await Exit(waiter));
             Assert.Equal("", await waiter.Errors);
         }
+
         foreach (var args in new[] { new[] { "--timeout", "5" }, new[] { "--timeout", "soon" }, new[] { "--other", "10" } }) {
             var waiter = await StartWaiter("reader-session", args);
             Assert.Equal(1, await Exit(waiter));
         }
+
         var codex = Pigeon("hook", "wait", "codex");
         codex.StandardInput.Close();
         await codex.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
@@ -339,6 +353,7 @@ public sealed class ClaudeHookWaitSteps {
             Assert.False(waiter.Process.HasExited);
             _ = other.Exec("ROLLBACK");
         }
+
         await WaitForOwner("claude-hook");
         await Publish();
         Assert.Equal(2, await Exit(waiter));
@@ -364,7 +379,8 @@ public sealed class ClaudeHookWaitSteps {
         outer.StandardInput.Close();
         await WaitForOwner("claude-hook");
         outer.Kill(entireProcessTree: false);
-        for (var i = 0; i < 30 && (await Notifier()).GetProperty("active").ValueKind != JsonValueKind.Null; i++) await Task.Delay(300);
+        for (var i = 0; i < 30 && (await Notifier()).GetProperty("active").ValueKind != JsonValueKind.Null; i++)
+            await Task.Delay(300);
         var notifier = await Notifier();
         Assert.Equal(JsonValueKind.Null, notifier.GetProperty("active").ValueKind);
         Assert.Equal("orphaned", notifier.GetProperty("lastRelease").GetProperty("reason").GetString());
@@ -376,13 +392,30 @@ public sealed class ClaudeHookWaitSteps {
     [AfterScenario]
     public async Task Cleanup() {
         foreach (var process in processes) {
-            if (!process.HasExited) process.Kill();
+            if (!process.HasExited)
+                process.Kill();
             await process.WaitForExitAsync();
             process.Dispose();
         }
-        if (heartbeat is not null) { heartbeat.Cancel(); await heartbeats; heartbeat.Dispose(); }
-        if (stop is not null) { stop.Cancel(); try { await server; } catch (OperationCanceledException) { } stop.Dispose(); }
+
+        if (heartbeat is not null) {
+            heartbeat.Cancel();
+            await heartbeats;
+            heartbeat.Dispose();
+        }
+
+        if (stop is not null) {
+            stop.Cancel();
+            try {
+                await server;
+            }
+            catch (OperationCanceledException) { }
+
+            stop.Dispose();
+        }
+
         broker?.Dispose();
-        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
     }
 }

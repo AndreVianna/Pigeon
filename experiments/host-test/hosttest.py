@@ -1,4 +1,4 @@
-"""Helper for Pigeon host tests H1-H3 (see README.md next to this file).
+"""Helper for the Pigeon host tests (see README.md next to this file).
 
 Uses only the frozen test build in artifacts/host-test/bin, an isolated service on port 49473
 and a disposable database in artifacts/host-test/data. It never touches the user's normal
@@ -10,12 +10,15 @@ Pigeon service (port 49372) or any session other than the test ones named on the
   python -I hosttest.py inbox                       receive the messages sent to the peer
   python -I hosttest.py waiters                     list test waiters and their launcher chains
   python -I hosttest.py kill-outer-shell --yes      H3: kill only the outer hook shell of the test waiter
+  python -I hosttest.py sidecars                    list test Antigravity sidecars and their parents
+  python -I hosttest.py restart                     stop and start the isolated service, keeping its data
   python -I hosttest.py stop [--clean]              stop the isolated service; --clean deletes its data
 """
 import json, os, subprocess, sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 EXE = os.path.join(ROOT, 'artifacts', 'host-test', 'bin', 'pigeon.exe')
+SIDECAR_EXE = os.path.join(ROOT, 'artifacts', 'host-test', 'bin-sidecar', 'pigeon.exe')
 # The overrides exist only to dry-run this script against a throwaway service.
 DATA = os.environ.get('HOSTTEST_DATA') or os.path.join(ROOT, 'artifacts', 'host-test', 'data')
 PORT, TOPIC = os.environ.get('HOSTTEST_PORT') or '49473', 'pigeon-host-test'
@@ -71,6 +74,17 @@ def main(argv):
         for chain in waiters():
             print(' <- '.join(f"{p['ProcessId']} {p['Name']}" for p in chain))
         print('done')
+    elif command == 'sidecars':
+        # Test sidecars only: the frozen test build started as an Antigravity sidecar.
+        procs = processes()
+        for p in procs.values():
+            if (p['ExecutablePath'] or '').lower() in (EXE.lower(), SIDECAR_EXE.lower()) and 'sidecar' in (p['CommandLine'] or ''):
+                parent = procs.get(p['ParentProcessId'])
+                print(f"{p['ProcessId']} {p['Name']} <- {p['ParentProcessId']} {parent['Name'] if parent else '(exited)'}")
+        print('done')
+    elif command == 'restart':
+        print(pigeon('stop', check=False).stdout.strip())
+        print(pigeon('start').stdout.strip())
     elif command == 'kill-outer-shell':
         found = waiters()
         if len(found) != 1:

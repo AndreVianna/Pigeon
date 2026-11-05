@@ -2,10 +2,12 @@ using System.Net;
 using System.Reflection;
 using System.Net.Http.Json;
 using System.Text.Json;
+
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+
 using Pigeon.Core;
 
 namespace Pigeon.Service;
@@ -34,6 +36,7 @@ public sealed class LocalHttpServer(string port, Broker broker, Action? stopRequ
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;
             }
+
             try {
                 var request = await context.Request.ReadFromJsonAsync<BrokerRequest>(cancellationToken: context.RequestAborted);
                 var stop = request?.Operation == "service_stop" && stopRequested is not null;
@@ -48,12 +51,17 @@ public sealed class LocalHttpServer(string port, Broker broker, Action? stopRequ
                     stopRequested!();
                 }
             }
-            catch (JsonException) { context.Response.StatusCode = StatusCodes.Status400BadRequest; }
+            catch (JsonException) {
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            }
         });
         await app.StartAsync(cancellation);
         ready.TrySetResult();
-        try { await Task.Delay(Timeout.Infinite, cancellation); }
+        try {
+            await Task.Delay(Timeout.Infinite, cancellation);
+        }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+
         await app.StopAsync();
     }
 }
@@ -78,6 +86,8 @@ public static class LocalHttpClient {
                 throw new IOException("Pigeon storage is temporarily unavailable");
             return json.RootElement.Clone();
         }
-        catch (HttpRequestException e) { throw new IOException("Pigeon service is unavailable", e); }
+        catch (HttpRequestException e) {
+            throw new IOException("Pigeon service is unavailable", e);
+        }
     }
 }

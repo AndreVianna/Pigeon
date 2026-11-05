@@ -12,3 +12,4 @@ node_modules/
 .claude/settings.local.json
 experiments/antigravity-probe/logs/
 experiments/cursor-probe/logs/
+experiments/copilot-probe/logs/

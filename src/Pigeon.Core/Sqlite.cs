@@ -18,9 +18,11 @@ internal sealed class Sqlite : IDisposable {
         : ["libsqlite3.so.0", "libsqlite3.so"];
 
     static Sqlite() => NativeLibrary.SetDllImportResolver(typeof(Sqlite).Assembly, (name, assembly, path) => {
-        if (name != Library) return IntPtr.Zero;
+        if (name != Library)
+            return IntPtr.Zero;
         foreach (var candidate in Candidates)
-            if (NativeLibrary.TryLoad(candidate, assembly, path, out var handle)) return handle;
+            if (NativeLibrary.TryLoad(candidate, assembly, path, out var handle))
+                return handle;
         throw new DllNotFoundException($"Pigeon needs the system SQLite library ({string.Join(" or ", Candidates)}). Install SQLite 3 with the system's package manager.");
     });
 

@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py sessionStart",
+        "bash": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py sessionStart",
+        "powershell": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py sessionStart",
+        "windows": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py sessionStart",
+        "timeoutSec": 10
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py userPromptSubmitted",
+        "bash": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py userPromptSubmitted",
+        "powershell": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py userPromptSubmitted",
+        "windows": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py userPromptSubmitted",
+        "timeoutSec": 10
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py agentStop",
+        "bash": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py agentStop",
+        "powershell": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py agentStop",
+        "windows": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py agentStop",
+        "timeoutSec": 10
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py sessionEnd",
+        "bash": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py sessionEnd",
+        "powershell": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py sessionEnd",
+        "windows": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py sessionEnd",
+        "timeoutSec": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py Stop",
+        "bash": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py Stop",
+        "powershell": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py Stop",
+        "windows": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py Stop",
+        "timeoutSec": 10
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py UserPromptSubmit",
+        "bash": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py UserPromptSubmit",
+        "powershell": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py UserPromptSubmit",
+        "windows": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py UserPromptSubmit",
+        "timeoutSec": 10
+      }
+    ],
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py SessionStart",
+        "bash": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py SessionStart",
+        "powershell": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py SessionStart",
+        "windows": "python C:\\Projects\\Pigeon\\experiments\\copilot-probe\\scripts\\hook.py SessionStart",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
+
 using Pigeon.Service;
 
 namespace Pigeon.Adapters;
@@ -25,9 +26,11 @@ public sealed class CodexQueueNotifier {
     // The service refuses the claim unless the bound session joined as codex.
     public async Task<McpOutboundNotification?> TickAsync(CancellationToken cancellation) {
         var id = sessionId();
-        if (!Guid.TryParse(id, out _)) return null;
+        if (!Guid.TryParse(id, out _))
+            return null;
         var claim = await broker("wake_claim", new { sessionId = id, mode = "codex-queue" }, cancellation);
-        if (!claim.GetProperty("Ok").GetBoolean() || claim.GetProperty("Value").ValueKind == JsonValueKind.Null) return null;
+        if (!claim.GetProperty("Ok").GetBoolean() || claim.GetProperty("Value").ValueKind == JsonValueKind.Null)
+            return null;
         var value = claim.GetProperty("Value");
         var generation = value.GetProperty("Generation").GetString()!;
         var attempt = value.GetProperty("Attempt").GetInt32();
@@ -40,24 +43,33 @@ public sealed class CodexQueueNotifier {
         var bundled = Environment.GetEnvironmentVariable("CODEX_APP_RUNTIME_CLI_PATH");
         var executable = !string.IsNullOrWhiteSpace(bundled) && Path.IsPathFullyQualified(bundled) && File.Exists(bundled) ? bundled : "codex";
         var info = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var argument in new[] { "queue", "--thread", sessionId, "--message", message }) info.ArgumentList.Add(argument);
+        foreach (var argument in new[] { "queue", "--thread", sessionId, "--message", message })
+            info.ArgumentList.Add(argument);
         try {
             using var process = Process.Start(info);
-            if (process is null) return false;
+            if (process is null)
+                return false;
             var output = process.StandardOutput.ReadToEndAsync(cancellation);
             var error = process.StandardError.ReadToEndAsync(cancellation);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
             timeout.CancelAfter(TimeSpan.FromSeconds(10));
-            try { await process.WaitForExitAsync(timeout.Token); }
+            try {
+                await process.WaitForExitAsync(timeout.Token);
+            }
             catch (OperationCanceledException) {
-                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
                 await process.WaitForExitAsync(CancellationToken.None);
-                if (cancellation.IsCancellationRequested) throw;
+                if (cancellation.IsCancellationRequested)
+                    throw;
                 return false;
             }
+
             await Task.WhenAll(output, error);
             return process.ExitCode == 0;
         }
-        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException) { return false; }
+        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException) {
+            return false;
+        }
     }
 }

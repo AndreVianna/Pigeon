@@ -5,10 +5,34 @@ using Xunit;
 namespace Pigeon.UnitTests;
 
 public class AdapterTests {
-    private static IRuntimeAdapter Adapter(string name) => name switch { "codex" => new CodexAdapter(), "claude" => new ClaudeCodeAdapter(), _ => throw new ArgumentException(nameof(name)) };
+    private static IRuntimeAdapter Adapter(string name) => name switch { "codex" => new CodexAdapter(), "claude" => new ClaudeCodeAdapter(), "antigravity" => new AntigravityAdapter(), "opencode" => new OpenCodeAdapter(), "copilot" => new CopilotAdapter(), _ => throw new ArgumentException(nameof(name)) };
 
     [Fact]
-    public void Only_the_two_expected_adapters_are_bundled() => Assert.Equal(["codex", "claude-code"], BundledAdapters.All().Select(a => a.Runtime));
+    public void Only_the_five_expected_adapters_are_bundled() => Assert.Equal(["codex", "claude-code", "antigravity", "opencode", "copilot"], BundledAdapters.All().Select(a => a.Runtime));
+
+    [Fact]
+    public void Copilot_identifies_existing_sessions_from_the_host() {
+        var capabilities = new CopilotAdapter().Capabilities;
+        Assert.Equal(CapabilityState.Available, capabilities.IdentifyExistingSession.State);
+        Assert.Equal(CapabilityState.Available, capabilities.SafeCheckpoint.State);
+        Assert.Contains("idle", capabilities.SafeCheckpoint.Detail);
+    }
+
+    [Fact]
+    public void OpenCode_identifies_existing_sessions_from_the_host() {
+        var capabilities = new OpenCodeAdapter().Capabilities;
+        Assert.Equal(CapabilityState.Available, capabilities.IdentifyExistingSession.State);
+        Assert.Equal(CapabilityState.Available, capabilities.SafeCheckpoint.State);
+        Assert.Contains("idle", capabilities.SafeCheckpoint.Detail);
+    }
+
+    [Fact]
+    public void Antigravity_identifies_existing_sessions_from_the_host() {
+        var capabilities = new AntigravityAdapter().Capabilities;
+        Assert.Equal(CapabilityState.Available, capabilities.IdentifyExistingSession.State);
+        Assert.Equal(CapabilityState.Available, capabilities.SafeCheckpoint.State);
+        Assert.Contains("idle", capabilities.SafeCheckpoint.Detail);
+    }
 
     [Theory]
     [InlineData("codex")]
@@ -27,6 +51,9 @@ public class AdapterTests {
     [Theory]
     [InlineData("codex")]
     [InlineData("claude")]
+    [InlineData("antigravity")]
+    [InlineData("opencode")]
+    [InlineData("copilot")]
     public void Stub_does_not_claim_delivery_or_change_mode(string name) {
         var adapter = Adapter(name);
         foreach (var origin in new[] { SessionOrigin.Existing, SessionOrigin.NewlyLaunched }) {

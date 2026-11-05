@@ -52,7 +52,46 @@ public sealed class ClaudeCodeAdapter : IRuntimeAdapter {
         => new(NotificationOutcome.Unavailable, "Notifications are emitted by the plugin's hook waiter, not by this direct adapter method; no delivery was attempted.");
 }
 
+public sealed class AntigravityAdapter : IRuntimeAdapter {
+    public string Runtime => "antigravity";
+    public AdapterCapabilities Capabilities { get; } = new(
+        new(CapabilityState.Available, "Antigravity names the calling conversation in every MCP tool call, and the plugin's hooks restore it."),
+        new(CapabilityState.NotImplemented, "Pigeon does not launch Antigravity conversations."),
+        new(CapabilityState.NotImplemented, "Live notification is not implemented."),
+        new(CapabilityState.Available, "The plugin's sidecar wakes an idle open conversation with agentapi send-message once its hooks report the turn ended; it needs the sidecar enabled and the Antigravity App running."),
+        new(CapabilityState.Available, "Shared MCP polling through the plugin's MCP server."));
+
+    public NotificationResult Notify(RuntimeSession session, RuntimeMessage message, NotificationMode mode)
+        => new(NotificationOutcome.Unavailable, "Notifications are sent by the plugin's sidecar, not by this direct adapter method; no delivery was attempted.");
+}
+
+public sealed class OpenCodeAdapter : IRuntimeAdapter {
+    public string Runtime => "opencode";
+    public AdapterCapabilities Capabilities { get; } = new(
+        new(CapabilityState.Available, "OpenCode 2 names the calling session in every MCP tool call."),
+        new(CapabilityState.NotImplemented, "Pigeon does not launch OpenCode sessions."),
+        new(CapabilityState.NotImplemented, "Live notification is not implemented."),
+        new(CapabilityState.Available, "The plugin wakes an idle session with a queued prompt once OpenCode reports it idle; it needs OpenCode's server running."),
+        new(CapabilityState.Available, "Shared MCP polling through the MCP server the plugin registers."));
+
+    public NotificationResult Notify(RuntimeSession session, RuntimeMessage message, NotificationMode mode)
+        => new(NotificationOutcome.Unavailable, "Notifications are sent by the OpenCode plugin, not by this direct adapter method; no delivery was attempted.");
+}
+
+public sealed class CopilotAdapter : IRuntimeAdapter {
+    public string Runtime => "copilot";
+    public AdapterCapabilities Capabilities { get; } = new(
+        new(CapabilityState.Available, "The Copilot runtime starts one MCP server per session and names the session in COPILOT_AGENT_SESSION_ID."),
+        new(CapabilityState.NotImplemented, "Pigeon does not launch Copilot sessions."),
+        new(CapabilityState.NotImplemented, "Live notification is not implemented."),
+        new(CapabilityState.Available, "The plugin's extension wakes its idle session with a queued prompt once the session reports idle; it needs the Copilot runtime running the session."),
+        new(CapabilityState.Available, "Shared MCP polling through the plugin's MCP server."));
+
+    public NotificationResult Notify(RuntimeSession session, RuntimeMessage message, NotificationMode mode)
+        => new(NotificationOutcome.Unavailable, "Notifications are sent by the Copilot extension, not by this direct adapter method; no delivery was attempted.");
+}
+
 // Explicitly bundled adapters only: no dynamic loading or plugin discovery.
 public static class BundledAdapters {
-    public static IReadOnlyList<IRuntimeAdapter> All() => [new CodexAdapter(), new ClaudeCodeAdapter()];
+    public static IReadOnlyList<IRuntimeAdapter> All() => [new CodexAdapter(), new ClaudeCodeAdapter(), new AntigravityAdapter(), new OpenCodeAdapter(), new CopilotAdapter()];
 }

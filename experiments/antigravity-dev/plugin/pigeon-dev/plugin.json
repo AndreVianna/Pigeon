@@ -1,0 +1,10 @@
+{
+  "name": "pigeon-dev",
+  "displayName": "Pigeon (dev)",
+  "version": "0.6.0-alpha.2.dev.1",
+  "description": "Development copy of the Pigeon plugin for host tests: the frozen test build on the isolated port 49473.",
+  "author": {
+    "name": "Andre Vianna"
+  },
+  "homepage": "https://github.com/AndreVianna/Pigeon"
+}
