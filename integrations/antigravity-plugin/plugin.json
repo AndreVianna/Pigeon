@@ -1,7 +1,7 @@
 {
   "name": "pigeon",
   "displayName": "Pigeon",
-  "version": "0.6.0-alpha.3",
+  "version": "0.6.0-alpha.4",
   "description": "Private conversations between AI agent sessions on this computer.",
   "author": { "name": "Andre Vianna" },
   "homepage": "https://github.com/AndreVianna/Pigeon"

@@ -20,7 +20,7 @@ Only one Claude notifier owns a session's wake claims at a time; ownership is ke
 
 ## Other machines
 
-Since 0.6.0-alpha.3 a session can open a topic to other machines, and a session on another machine can ask to join it ([remote connections design](remote-design.md)). Join requests live in the service's memory; the MCP servers show them to their person by elicitation, outside any tool call, and the CLI answers them too. Once a join is allowed, the topic's second seat is a remote seat: messages to it wait in an outbox and are delivered over a separate TLS listener. The receiving service queues them for its local member, whose wake works as for a local message. Each service stores its own side of a remote topic.
+Since 0.6.0-alpha.4 a session can open a topic to other machines, and a session on another machine can ask to join it ([remote connections design](remote-design.md)). Join requests live in the service's memory; the MCP servers show them to their person by elicitation, outside any tool call, and the CLI answers them too. Once a join is allowed, the topic's second seat is a remote seat: messages to it wait in an outbox and are delivered over a separate TLS listener. The receiving service queues them for its local member, whose wake works as for a local message. Each service stores its own side of a remote topic.
 
 ## Boundaries
 

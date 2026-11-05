@@ -1,6 +1,6 @@
-# Remote connections: design for 0.6.0-alpha.3
+# Remote connections: design for 0.6.0-alpha.4
 
-**Status: agreed by the user and built on `alpha3-remote-connections` on 2026-11-04, after elicitation was checked in every host; not yet host-tested across two machines.** It replaces the first design accepted earlier the same day (invitations to pair machines, then each topic shared by a person), which was built first and worked between two real machines on a LAN. The review of that test led to the second draft; an independent review of the second draft led to this one, which keeps the cheap fixes and accepts the rest as known limits (see "Accepted limits"). The aim is a middle ground: not a foolproof system, but not a fragile one.
+**Status: agreed by the user and built on `alpha3-remote-connections` on 2026-11-04, after elicitation was checked in every host; not yet host-tested across two machines.** It replaces the first design, built in 0.6.0-alpha.3 and accepted earlier the same day (invitations to pair machines, then each topic shared by a person), which was built first and worked between two real machines on a LAN. The review of that test led to the second draft; an independent review of the second draft led to this one, which keeps the cheap fixes and accepts the rest as known limits (see "Accepted limits"). The aim is a middle ground: not a foolproof system, but not a fragile one.
 
 ## Scope
 
@@ -13,7 +13,7 @@ The goal is that two sessions on different machines share a two-member topic exa
 
 **Assumed:** both machines can open an inbound port on the network they share (true on home and most small-office networks; often not on managed corporate devices or isolated guest Wi-Fi), and the two people can pass a 6-digit code to each other once per pair of machines.
 
-**Out of scope for alpha.3:** a relay or anything reachable from the internet; automatic discovery of machines; topics with more than two members; end-to-end encryption between agents beyond the encrypted link between services; authenticating the local loopback API.
+**Out of scope for alpha.4:** a relay or anything reachable from the internet; automatic discovery of machines; topics with more than two members; end-to-end encryption between agents beyond the encrypted link between services; authenticating the local loopback API.
 
 ## The model in one example
 
@@ -152,7 +152,7 @@ A known machine can list this machine's listed topics, request to join one (whic
 
 ## Accepted limits
 
-Known and accepted for alpha.3, to be listed in [known issues](known-issues.md):
+Known and accepted for alpha.4, to be listed in [known issues](known-issues.md):
 
 1. **The requesting side is not proven on first contact.** The code is checked only on the listing side, so a machine that impersonates the listing machine at the right address on the user's own network could accept the request itself and be pinned. It needs an active attacker on the local network; an accidental mix-up cannot pass, because the wrong machine's person would have to enter a code nobody gave them. A PAKE, which uses the code to prove both sides at once, is the later fix.
 2. **Both machines need an inbound port.** Managed corporate devices and isolated guest Wi-Fi often prevent it. Carrying replies back over the requester's outgoing connection is the later fix.
@@ -167,7 +167,7 @@ Messages from another machine are stored like local ones: unencrypted in SQLite,
 
 ## Delivery semantics
 
-- **Sent:** stored locally and in the outbox. **Delivered:** the other service acknowledged it. **Read:** stays local; no read receipts in alpha.3.
+- **Sent:** stored locally and in the outbox. **Delivered:** the other service acknowledged it. **Read:** stays local; no read receipts in alpha.4.
 - `pigeon status` shows known machines (last contact, undelivered count), listed topics and open join requests.
 
 ## What changes from the first design

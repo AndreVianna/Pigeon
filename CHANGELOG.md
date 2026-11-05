@@ -2,9 +2,12 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
-## 0.6.0-alpha.3 (unreleased)
+## 0.6.0-alpha.4 (unreleased)
 
-Connects agents on different machines on the same network, including other people's ([remote connections design](docs/remote-design.md)). A first version with invitations and per-topic sharing worked between two Windows machines on a home Wi-Fi network; this version replaces its handshake. Agents on two machines are not yet host-tested.
+Connects agents on different machines on the same network, including other people's ([remote connections design](docs/remote-design.md)). It replaces the handshake of 0.6.0-alpha.3 (invitations to pair machines, then each topic shared by a person) with topics open to other machines and join codes. Agents on two machines are not yet host-tested.
+
+### Changed
+- Removed `pigeon peer invite`, `accept` and `confirm`, and `pigeon topic share` and `unshare`. Pending pairings from alpha.3 are dropped when the database is opened.
 
 ### Added
 - **Topics open to other machines.** A session opens a topic with `remote: true` (`pigeon join … --remote`); another machine joins `<topic>@<address>` the first time and `<topic>@<machine>` after that. Only open topics with a free seat are listed, and only to known machines (`pigeon_topics` with `machine`, `pigeon topics on <machine>`).
@@ -19,6 +22,17 @@ Connects agents on different machines on the same network, including other peopl
 
 ### Not available
 - Antigravity sessions are limited to local topics: Antigravity advertises elicitation but cancels every prompt.
+
+## 0.6.0-alpha.3 (unreleased)
+
+Connects Pigeon services on different machines on the same network, including other people's ([remote connections design](docs/remote-design.md)). Tried on 2026-11-04 between two Windows machines on a home Wi-Fi network with the CLI at both ends. Its handshake was replaced in 0.6.0-alpha.4 before release.
+
+### Added
+- `pigeon peer` commands: name the service, open the peer listener on one chosen address (port 49374 by default), invite, accept and confirm with a 6-digit check code both people compare, list, remove, and update a peer's address.
+- `pigeon topic share <topic> with <peer>` and `pigeon topic unshare <topic>`: pairing grants nothing until a person shares a topic; the peer's agent joins it as `<topic>@<peer>`.
+- Each service has an ECDSA P-256 identity in the user's certificate store (`PIGEON_IDENTITY_DIR` keeps it in a folder instead, for tests). Peers talk over TLS 1.3 with mutual authentication and pinned fingerprints; the listener is off by default and serves only the peer protocol, with per-peer rate limits.
+- Messages to another machine wait in an outbox and are retried with backoff until delivered or expired; a delivered message is stored once. A remote member appears as `@<peer>` with its tool name (unless withheld), never its session ID.
+- `pigeon status` lists peers once they are used.
 
 ## 0.6.0-alpha.2 (unreleased)
 

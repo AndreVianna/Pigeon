@@ -1,12 +1,12 @@
 # Known issues and technical debt
 
-This list reflects 0.6.0-alpha.3. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+This list reflects 0.6.0-alpha.4. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
 
 ## Other machines
 
 ### Tried across two machines with the CLI only
 
-0.6.0-alpha.3 is tested with two services on one machine over real TLS on loopback. Its first version (invitations and per-topic sharing) was tried on 2026-11-04 between two Windows machines on a home Wi-Fi network; the join codes that replaced it, agents on two machines, macOS, Linux and Tailscale are not yet tried.
+0.6.0-alpha.4 is tested with two services on one machine over real TLS on loopback. The alpha.3 version (invitations and per-topic sharing) was tried on 2026-11-04 between two Windows machines on a home Wi-Fi network; the join codes that replaced it, agents on two machines, macOS, Linux and Tailscale are not yet tried.
 
 ### Accepted limits of the join handshake
 
