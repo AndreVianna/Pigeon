@@ -91,9 +91,18 @@ Measured in each host with a probe on 2026-11-04 ([results](../experiments/elici
 - The requesting agent is told "request pending; do not retry", because a model whose call fails may retry on its own (Copilot), and one open request per topic stops duplicates.
 - Pigeon raises prompts outside tool calls, which Claude Code, Codex, Copilot and OpenCode all support; Copilot cancels a tool call after 3 minutes, too short for two people to pass a code.
 
+### Antigravity: local topics only
+
+Antigravity advertises elicitation but cancels every prompt without showing it, so it could approve a join only through the terminal. Rather than make that the only path for one host, **Antigravity sessions are limited to local topics** (decided by the user on 2026-11-04):
+
+- `pigeon_join` with `remote: true` or a `<topic>@<machine>` name, and `pigeon_topics` with a machine, are refused for an Antigravity session: "Remote topics are not available in Antigravity, which cannot ask you for approval. Use it for local topics."
+- Opt-in approval on local topics is not offered to Antigravity sessions either, for the same reason; its local topics work as before.
+- Pigeon recognizes the host by the tool name its plugin reports. That is a product limit, not a security boundary: any local program can claim another tool name.
+- The README lists it as a host limitation. It is lifted if Antigravity starts showing prompts; the [elicitation probe](../experiments/elicitation-probe/README.md) re-checks that in a few minutes.
+
 ### Without elicitation
 
-Antigravity advertises elicitation but cancels every prompt without showing it, so it uses the terminal, as do requests with nobody at the session and headless runs (Codex and Copilot decline at once; OpenCode never answers): `pigeon requests` lists open requests on both sides, `pigeon requests --show <request>` shows the requesting side its code (only in a terminal, never through the MCP server), and `pigeon allow <request> [<code>]` or `pigeon deny <request>` answers on the listing side.
+Requests with nobody at the session, and headless runs (Codex and Copilot decline at once; OpenCode never answers), use the terminal: `pigeon requests` lists open requests on both sides, `pigeon requests --show <request>` shows the requesting side its code (only in a terminal, never through the MCP server), and `pigeon allow <request> [<code>]` or `pigeon deny <request>` answers on the listing side.
 
 ### Limits
 
@@ -188,6 +197,7 @@ Kept as built: identity and key storage, the listener and TLS setup, the outbox 
 7. The requesting person confirms before Pigeon contacts a new machine, and sees the code in that same prompt.
 8. Elicitation support is confirmed in every host before building: Claude Code, Codex, Copilot, OpenCode and Antigravity. Hosts without it use the terminal fallback, and the README says which. **Done on 2026-11-04:** the four CLIs show prompts inside tool calls and while idle, and their models see neither the prompt nor the answer; Antigravity cancels every prompt. The Claude desktop app's Code tab and the Codex desktop app are still to check.
 9. The middle ground after the independent review: the cheap fixes are in this design, and the rest are the accepted limits above.
+10. Antigravity is limited to local topics, because it cannot show prompts; the terminal fallback stays for the other hosts.
 
 ## Implementation outline
 
@@ -197,8 +207,8 @@ Kept as built: identity and key storage, the listener and TLS setup, the outbox 
 4. Listed topics: `remote` on `pigeon_join` and `--remote`; listing to known machines; `pigeon_topics` and `pigeon topics on <machine>`.
 5. Joins: the code exchange with commitment, first-contact confirmation, Allow/Deny for known machines, request limits, identity-changed handling, address updates on contact.
 6. Terminal fallback: `pigeon requests`, `--show`, `allow`, `deny`.
-7. Opt-in approval for local topics, and "who joined" notices.
+7. Opt-in approval for local topics, and "who joined" notices. Refuse remote topics and opt-in approval for Antigravity sessions.
 8. Defaults and transport: tidied host-name default, `pigeon peer listen` with no address, host names accepted, remaining lifetime instead of absolute expiry.
-9. Skills in every plugin: open a topic to other machines, list, join and disconnect.
+9. Skills in every plugin except Antigravity's: open a topic to other machines, list, join and disconnect. Antigravity's skill says remote topics are not available there.
 10. Docs: README (with the single-user warning and per-host elicitation), [security design](security-design.md), [architecture](architecture.md), known issues, changelog.
 11. Tests: two services in one test run (listing, codes right and wrong, Allow and Deny, expiry, limits, first contact, identity changed, disconnect, local approval), then the two-machine host test again.
