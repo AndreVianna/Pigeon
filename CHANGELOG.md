@@ -4,14 +4,21 @@ The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share o
 
 ## 0.6.0-alpha.3 (unreleased)
 
-Connects Pigeon services on different machines on the same network, including other people's ([remote connections design](docs/remote-design.md)). Not yet tried across two real machines.
+Connects agents on different machines on the same network, including other people's ([remote connections design](docs/remote-design.md)). A first version with invitations and per-topic sharing worked between two Windows machines on a home Wi-Fi network; this version replaces its handshake. Agents on two machines are not yet host-tested.
 
 ### Added
-- `pigeon peer` commands: name the service, open the peer listener on one chosen address (port 49374 by default), invite, accept and confirm with a 6-digit check code both people compare, list, remove, and update a peer's address.
-- `pigeon topic share <topic> with <peer>` and `pigeon topic unshare <topic>`: pairing grants nothing until a person shares a topic; the peer's agent joins it as `<topic>@<peer>`.
-- Each service has an ECDSA P-256 identity in the user's certificate store (`PIGEON_IDENTITY_DIR` keeps it in a folder instead, for tests). Peers talk over TLS 1.3 with mutual authentication and pinned fingerprints; the listener is off by default and serves only the peer protocol, with per-peer rate limits.
-- Messages to another machine wait in an outbox and are retried with backoff until delivered or expired; a delivered message is stored once. A remote member appears as `@<peer>` with its tool name (unless withheld), never its session ID.
-- `pigeon status` lists peers once they are used.
+- **Topics open to other machines.** A session opens a topic with `remote: true` (`pigeon join … --remote`); another machine joins `<topic>@<address>` the first time and `<topic>@<machine>` after that. Only open topics with a free seat are listed, and only to known machines (`pigeon_topics` with `machine`, `pigeon topics on <machine>`).
+- **Join codes.** The first join between two machines fixes a 6-digit code from random values both sides commit to in turn, and from both certificates. The requesting person confirms the contact and sees the code; the listing person enters it; then the machines pin each other's certificate. Joins from a known machine get Allow or Deny.
+- **Prompts outside the conversation.** Pigeon's MCP server asks the person by MCP elicitation as soon as a request arrives, outside any tool call, so no model turn is spent. The model never sees a code. Every prompt has a 10-minute limit; no reply, Decline and Esc all mean Deny, and late or replayed answers are ignored. Checked in Claude Code, Codex, Copilot CLI and OpenCode with a probe (`experiments/elicitation-probe`).
+- **Terminal fallback:** `pigeon requests [--show <request>]`, `pigeon allow <request> [<code>]` and `pigeon deny <request>`.
+- **Opt-in approval for local topics** (`approval: true`, `--approval`): a local joiner gives a code in the same way. Pigeon tells the waiting session who joined.
+- **Disconnecting:** leaving a remote topic ends it on both machines, and the other side is told.
+- `pigeon peer listen` with no address listens on the machine's LAN and Tailscale addresses, never virtual adapters or public addresses. The machine name defaults to the tidied host name, and addresses may be host names.
+- Each service has an ECDSA P-256 identity in the user's certificate store (`PIGEON_IDENTITY_DIR` keeps it in a folder instead, for tests). Machines talk over TLS 1.3 with mutual authentication; the listener serves only the peer protocol (version 2), with rate limits.
+- Messages to another machine wait in an outbox and are retried with backoff. They carry their remaining lifetime, so clocks that differ do not matter, and each delivery updates the sender's address.
+
+### Not available
+- Antigravity sessions are limited to local topics: Antigravity advertises elicitation but cancels every prompt.
 
 ## 0.6.0-alpha.2 (unreleased)
 

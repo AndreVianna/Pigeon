@@ -1,6 +1,6 @@
 # Local trust and operational boundaries
 
-> 0.6.0-alpha.3 adds connections to paired services on other machines; their own boundaries are in the [remote connections design](remote-design.md). What follows still holds for everything on one machine, and the unauthenticated local API matters more once a topic is shared: another local user can send on it as you.
+> 0.6.0-alpha.3 adds topics with sessions on other machines; their boundaries and accepted limits are in the [remote connections design](remote-design.md). What follows still holds for everything on one machine, and the unauthenticated local API matters more once a topic reaches another machine: another local user, or an agent with a shell, can use the terminal commands that answer join requests.
 
 For the one-machine MVP, Pigeon has no application-level authentication or per-agent credentials. A topic name and session ID are caller-supplied routing labels. They do not prove identity, session ownership, runtime liveness, or permission to perform work. The user explicitly chose this model for the MVP.
 

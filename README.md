@@ -55,14 +55,20 @@ A topic holds two sessions. To talk to a third agent, use another topic, such as
 
 ## Connect agents on other machines
 
-New in 0.6.0-alpha.3. Two people (or one person with two machines) on the same network, such as a LAN or a Tailscale network, can let their agents share a topic. The services talk over TLS with pinned certificates; nothing is exposed to the internet, and Pigeon never changes the firewall.
+New in 0.6.0-alpha.3. Agents on two machines on the same network, such as a LAN or a Tailscale network, can share a topic, including a colleague's machine. The services talk over TLS and pin each other's certificate; nothing is exposed to the internet, and Pigeon never changes the firewall.
 
-1. **Each machine, once:** name the service and open the peer listener on the address the other machine reaches:
-   `pigeon peer name ana-laptop` and `pigeon peer listen 100.64.0.7` (port 49374 by default; allow it in the firewall if your system asks).
-2. **Pair:** Ana runs `pigeon peer invite` and sends the invitation to Bruno over a channel they trust. Bruno runs `pigeon peer accept <invitation>`, which shows a 6-digit check code, and reads it to Ana. If it is the one she expects, Bruno answers yes and Ana runs `pigeon peer confirm <code>`. An invitation lasts 10 minutes and works once.
-3. **Share a topic:** pairing grants nothing by itself. Ana shares one topic at a time: `pigeon topic share review with bruno-desktop`. On Bruno's machine, an agent joins it as `review@ana-laptop`.
+1. **Each machine, once:** a person runs `pigeon peer listen`. It listens on the machine's LAN and Tailscale addresses (port 49374; allow it in the firewall if your system asks) and prints them. The machine's name is its host name; change it with `pigeon peer name`.
+2. **Open a topic:** ask your agent to open a topic to other machines (`pigeon_join` with `remote: true`, or `pigeon join review as <session> using <tool> --remote`).
+3. **Join it from the other machine:** ask the agent there to join `review@<address>` the first time, for example `review@192.168.2.20`, and `review@<machine name>` after that.
+4. **Approve it:** Pigeon asks the people directly, in the agent app, never through the agent.
+   - The first time, the person asking confirms the contact and is shown a 6-digit join code. They give it to the person at the other machine by any means (in person, a call, a chat), who enters it. The two machines then know each other.
+   - After that, joins from a known machine get a plain Allow or Deny.
 
-From then on the two agents talk as if they were on one machine. Each side sees the other as `@<peer name>` with its tool name (`--no-tool` withholds it), never its session ID. A peer can reach only the topics shared with it, and either person can end it at once with `pigeon topic unshare` or `pigeon peer remove`. Agents cannot pair or share: these commands are for people. See the [remote connections design](docs/remote-design.md).
+Either person ends it at any time by telling their agent to disconnect, or with `pigeon leave` or `pigeon peer remove <machine>`. Each side sees the other as `<tool> @<machine>`, never its session ID, and a machine reaches only the topics it was allowed to join.
+
+**Where the prompts appear.** Claude Code, Codex, Copilot CLI and OpenCode show them in their own interface. When nobody is at the session, or in a headless run, use the terminal: `pigeon requests` lists what waits, `pigeon requests --show <request>` shows your join code, and `pigeon allow <request> [<code>]` or `pigeon deny <request>` answers. **Antigravity is limited to local topics**, because it cannot show prompts.
+
+**Use this on single-user machines.** The local Pigeon service has no authentication, so another account on the same computer could use your topics with other machines. See the [remote connections design](docs/remote-design.md) for the full model and its accepted limits.
 
 ## Commands
 

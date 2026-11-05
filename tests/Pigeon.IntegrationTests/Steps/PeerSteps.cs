@@ -14,7 +14,6 @@ namespace Pigeon.IntegrationTests.Steps;
 public sealed partial class PeerSteps {
     private readonly string directory = Path.Combine(Path.GetTempPath(), "pigeon-peers-" + Guid.NewGuid().ToString("N"));
     private readonly Dictionary<string, (string Port, string PeerPort)> services = [];
-    private string? invitation;
 
     private async Task<(int ExitCode, string Output, string Error)> Run(string who, string? input, params string[] arguments) {
         var info = new ProcessStartInfo(TestTools.Pigeon) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, CreateNoWindow = true };
@@ -61,39 +60,53 @@ public sealed partial class PeerSteps {
         Assert.Fail("The peers did not get there in 20 seconds.");
     }
 
-    [GeneratedRegex("Check code: ([0-9]{6})")]
-    private static partial Regex CheckCode();
+    [GeneratedRegex("Join code: ([0-9]{6})")]
+    private static partial Regex JoinCodeLine();
+    [GeneratedRegex(@"Request ([0-9a-f]{12})")]
+    private static partial Regex RequestLine();
 
-    [Given("two isolated services, each named and listening for peers")]
+    private string? brunoRequest, code;
+
+    [Given("two isolated services, each listening for other machines")]
     public async Task TwoServices() {
         Directory.CreateDirectory(directory);
         foreach (var (who, name) in new[] { ("ana", "ana-laptop"), ("bruno", "bruno-desktop") }) {
             services[who] = (TestPorts.FreePort(), TestPorts.FreePort());
             Assert.Contains("Pigeon service started.", await Ok(who, "start"));
             Assert.Contains($"\"{name}\"", await Ok(who, "peer", "name", name));
-            Assert.Contains("Listening for paired peers on 127.0.0.1:" + services[who].PeerPort, await Ok(who, "peer", "listen", "127.0.0.1:" + services[who].PeerPort));
+            Assert.Contains($"at 127.0.0.1:{services[who].PeerPort}", await Ok(who, "peer", "listen", "127.0.0.1:" + services[who].PeerPort));
         }
     }
 
-    [When("Ana invites Bruno, Bruno accepts and confirms the check code, and Ana confirms the same code")]
-    public async Task Pair() {
-        invitation = (await Ok("ana", "peer", "invite")).Split('\n').Select(l => l.Trim()).Single(l => l.StartsWith("pigeon1.", StringComparison.Ordinal));
-        var accepted = await OkWith("bruno", "y", "peer", "accept", invitation);
-        Assert.Contains("its certificate matches the invitation", accepted);
-        var check = CheckCode().Match(accepted).Groups[1].Value;
-        Assert.Contains("accepted your invitation", await Ok("ana", "peer", "list"));
-        Assert.Contains("Paired with \"bruno-desktop\"", await Ok("ana", "peer", "confirm", check));
+    // The ID at the start of the `pigeon requests` line that mentions the text.
+    private async Task<string> RequestId(string who, string mentioning) {
+        string? id = null;
+        await Eventually(async () => (id = (await Ok(who, "requests")).Split('\n').FirstOrDefault(l => l.Contains(mentioning, StringComparison.Ordinal))?.Split(' ')[0]) is { Length: 12 });
+        return id!;
     }
 
-    [When("Ana shares a topic with Bruno and both sessions join it")]
-    public async Task ShareAndJoin() {
-        _ = await Ok("ana", "join", "review", "as", "ana-session", "using", "claude-code");
-        Assert.Contains("Shared \"review\" with bruno-desktop. On that machine, an agent joins it as \"review@ana-laptop\"", await Ok("ana", "topic", "share", "review", "with", "bruno-desktop"));
-        await Eventually(async () => (await Ok("bruno", "peer", "list")).Contains("review@ana-laptop shared by ana-laptop"));
-        Assert.Contains("@ana-laptop", await Ok("bruno", "join", "review@ana-laptop", "as", "bruno-session", "using", "codex"));
+    private async Task AskByAddress(string topic) {
+        Assert.Contains("Joined " + topic + ". Waiting for a partner.", await Ok("ana", "join", topic, "as", "ana-session", "using", "claude-code", "--remote"));
+        var asked = await Ok("bruno", "join", $"{topic}@127.0.0.1:{services["ana"].PeerPort}", "as", "bruno-session", "using", "codex");
+        Assert.Contains("a machine you have not joined before", asked);
+        brunoRequest = RequestLine().Match(asked).Groups[1].Value;
+        Assert.Contains($"Contact it: pigeon allow {brunoRequest}", await Ok("bruno", "requests"));
+        Assert.Contains("Contacting it.", await Ok("bruno", "allow", brunoRequest));
+        await Eventually(async () => (await Run("bruno", null, "requests", "--show", brunoRequest)) is { ExitCode: 0 } shown && (code = JoinCodeLine().Match(shown.Output).Groups[1].Value).Length == 6);
     }
 
-    [Then("a message from each side reaches the other, from the peer and never a session ID")]
+    [When("Ana opens a topic to other machines and Bruno asks to join it by address")]
+    public async Task Ask() => await AskByAddress("review");
+
+    [When("Bruno confirms the contact, reads his join code, and Ana allows the request with it")]
+    public async Task Allow() {
+        var id = await RequestId("ana", "wants to join review");
+        Assert.Contains("A new machine: allow with the code its person gives you", await Ok("ana", "requests"));
+        Assert.Contains("Allowed.", await Ok("ana", "allow", id, code!));
+        await Eventually(async () => (await Ok("bruno", "topics")) is var t && t.Contains("review@ana-laptop:") && t.Contains("claude-code @ana-laptop") && t.Contains("codex bruno-session"));
+    }
+
+    [Then("a message from each side reaches the other, from the machine and never a session ID")]
     public async Task Exchange() {
         Assert.StartsWith("Queued for the other machine", await Ok("ana", "send", "from", "ana-session", "to", "review", "hello from Ana"));
         string received = "";
@@ -106,36 +119,45 @@ public sealed partial class PeerSteps {
         Assert.DoesNotContain("bruno-session", received);
     }
 
-    [Then("each side lists the other as a peer with nothing left to send")]
+    [Then("each side lists the other as a known machine with nothing left to send")]
     public async Task Listed() {
         Assert.Contains("bruno-desktop at 127.0.0.1:" + services["bruno"].PeerPort, await Ok("ana", "peer", "list"));
         Assert.Contains("waiting to send: 0", await Ok("ana", "peer", "list"));
         Assert.Contains("ana-laptop at 127.0.0.1:" + services["ana"].PeerPort, await Ok("bruno", "peer", "list"));
     }
 
-    [Then("joining a topic that was not shared fails, a wrong check code pairs nothing, and an invitation works once")]
-    public async Task Refusals() {
-        var (code, _, error) = await Run("bruno", null, "join", "secret@ana-laptop", "as", "bruno-session", "using", "codex");
-        Assert.Equal(1, code);
-        Assert.Contains("has not been shared with this machine", error);
-        invitation = (await Ok("ana", "peer", "invite")).Split('\n').Select(l => l.Trim()).Single(l => l.StartsWith("pigeon1.", StringComparison.Ordinal));
-        // Bruno answers no: nothing is stored on his side.
-        Assert.Equal(1, (await Run("bruno", "n", "peer", "accept", invitation)).ExitCode);
-        Assert.Contains("Peers: 0", await Ok("bruno", "peer", "list"));
-        // Ana types a code that is not the one Bruno saw: nothing is paired.
-        (code, _, error) = await Run("ana", null, "peer", "confirm", "000000");
-        Assert.Equal(1, code);
-        Assert.Contains("That check code does not match the pairing waiting here for \"bruno-desktop\"", error);
-        Assert.Contains("Peers: 0", await Ok("ana", "peer", "list"));
-        // The invitation was used by the first acceptance.
-        (code, _, error) = await Run("bruno", "y", "peer", "accept", invitation);
-        Assert.Equal(1, code);
-        Assert.Contains("Could not pair", error);
+    [Then("a second topic from the known machine is allowed without a code")]
+    public async Task KnownMachine() {
+        _ = await Ok("ana", "join", "second", "as", "ana-2", "using", "claude-code", "--remote");
+        Assert.Contains("second@ana-laptop", await Ok("bruno", "topics", "on", "ana-laptop"));
+        Assert.Contains("Request submitted to ana-laptop", await Ok("bruno", "join", "second@ana-laptop", "as", "bruno-2", "using", "codex"));
+        var id = await RequestId("ana", "wants to join second");
+        Assert.Contains($"pigeon allow {id}   or", await Ok("ana", "requests"));
+        Assert.Contains("Allowed.", await Ok("ana", "allow", id));
+        await Eventually(async () => (await Ok("bruno", "topics")).Contains("second@ana-laptop"));
     }
 
-    [Then("invalid peer and topic commands exit with a usage error")]
+    [Then("a wrong code is refused, a denied request joins nothing, and Antigravity stays local")]
+    public async Task Refusals() {
+        await AskByAddress("review");
+        var id = await RequestId("ana", "wants to join review");
+        var (exit, output, _) = await Run("ana", null, "allow", id, code == "000000" ? "111111" : "000000");
+        Assert.Equal(1, exit);
+        Assert.Contains("does not match", output);
+        Assert.Contains("Refused.", await Ok("ana", "deny", id));
+        await Eventually(async () => !(await Ok("bruno", "requests")).Contains(brunoRequest!));
+        Assert.DoesNotContain("review@", await Ok("bruno", "topics"));
+        Assert.DoesNotContain("bruno", await Ok("ana", "peer", "list"));
+
+        var (agyExit, _, agyError) = await Run("bruno", null, "join", $"review@127.0.0.1:{services["ana"].PeerPort}", "as", "agy-1", "using", "antigravity");
+        Assert.Equal(1, agyExit);
+        Assert.Contains("not available in Antigravity", agyError);
+    }
+
+    [Then("invalid peer, request and join commands exit with a usage error")]
     public async Task Usage() {
-        foreach (var arguments in new[] { new[] { "peer" }, ["peer", "dance"], ["peer", "accept"], ["peer", "confirm", "1", "to", "x"], ["topic", "share", "x"], ["topic", "share", "x", "to", "y"], ["topic", "unshare"] })
+        foreach (var arguments in new[] { new[] { "peer" }, ["peer", "dance"], ["peer", "invite"], ["peer", "remove"], ["requests", "--show"], ["allow"], ["deny"], ["deny", "a", "b"],
+            ["join", "x", "as", "s", "using", "t", "--bogus"], ["join", "x", "as", "s", "using", "t", "--remote", "--remote"], ["topics", "on"], ["topic", "share", "x", "with", "y"] })
             Assert.Equal(2, (await Run("nobody", null, arguments)).ExitCode);
     }
 

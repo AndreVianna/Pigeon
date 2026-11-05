@@ -6,15 +6,23 @@ This list reflects 0.6.0-alpha.3. A topic is a private conversation between two 
 
 ### Tried across two machines with the CLI only
 
-0.6.0-alpha.3 is tested with two services on one machine over real TLS on loopback, and was tried on 2026-11-04 between two Windows machines on a home Wi-Fi network with the `pigeon` command at both ends. Agents on two machines, macOS, Linux and Tailscale are not yet tried. The pairing and sharing commands are due to be replaced by the second draft of the [remote connections design](remote-design.md).
+0.6.0-alpha.3 is tested with two services on one machine over real TLS on loopback. Its first version (invitations and per-topic sharing) was tried on 2026-11-04 between two Windows machines on a home Wi-Fi network; the join codes that replaced it, agents on two machines, macOS, Linux and Tailscale are not yet tried.
+
+### Accepted limits of the join handshake
+
+See "Accepted limits" in the [remote connections design](remote-design.md): on first contact only the listing side checks the code, so an active attacker on your network who takes the listing machine's address could pose as it; both machines need an inbound port, which managed corporate devices and isolated guest Wi-Fi often block; an agent with a shell can run `pigeon allow` and `pigeon requests --show`; a host can answer prompts without a person (headless runs decline them, a Claude Code hook could answer them); and request spam is limited only by one request per topic, a rate limit and Deny.
+
+### Antigravity is local only
+
+Antigravity advertises MCP elicitation but cancels every prompt, so its sessions cannot open or join topics with other machines, or require approval on local topics.
 
 ### The local API is still unauthenticated
 
-Another user account on a machine can use that machine's Pigeon service, including sending on its shared topics as its user. Share topics only from single-user machines. Authenticating the local API is planned for later.
+Another user account on a machine can use that machine's Pigeon service, including its topics with other machines and the commands that answer join requests. Use topics with other machines only on single-user machines. Authenticating the local API is planned for later.
 
 ### Addresses are fixed
 
-Peers are reached at the address given when pairing (or set with `pigeon peer address`); there is no discovery, so a machine whose address changes must be updated on the other side. Both machines need their peer listener open for messages to flow both ways.
+There is no discovery: the first join names the other machine's address or host name. A known machine's address is updated whenever it makes contact; if both machines change address at once, set one with `pigeon peer address`. Both machines need their peer listener open for messages to flow both ways.
 
 ## Antigravity
 

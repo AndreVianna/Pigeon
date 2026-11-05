@@ -1,6 +1,6 @@
 # Remote connections: design for 0.6.0-alpha.3
 
-**Status: third draft, 2026-11-04, agreed in principle by the user; to be built after elicitation is confirmed in every host.** It replaces the first design accepted earlier the same day (invitations to pair machines, then each topic shared by a person), which is built on `alpha3-remote-connections` and worked between two real machines on a LAN. The review of that test led to the second draft; an independent review of the second draft led to this one, which keeps the cheap fixes and accepts the rest as known limits (see "Accepted limits"). The aim is a middle ground: not a foolproof system, but not a fragile one.
+**Status: agreed by the user and built on `alpha3-remote-connections` on 2026-11-04, after elicitation was checked in every host; not yet host-tested across two machines.** It replaces the first design accepted earlier the same day (invitations to pair machines, then each topic shared by a person), which was built first and worked between two real machines on a LAN. The review of that test led to the second draft; an independent review of the second draft led to this one, which keeps the cheap fixes and accepts the rest as known limits (see "Accepted limits"). The aim is a middle ground: not a foolproof system, but not a fragile one.
 
 ## Scope
 
@@ -119,7 +119,7 @@ One open request per topic; requests from one address are rate-limited; Deny ref
 Local topics work exactly as today, with one optional addition:
 
 - **Approval required (opt-in).** A session can open a local topic with `approval: true` (CLI `--approval`). Whoever joins it is then shown a join code by elicitation, and the session that opened the topic is asked for it, as for a first contact. It guards against a wrong partner taking the seat first or an agent joining a topic it was talked into. Agents may turn it on, because it only tightens access. It does not protect against a malicious program running as the same user, which can read Pigeon's database directly.
-- **Who joined.** For every topic, local or remote, the session already waiting is told who joined (tool, and machine or session), so an unexpected partner is visible at once.
+- **Who joined.** For remote topics and topics that require approval, the session already waiting is told who joined (tool, and machine or session), so an unexpected partner is visible at once. Plain local topics keep today's behavior; a notice there would add a wake to every join.
 
 ## What another machine can and cannot do
 
@@ -163,7 +163,7 @@ Known and accepted for alpha.3, to be listed in [known issues](known-issues.md):
 
 ## Data
 
-Messages from another machine are stored like local ones: unencrypted in SQLite, subject to retention, expiry and redaction. A remote topic's messages exist on both machines. Leaving or removing a machine deletes the undelivered outbox; each side keeps what it already received until it expires. Join requests are kept only until answered or expired, with only a hash of the code. The first design's pairing and sharing tables are dropped, not migrated: alpha.3 has had no users beyond its own test.
+Messages from another machine are stored like local ones: unencrypted in SQLite, subject to retention, expiry and redaction. A remote topic's messages exist on both machines. Leaving or removing a machine deletes the undelivered outbox; each side keeps what it already received until it expires. Join requests are kept only until answered or expired, with only a hash of the code. The first design's pending pairings are dropped, not migrated; its per-topic link table is kept as the record of each remote topic. alpha.3 has had no users beyond its own test.
 
 ## Delivery semantics
 
