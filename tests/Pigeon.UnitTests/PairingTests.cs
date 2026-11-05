@@ -53,8 +53,13 @@ public sealed class PairingTests : IAsyncLifetime {
         var pending = Assert.Single(ana.PendingPeers());
         Assert.Equal((brunoId.Fingerprint, "bruno-desktop", result.Check), (pending.Fingerprint, pending.Name, pending.Check));
         Assert.False(ana.IsPeer(brunoId.Fingerprint));
-        Assert.Throws<InvalidOperationException>(() => ana.ConfirmPendingPeer("000000" == result.Check ? "111111" : "000000", null));
+        // A mistyped code names the waiting pairing and leaves it waiting.
+        var wrong = Assert.Throws<InvalidOperationException>(() => ana.ConfirmPendingPeer("000000" == result.Check ? "111111" : "000000", null));
+        Assert.Contains("does not match the pairing waiting here for \"bruno-desktop\"", wrong.Message);
+        _ = Assert.Single(ana.PendingPeers());
         _ = ana.ConfirmPendingPeer(result.Check, null);
+        // With nothing waiting, the message asks for a new invitation.
+        Assert.Contains("No pairing is waiting here", Assert.Throws<InvalidOperationException>(() => ana.ConfirmPendingPeer(result.Check, null)).Message);
         _ = bruno.AddPeer(anaId.Fingerprint, "ana-laptop", anaAddress);
         Assert.True(ana.IsPeer(brunoId.Fingerprint));
         Assert.Empty(ana.PendingPeers());

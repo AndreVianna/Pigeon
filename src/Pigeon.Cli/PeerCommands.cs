@@ -23,9 +23,9 @@ internal static class PeerCommands {
     public static async Task<int> RunAsync(string port, string[] a) {
         if (a[0] == "topic") {
             if (a[1] == "share") {
-                var share = await Call(port, "topic_share", new { topic = a[2], peer = a[4], shareTool = !a.Contains("--no-tool") });
-                Console.WriteLine($"Shared \"{a[2]}\" with {a[4]}. On that machine, an agent joins it as \"{a[2]}@<your service name there>\"; it appears there once {a[4]} is reachable.");
-                _ = share;
+                _ = await Call(port, "topic_share", new { topic = a[2], peer = a[4], shareTool = !a.Contains("--no-tool") });
+                var self = (await Call(port, "peer_status", new { })).GetProperty("name").GetString();
+                Console.WriteLine($"Shared \"{a[2]}\" with {a[4]}. On that machine, an agent joins it as \"{a[2]}@{self}\"; it appears there once {a[4]} is reachable.");
             }
             else {
                 var done = await Call(port, "topic_unshare", new { topic = a[2] });

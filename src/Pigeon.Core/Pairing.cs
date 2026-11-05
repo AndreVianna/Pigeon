@@ -36,8 +36,13 @@ public sealed partial class Mailbox {
     // The inviter saw the same check code as the acceptor: the pending peer becomes a paired peer,
     // named as the acceptor proposed unless a name is given here.
     public PeerInfo ConfirmPendingPeer(string check, string? name) => db.Transaction(() => {
-        var pending = PendingPeersCore().FirstOrDefault(p => p.Check == check)
-            ?? throw new InvalidOperationException("No pairing waits for that check code; it may have expired. Send a new invitation.");
+        var waiting = PendingPeersCore();
+        // A mistyped code leaves the pairing waiting, so the person can try again; only an empty
+        // list calls for a new invitation.
+        var pending = waiting.FirstOrDefault(p => p.Check == check)
+            ?? throw new InvalidOperationException(waiting.Length == 0
+                ? "No pairing is waiting here: nobody has accepted an invitation, or the pairing expired. Send a new invitation."
+                : $"That check code does not match the pairing waiting here for {string.Join(", ", waiting.Select(p => $"\"{p.Name}\""))}. Check the code with the person who accepted and try again.");
         if (name is not null)
             ValidPeerName(name);
         var peer = AddPeerCore(pending.Fingerprint, name ?? pending.Name, pending.Address);

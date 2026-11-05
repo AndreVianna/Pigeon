@@ -88,7 +88,7 @@ public sealed partial class PeerSteps {
     [When("Ana shares a topic with Bruno and both sessions join it")]
     public async Task ShareAndJoin() {
         _ = await Ok("ana", "join", "review", "as", "ana-session", "using", "claude-code");
-        Assert.Contains("Shared \"review\" with bruno-desktop", await Ok("ana", "topic", "share", "review", "with", "bruno-desktop"));
+        Assert.Contains("Shared \"review\" with bruno-desktop. On that machine, an agent joins it as \"review@ana-laptop\"", await Ok("ana", "topic", "share", "review", "with", "bruno-desktop"));
         await Eventually(async () => (await Ok("bruno", "peer", "list")).Contains("review@ana-laptop shared by ana-laptop"));
         Assert.Contains("@ana-laptop", await Ok("bruno", "join", "review@ana-laptop", "as", "bruno-session", "using", "codex"));
     }
@@ -125,7 +125,7 @@ public sealed partial class PeerSteps {
         // Ana types a code that is not the one Bruno saw: nothing is paired.
         (code, _, error) = await Run("ana", null, "peer", "confirm", "000000");
         Assert.Equal(1, code);
-        Assert.Contains("No pairing waits for that check code", error);
+        Assert.Contains("That check code does not match the pairing waiting here for \"bruno-desktop\"", error);
         Assert.Contains("Peers: 0", await Ok("ana", "peer", "list"));
         // The invitation was used by the first acceptance.
         (code, _, error) = await Run("bruno", "y", "peer", "accept", invitation);
