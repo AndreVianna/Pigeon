@@ -186,7 +186,7 @@ Kept as built: identity and key storage, the listener and TLS setup, the outbox 
 5. Any user can disconnect by telling their agent; a skill covers it.
 6. Local topics stay as they are, with approval by code as an opt-in per topic.
 7. The requesting person confirms before Pigeon contacts a new machine, and sees the code in that same prompt.
-8. Elicitation support is confirmed in every host before building: Claude Code, Codex, Copilot, OpenCode and Antigravity. Hosts without it use the terminal fallback, and the README says which.
+8. Elicitation support is confirmed in every host before building: Claude Code, Codex, Copilot, OpenCode and Antigravity. Hosts without it use the terminal fallback, and the README says which. **Done on 2026-11-04:** the four CLIs show prompts inside tool calls and while idle, and their models see neither the prompt nor the answer; Antigravity cancels every prompt. The Claude desktop app's Code tab and the Codex desktop app are still to check.
 9. The middle ground after the independent review: the cheap fixes are in this design, and the rest are the accepted limits above.
 
 ## Implementation outline
