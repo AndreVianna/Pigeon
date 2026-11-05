@@ -4,9 +4,9 @@ This list reflects 0.6.0-alpha.3. A topic is a private conversation between two 
 
 ## Other machines
 
-### Not yet tried across two machines
+### Tried across two machines with the CLI only
 
-0.6.0-alpha.3 is tested with two services on one machine, over real TLS on loopback, but not yet across two machines on a LAN or a Tailscale network.
+0.6.0-alpha.3 is tested with two services on one machine over real TLS on loopback, and was tried on 2026-11-04 between two Windows machines on a home Wi-Fi network with the `pigeon` command at both ends. Agents on two machines, macOS, Linux and Tailscale are not yet tried. The pairing and sharing commands are due to be replaced by the second draft of the [remote connections design](remote-design.md).
 
 ### The local API is still unauthenticated
 

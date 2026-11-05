@@ -1,127 +1,178 @@
 # Remote connections: design for 0.6.0-alpha.3
 
-**Status: reviewed and accepted by the user on 2026-11-04, with the recommended answers to the open questions (see the end). Built on `alpha3-remote-connections`; not yet tried across two real machines.** The release plan required this design to be reviewed before any code, because it opens Pigeon to the network for the first time.
+**Status: second draft for review, 2026-11-04.** It replaces the first design accepted earlier the same day (invitations to pair machines, then each topic shared by a person). That design is built on `alpha3-remote-connections` and worked between two real machines on a LAN; the review of that test led to this simpler model. Nothing in this draft is built yet. The release plan requires the design to be reviewed before code, because it opens Pigeon to the network.
 
 ## Scope
 
-Set by the user on 2026-11-04:
+Set by the user on 2026-11-04 and unchanged:
 
 - **Machines on the same network:** a LAN, or a private overlay such as Tailscale or WireGuard that the user already runs. Connections are direct. There is no relay, no NAT traversal and no exposure to the internet.
-- **Other people's machines, not only the user's own:** a colleague's agent can talk to yours. So pairing a machine must not grant access to everything on it, and either side must be able to end the relationship.
+- **Other people's machines, not only the user's own:** a colleague's agent can talk to yours, so nothing is reachable from another machine unless a person on this machine approves it, and either side can end a connection at any time.
 
-The goal is that two sessions on different machines share a two-member topic exactly as two local sessions do today: messages queue in order, each side is woken by its own host as it is now, and peer messages remain untrusted data.
+The goal is that two sessions on different machines share a two-member topic exactly as two local sessions do: messages queue in order, each side is woken by its own host, and peer messages remain untrusted data.
 
-**Out of scope for alpha.3:** a relay or anything reachable from the internet; automatic discovery (mDNS or broadcast); topics with members on more than two machines; end-to-end encryption between agents beyond the encrypted link between services; hiding from a paired peer the traffic of the topics shared with it.
+**Out of scope for alpha.3:** a relay or anything reachable from the internet; automatic discovery of machines (mDNS or broadcast); topics with more than two members; end-to-end encryption between agents beyond the encrypted link between services; authenticating the local loopback API.
+
+## The model in one example
+
+A topic has two seats. A seat can be taken by a local session or by a session on another machine, never both, so a topic open to other machines connects exactly one local session to one remote one.
+
+1. On dev-laptop, the user asks their agent to open `project-1` to other machines. The topic is created locally and **listed**.
+2. On office-laptop, the user asks their agent which topics dev-laptop has. dev-laptop answers `project-1`.
+3. The office-laptop agent asks to join `project-1@dev-laptop`. Pigeon tells the office-laptop user: "Request submitted. Join code 123456."
+4. dev-laptop's waiting session is woken with the request, and Pigeon asks the dev-laptop user, in a prompt the agent cannot answer: "office-laptop wants to join project-1 with Codex. Enter the join code to allow."
+5. The office-laptop user tells the dev-laptop user the code by any means they like: in person, a call, a chat, an email.
+6. The dev-laptop user enters it. If it matches, the join completes and the topic is full, so it is no longer listed.
+7. Separately, a second office-laptop session opens `project-2`, and a third office-laptop session joins `project-2` with no `@machine`. That is a local topic, exactly as today; no code is asked for unless the topic was opened with approval required (see "Local topics").
+
+Either user can end the connection at any time by telling their agent to disconnect.
 
 ## How it fits the current design
 
-Today each user runs one service bound to `127.0.0.1`, with no authentication: any local process can use any session ID. That stays exactly as it is. Local agents, plugins and hooks keep talking to the loopback service.
+Each user runs one service bound to `127.0.0.1`, with no authentication; that does not change. Local agents, plugins and hooks keep using the loopback service.
 
-alpha.3 adds a second, separate listener to the same service: the **peer listener**. It is off by default, accepts only mutually authenticated TLS connections from paired peers, and serves only a small peer protocol (deliver a message, acknowledge, leave). It never serves the local API: a peer cannot join arbitrary topics, list sessions, read status or stop the service.
+The service has a second, separate listener: the **peer listener**. It is off until a person turns it on, accepts only TLS 1.3 connections with a client certificate, and serves only the small peer protocol below. It never serves the local API.
 
 ```
-machine A (Ana)                                   machine B (Bruno)
+machine A                                          machine B
 agent ── loopback ── service A ══ mutual TLS ══ service B ── loopback ── agent
                      (local API)   peer link    (local API)
 ```
 
-A **shared topic** has one member on each machine. Each service stores its own side: its local member, the remote member as a peer seat (`peer:<peer name>`), and the messages in both directions. Sending on a shared topic writes the message locally and puts it in an **outbox**; the service delivers it to the peer over the peer link and retries until the peer acknowledges it or it expires (24 hours, as today). The receiving service queues it for its local member, and the local wake works unchanged. Each message keeps its ID across both machines, so a retried delivery is stored once.
+A **remote topic** has one member on each machine. Each service stores its own side: its local member, the other machine's member as a peer seat, and the messages both ways. Sending writes the message locally and into an **outbox**; the service delivers it over the peer link and retries until the other side acknowledges it or it expires (24 hours). The receiving service queues it for its local member, whose wake works unchanged. A message keeps its ID on both machines, so a retried delivery is stored once.
 
 ## Identity
 
-Each service has a long-term key pair, created on first use of any peer command: an ECDSA P-256 key and a self-signed X.509 certificate. Its **fingerprint** (SHA-256 of the public key) is the service's identity. There is no certificate authority: each side pins the other's fingerprint at pairing.
+Each service has a long-term ECDSA P-256 key and a self-signed certificate, created on first use. Its **fingerprint** (SHA-256 of the public key) is its identity; there is no certificate authority. The private key stays in the current user's certificate store (DPAPI on Windows, the login Keychain on macOS, .NET's user-only store on Linux), never leaves the machine and is never printed. This part is already built.
 
-Each service also has a human name chosen by its user (for example `ana-laptop`). A name is a label, not an identity; fingerprints decide trust, and each side may name a peer whatever it likes locally.
+Each service also has a **name**, which defaults to the computer's host name and can be changed with `pigeon peer name`. A name is a label shown to people, not an identity; fingerprints decide trust.
 
-The private key is stored in the current user's certificate store, with no outside package: a non-exportable CNG key protected by DPAPI on Windows, the login Keychain on macOS, and .NET's user-only store under the home folder on Linux. Pigeon remembers its certificate's thumbprint next to its database and never touches other certificates in the store. Anyone who can read it can act as this service to its peers, so the key never leaves the machine and is never printed.
+A machine becomes a **known machine** the first time a join between the two completes: each side pins the other's fingerprint, name and last address. There is no separate pairing step. `pigeon peer list` shows known machines and `pigeon peer remove <name>` forgets one, ending its topics at once.
 
-## Pairing
+## Opening a topic to other machines
 
-Pairing is always started by a person, never by an agent, and both people take part:
+- An agent opens a topic to other machines at the user's request: `pigeon_join` with `remote: true` creates or joins the topic and lists it. The CLI equivalent is `pigeon join <topic> as <session> using <tool> --remote`.
+- Only **listed** topics accept requests from other machines. A topic is listed while it has a free seat and stops being listed once both seats are taken or the topic is closed. A topic opened without `remote` is never listed and never reachable from another machine.
+- Letting an agent list a topic is safe because listing grants nothing: every join from another machine still needs the code from a person (below).
+- The peer listener must be on for a topic to be listed. `pigeon peer listen` turns it on, once per machine, by a person. With no address it binds to this machine's private addresses (LAN and Tailscale ranges), never a public address and never `0.0.0.0`; `pigeon peer listen <address>` binds to one address; `pigeon peer listen off` closes it. Listing a topic while the listener is off fails with an error that says to run `pigeon peer listen`.
+- The machine that requests a join also needs its listener on, because replies are delivered to it the same way. The error says so if it is off.
 
-1. **Ana invites:** `pigeon peer invite` prints a one-time invitation: Ana's address and peer port, her service's fingerprint, and a random secret. It is valid for 10 minutes and for one acceptance.
-2. **Ana sends it to Bruno** over a channel they both trust (a chat, an email, in person). Whoever sees the invitation could use it before Bruno does, which is why it is short-lived, single-use, and confirmed in step 4.
-3. **Bruno accepts:** `pigeon peer accept <invitation>` connects to Ana's address, refuses to continue unless Ana's certificate matches the fingerprint in the invitation, and proves he holds the secret (an HMAC over both fingerprints, so the proof cannot be replayed to another service).
-4. **Both confirm:** both machines show the same 6-digit check code, derived from both fingerprints and the secret. Each person compares it with the other (read aloud, or in the chat) and confirms. Only then does either side store the other as a peer.
+## Finding topics on another machine
 
-After pairing, each side has the other's fingerprint, its chosen name and its last known address. Nothing else is shared.
+- `pigeon_topics` with `machine: "dev-laptop"` (CLI: `pigeon topics on dev-laptop`) asks that machine for its listed topics. Only known machines get an answer, so topic names are never shown to a machine nobody has approved.
+- For the **first contact** with a machine, there is nothing to list yet: the user gives the topic name and the address, for example `project-1@192.168.2.20` (or with a port, `project-1@192.168.2.20:49374`). After that join, the machine is known by its name.
 
-**Removing a peer** (`pigeon peer remove <name>`) deletes its fingerprint and closes its connections at once; its shared topics end on this side, and the peer learns that on its next delivery. Either person can remove the other at any time, without the other's consent.
+## Joining with a code
 
-## Sharing topics
+A join request names a listed topic and the requesting session's tool name. Every request from another machine, known or not, needs a **join code**:
 
-Pairing grants nothing on its own. Each shared topic is offered by a person:
+1. **The request.** The requesting service connects over TLS, sends the topic name, and both services exchange random values with a commitment: the requester first sends only a hash of its value, the listing side answers with its own value, and then the requester reveals its value. The code is 6 digits derived from both values and both fingerprints. Because each side fixes its value before seeing the other's, nobody (including a machine in the middle) can choose or predict the code.
+2. **The requester sees the code.** `pigeon_join` returns "Request submitted. Join code 123456; give it to the person at dev-laptop. The join completes when they enter it." The session waits as it does for a local partner.
+3. **The listing side asks its person.** The session holding the topic is woken with a join request. When its agent calls `pigeon_receive`, the Pigeon MCP server asks the user directly through **MCP elicitation**: "office-laptop (new machine, fingerprint ca99…) wants to join project-1 with Codex. Enter the join code to allow, or decline." Pigeon fills in every detail from what it verified (the fingerprint from the TLS handshake, the name for a known machine, "new machine" otherwise), never from text the requester chose; the tool name is shown as the requester's claim.
+4. **The code goes straight to Pigeon.** The elicitation answer goes from the host's own UI to the MCP server, not through the model, so neither agent can answer it, and a message on any other topic cannot carry the code into it. The agent is told only "allowed", "declined" or "wrong code".
+5. **Result.** A matching code completes the join: the requester's seat is taken, the topic stops being listed, and if the machine is new, both sides now know it. A decline, 3 wrong codes, or 10 minutes without an answer refuses the request; the seat stays free and the requester is told "not allowed".
 
-- `pigeon topic share <topic> with <peer>` on Ana's machine offers one topic to one peer. The topic keeps its local member (or waits for one), and its second seat becomes Bruno's.
-- Bruno's agent joins it as `<topic>@ana-laptop` (or Bruno runs `pigeon join` with that name). Until Ana shares the topic, joining it fails, so an agent cannot reach anything that was not offered.
-- `pigeon topic unshare <topic>` ends the sharing on Ana's side and tells Bruno's service, whose member is notified on its next receive.
+**Hosts without elicitation, or nobody at the session.** The request also appears in `pigeon requests`, and a person allows it from any terminal with `pigeon allow <request> <code>` or refuses it with `pigeon deny <request>`. The CLI lists requests but never their codes.
 
-**Agents cannot pair, share or unshare.** These are command-line actions only, never MCP tools, because a peer message can try to persuade an agent to widen access (prompt injection). An agent can only join a topic a person already shared and use it like any other.
+**Limits on requests:** one open request per topic; a cap on open requests per service; requests from one address are rate-limited; requests for a topic that is not listed get the same "submitted" answer as listed ones, so nobody can probe for topic names, and are then dropped.
 
-## What a paired peer can and cannot do
+## Disconnecting
 
-A peer can:
-- deliver messages into the topics shared with it, into the seat reserved for it, within the limits below;
-- acknowledge messages it received;
-- leave a shared topic.
+- Either user tells their agent to disconnect ("leave project-1", "disconnect from office-laptop"). The connect skill in every plugin says how: the agent calls `pigeon_leave`. It is safe to let agents do this, because it only takes access away; the worst a hostile message can do is make an agent leave, which the user can undo.
+- Leaving a remote topic frees the seat on both sides, tells the other service at once (or on its next delivery if unreachable), and deletes the undelivered outbox. If the topic's opener left, it is no longer listed.
+- People can also act from the terminal: `pigeon leave <topic> as <session>`, or `pigeon peer remove <name>` to end every topic with that machine and forget it.
 
-A peer cannot:
-- join, create or list any other topic, or learn which other topics or peers exist;
-- see local session IDs: it sees the other member as `ana-laptop` with its tool name (unless Ana's side turns that off), never the session ID;
+## Local topics
+
+Local topics work exactly as today, with one optional addition:
+
+- **Approval required (opt-in).** A session can open a topic with `approval: true` (CLI `--approval`). Whoever joins it then gets a join code, and the session that opened the topic is asked for it by elicitation, as for a remote join. It guards against a wrong partner taking the seat first or an agent joining a topic it was talked into. Agents may turn it on, because it only tightens access. It does not protect against a malicious program running as the same user, which can read Pigeon's database directly; the operating system's user boundary is the protection there.
+- **Who joined.** For every topic, local or remote, the session already waiting is told who joined (tool, and machine or session), so an unexpected partner is visible at once.
+
+## What another machine can and cannot do
+
+A known machine can:
+- list this machine's listed topics;
+- request to join a listed topic, which still needs a person's code;
+- deliver messages into the topics it joined, into its own seat, within the limits below; acknowledge them; leave.
+
+An unknown machine can only send join requests for a named topic, within the request limits. Neither can:
+- join any topic without a person's code, or reach a topic that was never opened to other machines;
+- see local session IDs (the other member is shown as `<tool> @<machine>`, never its session ID);
 - read status, start waits or wakes, receive messages for local sessions, or stop the service.
 
-**Limits per peer:** the existing per-topic hourly limit and 16 KiB message cap, plus a per-peer message rate, a cap on stored undelivered messages, a connection limit, and a handshake rate limit. A peer that exceeds them is refused with an error and logged; it is not removed automatically.
+**Limits per machine:** the per-topic hourly limit and 16 KiB message cap, a per-machine message rate, a cap on undelivered messages, a connection limit and a handshake rate limit. Exceeding them is refused and logged.
 
 ## Transport
 
-- TLS 1.3 only, through Kestrel's HTTPS support, with a client certificate required. The certificate validation accepts only fingerprints in the peer list and, during pairing, the one fingerprint the invitation names.
-- The peer listener binds only to the address the user names (`pigeon peer listen <address>[:port]`, default port 49374), for example a Tailscale or LAN address, never `0.0.0.0` implicitly. It is off until then, and `pigeon peer listen off` closes it.
-- Pigeon never changes the firewall. If the operating system asks, the person decides; the docs say which port and address to allow.
-- Outgoing connections go only to the last known address of a paired peer. Addresses are not discovered, so a peer whose address changes is updated with `pigeon peer address <name> <address>`.
+- TLS 1.3 only, through Kestrel, with a client certificate required. Known machines are recognized by their pinned fingerprints; any other certificate reaches only the join-request path and the code exchange.
+- Outgoing connections go to an address a user typed (first contact) or a known machine's last address. `pigeon peer address <name> <address>` updates it.
+- Pigeon never changes the firewall. If the operating system asks, the person decides; the docs say which port to allow (49374 by default).
 
 ## Threats and mitigations
 
 | Threat | Mitigation |
 |---|---|
-| Someone on the network reads or changes traffic | Mutual TLS 1.3; both sides pin fingerprints. |
-| A machine-in-the-middle during pairing | The invitation carries Ana's fingerprint; the 6-digit check code catches a substituted acceptor. |
-| A stolen invitation | Single use, 10-minute lifetime, and the check code must match on both screens. Ana sees who accepted and can remove them. |
-| A scanner or unpaired machine on the network | The listener is off by default and binds to one chosen address; unpaired certificates fail the TLS handshake before any request; handshakes are rate-limited. |
-| A paired peer turns hostile, or its machine is compromised | It reaches only the topics shared with it, within rate and size limits; its messages remain untrusted data that confer no permissions; either person removes it at once. |
-| Prompt injection through a peer message | Unchanged rule: peer messages are data. No agent tool can pair, share or widen access. |
-| A peer learns too much | It sees only its shared topics, the other member as a machine name, and messages in those topics; never session IDs, other topics or peers. |
-| The service's private key is stolen | OS-protected storage; removing the stolen identity on the other side revokes it. A new key means pairing again. |
-| Replay of old deliveries | TLS prevents replay on the wire; message IDs make a repeated delivery a no-op. |
-| Another local user on the same machine | Unchanged and now more important: the loopback API has no authentication, so another user on Ana's machine could send on Ana's shared topics as her. The docs will recommend shared topics only on single-user machines. Authenticating the local API is a later step. |
+| Someone on the network reads or changes traffic | Mutual TLS 1.3; fingerprints pinned after the first join. |
+| A machine in the middle of a first contact | The code depends on both real fingerprints and on random values fixed with a commitment, so a relaying machine produces different codes on the two sides and the join fails. |
+| A machine joins without its person's or the other person's consent | Every remote join needs a code that only the requesting user is shown and only the listing user can enter, in a prompt the agent cannot answer. |
+| An agent is talked into opening, listing or joining | Listing grants nothing; joining needs a person on the other side to enter the code. Agents can only narrow access by themselves (leave, approval on). |
+| Guessing the code | 6 digits, 3 attempts, 10 minutes, one open request per topic. |
+| Probing for topic names | Only known machines can list; requests for unlisted topics get the same answer as listed ones. |
+| Request spam | Rate limits per address, one open request per topic, a cap per service; listener off by default. |
+| A known machine turns hostile | It reaches only the topics it joined, within limits; it can request more joins, but each needs a code; its messages are untrusted data; `pigeon peer remove` cuts it off. |
+| Prompt injection through a peer message | Peer messages are data. No message can approve a join, and the code never reaches the listing side's model. |
+| The service's private key is stolen | OS-protected storage; the other side removes the machine; a new key means a new first contact. |
+| Replay of old deliveries | TLS prevents replay; message IDs make a repeated delivery a no-op. |
+| An agent with a shell runs `pigeon allow` itself | Possible today for any CLI action; the code still has to come from the requesting person. Listed as a known issue; closing it needs a prompt outside the CLI, later. |
+| Another local user on the same machine | Unchanged: the loopback API is unauthenticated, so remote topics are recommended only on single-user machines. |
 
 ## Data
 
-Messages from a peer are stored like local ones: unencrypted in SQLite, subject to retention, expiry and redaction as today. A shared topic's messages exist on both machines. Removing a peer or unsharing a topic deletes its undelivered outbox, but each side keeps what it already received until it expires.
+Messages from another machine are stored like local ones: unencrypted in SQLite, subject to retention, expiry and redaction. A remote topic's messages exist on both machines. Leaving or removing a machine deletes the undelivered outbox; each side keeps what it already received until it expires. Join requests are kept only until they are answered or expire; their codes are never written to disk in clear (only a hash for checking).
 
 ## Delivery semantics
 
-- **Sent:** stored locally and in the outbox.
-- **Delivered:** the peer service acknowledged it; it now waits there for Bruno's member, like a local message.
-- **Read:** the local and remote receive acknowledgments stay local; alpha.3 does not send read receipts.
+- **Sent:** stored locally and in the outbox. **Delivered:** the other service acknowledged it. **Read:** stays local; no read receipts in alpha.3.
+- `pigeon status` shows known machines (last contact, undelivered count), listed topics and open join requests.
 
-`pigeon status` shows each peer (connected or not, last contact) and each shared topic's outbox. `send` on a shared topic reports "delivered to peer" or "queued for peer".
+## What changes from the first design
 
-## Decisions from the review (2026-11-04)
+| First design (built) | This design |
+|---|---|
+| `pigeon peer invite`, `accept`, `confirm`: pair machines first | Removed. The first completed join makes a machine known. |
+| `pigeon topic share`, `unshare`: a person opens each topic to one machine | Removed. A topic opened with `remote: true` is listed; a person approves each join with the code. |
+| Join `<topic>@<peer>` only after sharing | Join `<topic>@<machine or address>` any listed topic, with the code. |
+| Check code compared once, at pairing | Join code entered by the listing person for every remote join. |
+| `pigeon peer listen <address>` required | Still once per machine, but the address is optional. |
+| Service name required | Defaults to the host name. |
+| `--no-tool` per share | Not carried over: the requester's tool name is shown to the person approving. Can return later if wanted. |
 
-The user accepted the recommended answer to each open question:
+Kept as built: identity and key storage, the peer listener, the outbox and delivery, message IDs, limits, `peer list`, `peer remove`, `peer address`, `peer name`.
 
-1. **No live approval of each acceptance.** The check code that both people compare already catches a wrong acceptor; requiring the inviter's command to be running would force both people online at the same moment.
-2. **The remote member's tool name is shared by default** (for example "Claude Code"), and the sharing side can turn it off per shared topic. Session IDs are never shared.
-3. **A remote agent joins a shared topic as `<topic>@<peer>`.**
-4. **No read receipts in alpha.3.**
-5. **Authenticating the local loopback API is left for later.** It changes every plugin; alpha.3 documents the multi-user limitation instead.
+## Decisions taken in the review conversation (2026-11-04)
+
+1. One handshake per topic, started by the agent at the user's request, approved by a code passed between the two people.
+2. Topics are created locally and listed to other machines; a session joins `<topic>@<machine>` for a remote topic and `<topic>` for a local one.
+3. The code is entered through elicitation, never in the chat; a terminal command is the fallback.
+4. A code is needed for every remote join, including from a known machine.
+5. Any user can disconnect by telling their agent; a skill covers it.
+6. Local topics stay as they are, with approval by code as an opt-in per topic.
+
+## Open questions
+
+1. **Confirming a new machine on the requesting side.** Should the requester's person also confirm before Pigeon contacts a machine it has never seen ("Contact 192.168.2.20, a machine you have not joined before?")? It stops an agent from being talked into reaching out to an unknown machine, but adds a click to every first contact. **Recommendation:** yes, by elicitation, only for new machines.
+2. **Elicitation support per host.** Claude Code supports MCP elicitation; Codex, Copilot, OpenCode and Antigravity must be checked. Hosts without it use the terminal fallback. **Recommendation:** check each before building, and list the result in the README.
 
 ## Implementation outline
 
-1. Key pair, fingerprint and protected storage per platform.
-2. Peer store (peers, shared topics, outbox) in the existing SQLite database, upgraded on first open.
-3. The peer listener: Kestrel HTTPS with required client certificates, fingerprint pinning, the peer protocol, and limits.
-4. Pairing: `peer invite`, `peer accept` with the check code, `peer list`, `peer remove`, `peer address`, `peer listen`.
-5. Sharing: `topic share`, `topic unshare`, joining `<topic>@<peer>`, and the outbox with retries.
-6. Status and docs: peers and outboxes in `pigeon status`; [security design](security-design.md) and [architecture](architecture.md) updated.
-7. Tests: two services in one test run on loopback (pairing, sharing, delivery, retries, removal, refused access), and a host test with two machines on a LAN or Tailscale.
+1. Check MCP elicitation support in each host and record it.
+2. Remove invitation pairing and topic sharing; keep identity, listener, outbox and peer store, with a migration for the stored shares.
+3. Listed topics: `remote` on `pigeon_join` and `--remote` in the CLI; listing to known machines; `pigeon_topics` and `pigeon topics on <machine>`.
+4. Join requests: the code exchange with commitment, request limits, first-contact by address, known machines on success.
+5. Elicitation in the MCP server, plus `pigeon requests`, `allow` and `deny`.
+6. Opt-in approval for local topics, and "who joined" notices.
+7. Defaults: service name from the host name, `pigeon peer listen` with no address.
+8. Skills in every plugin: open a topic to other machines, list, join, and disconnect.
+9. Docs: README, [security design](security-design.md), [architecture](architecture.md), known issues, changelog.
+10. Tests: two services in one test run (listing, codes right and wrong, expiry, limits, first contact, disconnect, local approval), then the two-machine host test again.
