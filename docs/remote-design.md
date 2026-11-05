@@ -75,16 +75,25 @@ The code and every approval go to people, never to a model. Agents only see the 
 ### First contact (a new machine): join code
 
 1. **The requesting person confirms and sees the code.** Before contacting a machine it has never joined, Pigeon asks the requesting user by elicitation: "Contact 192.168.2.20, a machine you have not joined before?" On yes, the services connect over TLS and exchange random values with a commitment (the requester first sends only a hash of its value, the listing side answers with its own value, then the requester reveals its value). The 6-digit code is derived from both values and both fingerprints, so neither side, nor a machine in the middle relaying the exchange, can choose it. The elicitation then shows the code: "Join code 123456; give it to the person at that machine." The code is never in a tool result.
-2. **The listing person enters it.** The session holding the topic is woken with a join request. When its agent calls `pigeon_receive`, the Pigeon MCP server asks the user by elicitation, with details Pigeon verified itself: "A new machine, office-laptop, wants to join project-1 with Codex. Enter the join code its person gave you. Never enter a code your agent relays." The name and tool are the requester's claims and are shown as such.
+2. **The listing person enters it.** As soon as the request arrives, the Pigeon MCP server of the session holding the topic asks the user by elicitation, outside any tool call: the session is not woken and no model turn is spent. The prompt shows details Pigeon verified itself: "A new machine, office-laptop, wants to join project-1 with Codex. Enter the join code its person gave you. Never enter a code your agent relays." The name and tool are the requester's claims and are shown as such.
 3. **Result.** A matching code completes the join and both sides pin each other. A decline, 3 wrong codes, or 10 minutes without an answer refuses it; the seat stays free.
 
 ### Known machines: Allow or Deny
 
 The fingerprint is already pinned, so a code would add nothing. The listing user is asked "office-laptop wants to join project-2 with Codex. Allow?" and answers Allow or Deny. The requesting side needs no confirmation. Unattended agent pairs can reconnect after a reboot with a single click on one side.
 
+### How prompts are handled
+
+Measured in each host with a probe on 2026-11-04 ([results](../experiments/elicitation-probe/README.md)):
+
+- Every prompt has Pigeon's own time limit (10 minutes); no reply, `decline` and `cancel` (Esc, in every host) all mean Deny.
+- An answer counts only for a request that is still open. Hosts can deliver an answer after the moment has passed (Copilot) or replay an unanswered prompt in a later session (OpenCode); those are ignored.
+- The requesting agent is told "request pending; do not retry", because a model whose call fails may retry on its own (Copilot), and one open request per topic stops duplicates.
+- Pigeon raises prompts outside tool calls, which Claude Code, Codex, Copilot and OpenCode all support; Copilot cancels a tool call after 3 minutes, too short for two people to pass a code.
+
 ### Without elicitation
 
-Hosts that do not support elicitation, and requests with nobody at the session, use the terminal: `pigeon requests` lists open requests on both sides, `pigeon requests --show <request>` shows the requesting side its code (only in a terminal, never through the MCP server), and `pigeon allow <request> [<code>]` or `pigeon deny <request>` answers on the listing side.
+Antigravity advertises elicitation but cancels every prompt without showing it, so it uses the terminal, as do requests with nobody at the session and headless runs (Codex and Copilot decline at once; OpenCode never answers): `pigeon requests` lists open requests on both sides, `pigeon requests --show <request>` shows the requesting side its code (only in a terminal, never through the MCP server), and `pigeon allow <request> [<code>]` or `pigeon deny <request>` answers on the listing side.
 
 ### Limits
 
@@ -182,8 +191,8 @@ Kept as built: identity and key storage, the listener and TLS setup, the outbox 
 
 ## Implementation outline
 
-1. Confirm MCP elicitation in each host: whether it works inside a tool call, how long a tool call may wait, what auto-approve and headless modes do, and whether a server can raise one outside a tool call. Record the result.
-2. MCP server: declare the elicitation capability and send requests to the client, matching their replies.
+1. Confirm MCP elicitation in each host (done for the four CLIs and Antigravity; desktop apps pending; see "How prompts are handled").
+2. MCP server: send requests to the client outside tool calls and match their replies, with Pigeon's own time limit and stale answers ignored.
 3. Remove invitation pairing and topic sharing; drop their tables; peer protocol version 2.
 4. Listed topics: `remote` on `pigeon_join` and `--remote`; listing to known machines; `pigeon_topics` and `pigeon topics on <machine>`.
 5. Joins: the code exchange with commitment, first-contact confirmation, Allow/Deny for known machines, request limits, identity-changed handling, address updates on contact.

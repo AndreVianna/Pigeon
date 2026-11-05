@@ -105,4 +105,33 @@ Not covered: the Codex desktop app (ChatGPT app), which Pigeon's Codex plugin al
 
 Not covered: the Claude desktop app's Code tab and Claude Desktop chats, and the headless run (blocked by the CLI account's usage limit).
 
-**What this means for the design:** declining by default in headless runs (Codex, Copilot) is the safe behaviour, since nobody approves a join. OpenCode's silence means Pigeon must apply its own timeout to every elicitation and treat "no reply" as declined, never wait on the host.
+**Antigravity app (`antigravity-client` v1.0.0, Gemini 3.8 Flash), run by the user on 2026-11-04: no forms.**
+
+| Question | Result |
+|---|---|
+| Q1 | Advertises `elicitation: {form, url}`, protocol 2025-11-25. |
+| Q2 inside a tool call | **Cancelled at once (0.0 s), no form shown**, in four calls: two made through a subagent the model created, one made directly. |
+| Q4 outside a tool call | **Cancelled at once**, no form shown. |
+| Side note | The agent read the probe's log file and quoted its markers. Anything Pigeon writes to disk is readable by an agent with file access, so join codes must never be stored in clear. |
+
+The probe entry was removed from `~/.gemini/config/mcp_config.json` afterwards (the file is empty again, as before the test).
+
+### Summary
+
+| Host | Form in a tool call | Waits ≥ 3 min | Form while idle | Model sees it | Headless |
+|---|---|---|---|---|---|
+| Claude Code 2.1.318 (terminal) | yes | yes (197 s) | yes | no | not run |
+| Codex CLI 0.162.1 | yes | yes (205 s) | yes | no | declines |
+| Copilot CLI 1.0.106-9 | yes | **no: call cancelled at 3 min** | yes | no | declines |
+| OpenCode 2.2.5 | yes | yes (198 s) | yes | no | never answers |
+| Antigravity app | **no: cancels** | — | **no: cancels** | — | — |
+
+Not covered: the Claude desktop app's Code tab and Claude Desktop chats, and the Codex desktop app.
+
+**What this means for the design:** declining by default in headless runs (Codex, Copilot) is the safe behaviour, since nobody approves a join. OpenCode's silence means Pigeon must apply its own timeout to every elicitation and treat "no reply" as declined, never wait on the host. From the interactive runs:
+
+1. **Ask outside tool calls.** Four hosts show a form while the session is idle, with no model turn and no tool timeout; Copilot cancels a tool call after 3 minutes. Pigeon's MCP server should raise the prompt as soon as a request arrives, not wait for the agent to call a tool.
+2. **`cancel` and no reply mean Deny.** Esc returns `cancel` everywhere; only Claude Code also has a Decline button.
+3. **Answer only open requests.** Copilot delivered an answer after the call had ended, and OpenCode replayed an unanswered form in a later session. Every answer must match a request that is still open, or it is ignored.
+4. **Tell the agent the request is pending.** Copilot's model retried by itself after a timeout. The agent should get "request pending; do not retry", and one open request per topic stops duplicates.
+5. **Antigravity uses the terminal.** It cancels every form, so its users approve with `pigeon requests` and `pigeon allow`, and the README says so.
