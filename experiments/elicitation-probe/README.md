@@ -92,6 +92,17 @@ Not covered: the Codex desktop app (ChatGPT app), which Pigeon's Codex plugin al
 | Q5 does the model see it | No: "I have no marker or digits to report." |
 | Decline | Esc returns `cancel`. |
 
-**What this means for the design:** declining by default
+**Claude Code 2.1.318 (terminal UI, auto mode on), run by the user on 2026-11-04: all pass.**
+
+| Question | Result |
+|---|---|
+| Q1 | `elicitation: {form, url}`, protocol 2025-11-25 |
+| Q2 form inside a tool call | "MCP server "elicitation-probe" requests your input", with the message, a required Code field, and Accept and Decline buttons; `accept` after 31 s. |
+| Q3 long wait | Waited 197 s without timing out; `accept`. |
+| Q4 outside a tool call | **Works.** Appeared 60 s after the turn ended; `accept` after 16 s. |
+| Q5 does the model see it | No: "I can't see a marker or any digits for any of the three forms." |
+| Decline | Esc returns `cancel`; a Decline button also exists. Auto mode did not answer any form on the user's behalf. |
+
+Not covered: the Claude desktop app's Code tab and Claude Desktop chats, and the headless run (blocked by the CLI account's usage limit).
 
 **What this means for the design:** declining by default in headless runs (Codex, Copilot) is the safe behaviour, since nobody approves a join. OpenCode's silence means Pigeon must apply its own timeout to every elicitation and treat "no reply" as declined, never wait on the host.
