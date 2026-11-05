@@ -56,4 +56,42 @@ Versions on this machine on 2026-11-04: Claude Code 2.1.314, Codex CLI 0.162.1, 
 | Claude Code 2.1.314 (`claude -p`) | not run | Blocked: the CLI's account had reached its weekly usage limit (resets 2026-11-07). |
 | Antigravity | not run | `agy` is not installed on the PATH; interactive only. |
 
+### Interactive (Q2–Q5)
+
+**Codex CLI 0.162.1 (terminal UI), run by the user on 2026-11-04: all pass.**
+
+| Question | Result |
+|---|---|
+| Q2 form inside a tool call | A form appeared at the bottom of the terminal with the message, the field title and its description; Enter submits, Esc cancels. Reply `accept` with the 6 digits after 32 s. |
+| Q3 long wait | The tool call waited 205 s for the answer without timing out, and returned `accept`. |
+| Q4 outside a tool call | **Works.** 60 s after the turn ended, the form appeared while Codex was idle; answered after 35 s, `accept`. No model turn was needed. |
+| Q5 does the model see it | No. Asked for the marker and digits, the model said it could not see them; it saw only the tool results. |
+| Decline | The form has no separate Decline: Esc returns `cancel`. Pigeon must treat `cancel` like `decline`. |
+
+Not covered: the Codex desktop app (ChatGPT app), which Pigeon's Codex plugin also targets.
+
+**Copilot CLI 1.0.106-9 (terminal UI, Manual Approval mode), run by the user on 2026-11-04: passes, with a 3-minute limit inside tool calls.**
+
+| Question | Result |
+|---|---|
+| Q1 | `elicitation: {form, url}`, protocol 2025-11-25 |
+| Q2 form inside a tool call | Appeared and returned `accept` with 6 digits after 5 s. |
+| Q3 long wait | **Copilot cancelled the tool call after exactly 3 minutes** (`notifications/cancelled`, reason "request timeout"; the user saw MCP error -32001). The form stayed open, and the answer given at 204 s still reached the server, for a call that had already ended. The model then **retried by itself** with `wait_minutes: 1`, which opened a second form. |
+| Q4 outside a tool call | **Works.** The form appeared 60 s after the turn ended; answered after 16 s, `accept`. |
+| Q5 does the model see it | No: "I can't see the marker or any digits; the probe results only report the outcome." |
+| Decline | Esc returns `cancel`. |
+
+**OpenCode 2.2.5 (terminal UI), run by the user on 2026-11-04: all pass, plus a replayed stale form.**
+
+| Question | Result |
+|---|---|
+| Before any prompt | A new session showed the form left unanswered by the headless run 30 minutes earlier (marker `IN-CALL-B017`), whose probe had long exited. OpenCode keeps unanswered forms and shows them again later, in another session. Dismissed with Esc. |
+| Q2 form inside a tool call | Appeared as "elicitation-probe is requesting input"; `accept` after 19 s. OpenCode called the tool through its `execute` code tool. |
+| Q3 long wait | Waited 198 s without timing out; `accept`. |
+| Q4 outside a tool call | **Works.** Appeared 60 s after the turn ended; `accept` after 23 s. |
+| Q5 does the model see it | No: "I have no marker or digits to report." |
+| Decline | Esc returns `cancel`. |
+
+**What this means for the design:** declining by default
+
 **What this means for the design:** declining by default in headless runs (Codex, Copilot) is the safe behaviour, since nobody approves a join. OpenCode's silence means Pigeon must apply its own timeout to every elicitation and treat "no reply" as declined, never wait on the host.
