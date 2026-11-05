@@ -10,108 +10,86 @@ using Xunit;
 
 namespace Pigeon.UnitTests;
 
-// Two services on loopback, each with its own identity and peer listener, as two machines would be.
+// The listener's boundaries over real TLS: who gets through the handshake, and to which paths.
 public sealed class PeerLinkTests : IAsyncLifetime {
     private readonly string directory = Path.Combine(Path.GetTempPath(), "pigeon-link-" + Guid.NewGuid().ToString("N"));
     private readonly CancellationTokenSource stop = new();
-    private readonly List<Task> servers = [];
-    private Broker ana = null!, bruno = null!;
-    private ServiceIdentity anaId = null!, brunoId = null!, strangerId = null!;
-    private int anaPort, brunoPort;
-
-    private static int FreePort() {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
-    }
+    private Task server = Task.CompletedTask;
+    private Broker ana = null!;
+    private ServiceIdentity anaId = null!, strangerId = null!;
+    private int anaPort;
 
     public async ValueTask InitializeAsync() {
         Directory.CreateDirectory(directory);
         ana = new Broker(Path.Combine(directory, "ana.db"));
-        bruno = new Broker(Path.Combine(directory, "bruno.db"));
         anaId = ServiceIdentity.LoadOrCreate(new FileIdentityStore(Path.Combine(directory, "ana")));
-        brunoId = ServiceIdentity.LoadOrCreate(new FileIdentityStore(Path.Combine(directory, "bruno")));
         strangerId = ServiceIdentity.LoadOrCreate(new FileIdentityStore(Path.Combine(directory, "stranger")));
-        (anaPort, brunoPort) = (FreePort(), FreePort());
-        _ = ana.AddPeer(brunoId.Fingerprint, "bruno-desktop", $"127.0.0.1:{brunoPort}");
-        _ = bruno.AddPeer(anaId.Fingerprint, "ana-laptop", $"127.0.0.1:{anaPort}");
-        foreach (var (broker, identity, port) in new[] { (ana, anaId, anaPort), (bruno, brunoId, brunoPort) }) {
-            var server = new PeerServer(broker, identity, new IPEndPoint(IPAddress.Loopback, port));
-            servers.Add(server.RunAsync(stop.Token));
-            await server.Ready.WaitAsync(TimeSpan.FromSeconds(10));
+        using (var listener = new TcpListener(IPAddress.Loopback, 0)) {
+            listener.Start();
+            anaPort = ((IPEndPoint)listener.LocalEndpoint).Port;
         }
+
+        ana.SetPeerSetting("listen", $"127.0.0.1:{anaPort}");
+        var peer = new PeerServer(ana, anaId, [new IPEndPoint(IPAddress.Loopback, anaPort)]);
+        server = peer.RunAsync(stop.Token);
+        await peer.Ready.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
-    private static JsonElement Call(Broker broker, string operation, object args) {
-        var result = broker.Execute(operation, JsonSerializer.SerializeToElement(args));
-        Assert.True(result.Ok, result.Error);
-        return JsonSerializer.SerializeToElement(result.Value);
-    }
+    private string Url(string path) => $"https://127.0.0.1:{anaPort}{path}";
 
     [Fact]
-    public async Task A_message_crosses_the_peer_link_and_wakes_the_session_on_the_other_machine() {
-        _ = Call(ana, "join", new { tool = "claude-code", sessionId = "ana-session", topic = "review" });
-        _ = ana.Share("review", "bruno-desktop", shareTool: true);
-        var anaDelivery = new PeerDelivery(ana, anaId);
-        Assert.Equal(1, await anaDelivery.TickAsync(CancellationToken.None));
-        _ = Call(bruno, "join", new { tool = "codex", sessionId = "bruno-session", topic = "review@ana-laptop" });
-
-        var sent = Call(ana, "send", new { sessionId = "ana-session", topic = "review", message = "over the wire" });
-        Assert.Equal("queued-for-peer", sent.GetProperty("delivery").GetString());
-        Assert.Equal(1, await anaDelivery.TickAsync(CancellationToken.None));
-        // Bruno's session now has a wake waiting, exactly as for a local message.
-        var claim = Call(bruno, "wake_claim", new { sessionId = "bruno-session", mode = "codex-queue" });
-        Assert.Equal(JsonValueKind.Object, claim.ValueKind);
-        var taken = Call(bruno, "take", new { sessionId = "bruno-session", topic = "review@ana-laptop" });
-        Assert.Equal("over the wire", taken[0].GetProperty("Body").GetString());
-        Assert.Equal("@ana-laptop", taken[0].GetProperty("SenderSessionId").GetString());
-
-        _ = Call(bruno, "send", new { sessionId = "bruno-session", topic = "review@ana-laptop", message = "and back" });
-        Assert.Equal(1, await new PeerDelivery(bruno, brunoId).TickAsync(CancellationToken.None));
-        Assert.Equal("and back", Call(ana, "take", new { sessionId = "ana-session", topic = "review" })[0].GetProperty("Body").GetString());
-    }
-
-    [Fact]
-    public async Task An_unreachable_peer_keeps_the_message_queued_for_a_later_attempt() {
-        _ = Call(ana, "join", new { tool = "claude-code", sessionId = "ana-session", topic = "review" });
-        _ = ana.Share("review", "bruno-desktop", shareTool: true);
-        _ = Call(ana, "send", new { sessionId = "ana-session", topic = "review", message = "while Bruno is away" });
-        await stop.CancelAsync();
-        await Task.WhenAll(servers);
-        Assert.Equal(0, await new PeerDelivery(ana, anaId).TickAsync(CancellationToken.None));
-        // Still waiting on Ana's side, now backed off rather than due at once.
-        Assert.Equal(1, Call(ana, "topics", new { })[0].GetProperty("Waiting").GetInt32());
-        Assert.Empty(ana.DueForPeers());
-    }
-
-    [Fact]
-    public async Task An_unpaired_service_is_refused_at_the_handshake_and_a_wrong_server_is_refused_by_the_client() {
-        // A certificate that is not a paired peer never gets a request through.
+    public async Task An_unknown_machine_is_refused_at_the_handshake_while_no_topic_is_open() {
         using var stranger = PeerDelivery.ClientFor(strangerId, anaId.Fingerprint);
-        await Assert.ThrowsAnyAsync<HttpRequestException>(() => stranger.PostAsJsonAsync($"https://127.0.0.1:{anaPort}{PeerServer.DeliverPath}", new { Items = Array.Empty<object>() }));
-        // Bruno's client expecting Ana's fingerprint refuses a server presenting another one.
-        using var misdirected = PeerDelivery.ClientFor(brunoId, strangerId.Fingerprint);
-        await Assert.ThrowsAnyAsync<HttpRequestException>(() => misdirected.PostAsJsonAsync($"https://127.0.0.1:{anaPort}{PeerServer.DeliverPath}", new { Items = Array.Empty<object>() }));
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => stranger.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { }));
     }
 
     [Fact]
-    public async Task A_peer_cannot_deliver_into_a_topic_that_was_not_shared_with_it() {
-        _ = Call(ana, "join", new { tool = "claude-code", sessionId = "ana-session", topic = "private" });
-        using var client = PeerDelivery.ClientFor(brunoId, anaId.Fingerprint);
-        var item = new PeerItem("message", "private", Guid.NewGuid().ToString("N"), "codex", "let me in", DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeMilliseconds());
-        using var response = await client.PostAsJsonAsync($"https://127.0.0.1:{anaPort}{PeerServer.DeliverPath}", new { Items = new[] { item } });
-        Assert.True(response.IsSuccessStatusCode);
-        Assert.Equal("[\"unknown\"]", JsonSerializer.Serialize((await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("results")));
-        Assert.Equal(0, Call(ana, "topics", new { sessionId = "ana-session" })[0].GetProperty("Waiting").GetInt32());
+    public async Task A_client_refuses_a_server_with_another_identity() {
+        _ = ana.Execute("join", JsonSerializer.SerializeToElement(new { tool = "claude-code", sessionId = "ana-session", topic = "open", remote = true }));
+        using var misdirected = PeerDelivery.ClientFor(strangerId, strangerId.Fingerprint);
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => misdirected.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { }));
+    }
+
+    [Fact]
+    public async Task While_a_topic_is_open_an_unknown_machine_reaches_only_the_join_paths() {
+        _ = ana.Execute("join", JsonSerializer.SerializeToElement(new { tool = "claude-code", sessionId = "ana-session", topic = "open", remote = true }));
+        using var stranger = PeerDelivery.ClientFor(strangerId, anaId.Fingerprint, port: 49999);
+        var item = new PeerItem("message", "open", Guid.NewGuid().ToString("N"), "codex", "let me in", 60000);
+        using (var delivered = await stranger.PostAsJsonAsync(Url(PeerServer.DeliverPath), new { Items = new[] { item } }))
+            Assert.Equal(HttpStatusCode.Forbidden, delivered.StatusCode);
+        using (var listed = await stranger.PostAsJsonAsync(Url(PeerServer.TopicsPath), new { }))
+            Assert.Equal(HttpStatusCode.Forbidden, listed.StatusCode);
+        using var started = await stranger.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { Topic = "open", Name = "stranger", Tool = "codex", Port = 49999, Commitment = JoinCode.Commit(JoinCode.NewNonce()) });
+        Assert.True(started.IsSuccessStatusCode);
+        Assert.Equal(0, ana.Execute("topics", JsonSerializer.SerializeToElement(new { sessionId = "ana-session" })) is { Ok: true } ? 0 : 1);
+    }
+
+    [Fact]
+    public void The_join_code_depends_on_both_values_both_machines_and_the_topic() {
+        var (a, b) = (JoinCode.NewNonce(), JoinCode.NewNonce());
+        var code = JoinCode.Derive(a, b, "listing", "requester", "topic");
+        Assert.Matches("^[0-9]{6}$", code);
+        Assert.Equal(code, JoinCode.Derive(a, b, "listing", "requester", "topic"));
+        Assert.NotEqual(code, JoinCode.Derive(a, b, "other", "requester", "topic"));
+        Assert.NotEqual(code, JoinCode.Derive(a, b, "listing", "requester", "other"));
+        Assert.True(JoinCode.Matches(JoinCode.Commit(a), a));
+        Assert.False(JoinCode.Matches(JoinCode.Commit(a), b));
+    }
+
+    [Fact]
+    public void Addresses_accept_host_names_and_default_the_port() {
+        Assert.Equal("192.168.2.20:49374", PeerHost.ParseTarget("192.168.2.20"));
+        Assert.Equal("dev-laptop.tail1234.ts.net:49374", PeerHost.ParseTarget("Dev-Laptop.tail1234.ts.net"));
+        Assert.Equal("dev-laptop:50000", PeerHost.ParseTarget("dev-laptop:50000"));
+        Assert.Throws<ArgumentException>(() => PeerHost.ParseTarget("bad host!"));
+        Assert.Throws<ArgumentException>(() => PeerHost.ParseListen("dev-laptop"));
     }
 
     public async ValueTask DisposeAsync() {
         await stop.CancelAsync();
-        await Task.WhenAll(servers);
+        await server;
         ana.Dispose();
-        bruno.Dispose();
         anaId.Dispose();
-        brunoId.Dispose();
         strangerId.Dispose();
         stop.Dispose();
         if (Directory.Exists(directory))

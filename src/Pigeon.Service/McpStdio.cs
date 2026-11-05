@@ -68,13 +68,41 @@ public static class McpStdio {
             }
         }
 
+        // Join requests and codes are shown to the person by elicitation as soon as they arrive,
+        // outside any tool call, so no model turn is spent and no tool-call timeout applies.
+        async Task PromptsAsync() {
+            while (!stopped.IsCancellationRequested) {
+                await Task.Delay(1000, stopped.Token);
+                if (!session.IsReady || !session.CanPrompt || session.ServedSessions() is not { Length: > 0 } sessions)
+                    continue;
+                try {
+                    var next = await session.BridgeAsync("prompts_next", new { bridgeId, sessions }, stopped.Token);
+                    if (!next.GetProperty("Ok").GetBoolean())
+                        continue;
+                    foreach (var prompt in next.GetProperty("Value").EnumerateArray())
+                        await WriteAsync(McpSession.PromptRequest(prompt.GetProperty("id").GetString()!, prompt.GetProperty("message").GetString()!, prompt.GetProperty("code").GetBoolean()), stopped.Token);
+                }
+                catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException) { }
+                catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { }
+            }
+        }
+
         var heartbeat = HeartbeatAsync();
+        var prompts = PromptsAsync();
         var notifications = nextNotification is null ? Task.CompletedTask : NotificationsAsync();
         try {
             while (!stopped.IsCancellationRequested) {
                 var line = await ReadLineAsync(input, stopped.Token);
                 if (line is null)
                     return;
+                if (McpSession.PromptReply(line) is { } answer) {
+                    try {
+                        _ = await session.BridgeAsync("prompt_answer", new { id = answer.Id, action = answer.Action, code = answer.Code }, stopped.Token);
+                    }
+                    catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+                    continue;
+                }
+
                 var reply = await session.HandleAsync(line, stopped.Token);
                 if (reply is not null)
                     await WriteAsync(reply, stopped.Token);
@@ -84,6 +112,11 @@ public static class McpStdio {
             stopped.Cancel();
             try {
                 await notifications;
+            }
+            catch (OperationCanceledException) when (stopped.IsCancellationRequested) { }
+
+            try {
+                await prompts;
             }
             catch (OperationCanceledException) when (stopped.IsCancellationRequested) { }
 

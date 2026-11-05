@@ -4,20 +4,23 @@ using System.Text.RegularExpressions;
 namespace Pigeon.Core;
 
 public sealed record PeerInfo(string Fingerprint, string Name, string? Address, long AddedUnixMs, long? LastContactUnixMs);
-// Role "offer": this service shares one of its topics with the peer. Role "join": the peer shared one
-// of its topics, which exists here as "<offered>@<peer name>". Offered is the offerer's topic name,
-// the key both services use for the topic on the wire.
+// A remote topic (see docs/remote-design.md). Role "offer": a local topic whose second seat belongs to
+// a machine that joined it. Role "join": a topic on another machine, which exists here as
+// "<offered>@<machine name>". Offered is the listing machine's topic name, the key both services use.
 public sealed record ShareInfo(string Topic, string PeerName, string Offered, string Role, bool ShareTool);
-// Kind "offer", "unshare" or "message"; Topic is the offered topic name.
+// Kind "message" or "leave"; Offered is the listing machine's topic name.
 public sealed record OutboxItem(string Id, string PeerFingerprint, string Kind, string Offered, string? MessageId, string? SenderTool, string? Body, long ExpiresUnixMs, int Attempts);
 
-// Topics shared with paired services on other machines (see docs/remote-design.md). A shared topic's
-// other seat is a remote seat: a reserved member ID, "peer:<fingerprint>:<offered topic>", that local
-// callers cannot use. Messages to it wait in an outbox for delivery instead of waking anyone.
+// Topics with a member on another machine. A remote topic's other seat is a remote seat: a reserved
+// member ID, "peer:<fingerprint>:<offered topic>", that local callers cannot use. Messages to it wait
+// in an outbox for delivery instead of waking anyone.
 public sealed partial class Mailbox {
     public const string RemoteSeatPrefix = "peer:";
+    // The sender of Pigeon's own notices ("codex @office-laptop joined project-1.").
+    public const string NoticeSender = "peer:notice";
     private const string RemoteTool = "remote";
     private const long MaxRetryDelayMilliseconds = 300000;
+    private const long DayMilliseconds = 86400000;
 
     public static bool IsRemoteSeat(string session) => session.StartsWith(RemoteSeatPrefix, StringComparison.Ordinal);
     private static string Seat(string fingerprint, string offered) => $"{RemoteSeatPrefix}{fingerprint}:{offered}";
@@ -32,7 +35,9 @@ public sealed partial class Mailbox {
             "CREATE TABLE IF NOT EXISTS p_peers(fingerprint TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, address TEXT, added INTEGER NOT NULL, last_contact INTEGER)",
             "CREATE TABLE IF NOT EXISTS p_shares(topic TEXT PRIMARY KEY, peer TEXT NOT NULL, offered TEXT NOT NULL, role TEXT NOT NULL, share_tool INTEGER NOT NULL, created INTEGER NOT NULL, UNIQUE(peer,offered,role))",
             "CREATE TABLE IF NOT EXISTS p_outbox(id TEXT PRIMARY KEY, peer TEXT NOT NULL, kind TEXT NOT NULL, offered TEXT NOT NULL, message TEXT, created INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL, expires INTEGER NOT NULL)",
-            "CREATE INDEX IF NOT EXISTS p_outbox_due ON p_outbox(peer,next_at)"
+            "CREATE INDEX IF NOT EXISTS p_outbox_due ON p_outbox(peer,next_at)",
+            // remote: listed to other machines while a seat is free. approval: a local joiner needs a code.
+            "CREATE TABLE IF NOT EXISTS p_topic_options(topic TEXT PRIMARY KEY, remote INTEGER NOT NULL, approval INTEGER NOT NULL)"
         })
             _ = db.Exec(sql);
     }
@@ -46,7 +51,18 @@ public sealed partial class Mailbox {
 
     private static void ValidPeerName(string name) {
         if (!PeerNamePattern().IsMatch(name))
-            throw new ArgumentException("A peer name uses lowercase letters, digits and hyphens, up to 64 characters.");
+            throw new ArgumentException("A machine name uses lowercase letters, digits and hyphens, up to 64 characters.");
+    }
+
+    // A host name such as "DESKTOP-AB12" or "Ana's MacBook.local" as a valid machine name.
+    public static string TidyName(string? name) {
+        var text = (name ?? "").Trim().ToLowerInvariant().Replace("'", "").Replace("’", "");
+        if (text.EndsWith(".local", StringComparison.Ordinal))
+            text = text[..^6];
+        var tidy = Regex.Replace(Regex.Replace(text, "[^a-z0-9]+", "-"), "^-+|-+$", "");
+        if (tidy.Length > 64)
+            tidy = tidy[..64].TrimEnd('-');
+        return tidy.Length == 0 ? "pigeon" : tidy;
     }
 
     private static PeerInfo ToPeer(string?[] r) => new(r[0]!, r[1]!, r[2], Long(r[3]), r[4] is null ? null : Long(r[4]));
@@ -60,145 +76,187 @@ public sealed partial class Mailbox {
         return db.Transaction(() => AddPeerCore(fingerprint, name, address));
     }
 
+    // A known machine keeps its name; a new one whose name is taken gets a number ("dev-laptop-2").
     private PeerInfo AddPeerCore(string fingerprint, string name, string? address) {
-        if (db.Query("SELECT 1 FROM p_peers WHERE fingerprint=?", fingerprint).Count != 0)
-            throw new InvalidOperationException("This service is already paired.");
-        if (db.Query("SELECT 1 FROM p_peers WHERE name=?", name).Count != 0)
-            throw new InvalidOperationException($"A peer named \"{name}\" already exists; choose another name.");
-        _ = db.Exec("INSERT INTO p_peers(fingerprint,name,address,added) VALUES(?,?,?,?)", fingerprint, name, address, Time());
+        if (PeerByFingerprint(fingerprint) is { } known) {
+            if (address is not null)
+                _ = db.Exec("UPDATE p_peers SET address=? WHERE fingerprint=?", address, fingerprint);
+            return PeerByFingerprint(fingerprint) ?? known;
+        }
+
+        var unique = name;
+        for (var n = 2; PeerByName(unique) is not null; n++)
+            unique = $"{(name.Length > 60 ? name[..60] : name)}-{n}";
+        _ = db.Exec("INSERT INTO p_peers(fingerprint,name,address,added) VALUES(?,?,?,?)", fingerprint, unique, address, Time());
         return ToPeer(db.Query($"SELECT {PeerColumns} FROM p_peers WHERE fingerprint=?", fingerprint)[0]);
     }
 
     public PeerInfo[] Peers() => [.. db.Query($"SELECT {PeerColumns} FROM p_peers ORDER BY name").Select(ToPeer)];
     public PeerInfo? PeerByName(string name) => db.Query($"SELECT {PeerColumns} FROM p_peers WHERE name=?", name).Select(ToPeer).FirstOrDefault();
     public PeerInfo? PeerByFingerprint(string fingerprint) => db.Query($"SELECT {PeerColumns} FROM p_peers WHERE fingerprint=?", fingerprint).Select(ToPeer).FirstOrDefault();
+    public PeerInfo? PeerByAddress(string address) => db.Query($"SELECT {PeerColumns} FROM p_peers WHERE address=?", address).Select(ToPeer).FirstOrDefault();
 
     public void SetPeerAddress(string name, string address) {
         Required(address, "address");
         if (db.Exec("UPDATE p_peers SET address=? WHERE name=?", address, name) == 0)
-            throw new InvalidOperationException($"No peer is named \"{name}\".");
+            throw new InvalidOperationException($"No machine is named \"{name}\".");
     }
 
-    // A peer that answered or connected counts as active, and so do its remote seats, which keeps
-    // its shared topics from being deleted as abandoned.
-    public void TouchPeer(string fingerprint) => db.Transaction(() => {
+    // A machine that answered or connected counts as active, and so do its remote seats, which keeps
+    // its topics from being deleted as abandoned. An authenticated contact also updates its address.
+    public void TouchPeer(string fingerprint, string? address = null) => db.Transaction(() => {
         _ = db.Exec("UPDATE p_peers SET last_contact=? WHERE fingerprint=?", Time(), fingerprint);
+        if (address is not null)
+            _ = db.Exec("UPDATE p_peers SET address=? WHERE fingerprint=?", address, fingerprint);
         return db.Exec("UPDATE p_sessions SET last_seen=? WHERE session LIKE ?", Time(), Seat(fingerprint, "") + "%");
     });
 
-    // Ends every share with the peer at once: topics it shared here are deleted, and topics shared
-    // with it lose its seat. Nothing more is sent to it.
+    // Ends every topic with the machine at once and forgets it. Nothing more is sent to it.
     public bool RemovePeer(string name) => db.Transaction(() => {
         var peer = PeerByName(name);
         if (peer is null)
             return false;
         foreach (var share in SharesWith(peer.Fingerprint))
-            EndShareCore(share, peer.Fingerprint);
+            EndShareCore(share, peer.Fingerprint, $"{name} was removed, so {share.Topic} no longer reaches it.");
         _ = db.Exec("DELETE FROM p_outbox WHERE peer=?", peer.Fingerprint);
         _ = db.Exec("DELETE FROM p_peers WHERE fingerprint=?", peer.Fingerprint);
         return true;
     });
 
     private ShareInfo ToShare(string?[] r) => new(r[0]!, PeerByFingerprint(r[1]!)?.Name ?? r[1]!, r[2]!, r[3]!, r[4] == "1");
+    private const string ShareColumns = "topic,peer,offered,role,share_tool";
     private ShareInfo[] SharesWith(string fingerprint)
-        => [.. db.Query("SELECT topic,peer,offered,role,share_tool FROM p_shares WHERE peer=?", fingerprint).Select(ToShare)];
-    public ShareInfo[] Shares() => [.. db.Query("SELECT topic,peer,offered,role,share_tool FROM p_shares ORDER BY topic").Select(ToShare)];
+        => [.. db.Query($"SELECT {ShareColumns} FROM p_shares WHERE peer=?", fingerprint).Select(ToShare)];
+    public ShareInfo[] Shares() => [.. db.Query($"SELECT {ShareColumns} FROM p_shares ORDER BY topic").Select(ToShare)];
+    private (ShareInfo Share, string Fingerprint)? ShareOf(string topic)
+        => db.Query($"SELECT {ShareColumns} FROM p_shares WHERE topic=?", topic).Select(r => ((ShareInfo, string)?)(ToShare(r), r[1]!)).FirstOrDefault();
 
-    // Offers a local topic to a peer, whose seat becomes the topic's second member. The local member's
-    // tool name goes with the offer unless shareTool is false; its session ID never does.
-    public ShareInfo Share(string topic, string peerName, bool shareTool = true) {
-        Required(topic, "topic");
+    // Options a session sets when it opens a topic: listed to other machines, or a code for local joiners.
+    public (bool Remote, bool Approval) TopicOptions(string topic) {
+        var row = db.Query("SELECT remote,approval FROM p_topic_options WHERE topic=?", topic).FirstOrDefault();
+        return row is null ? (false, false) : (row[0] == "1", row[1] == "1");
+    }
+
+    private void SetTopicOptions(string topic, bool remote, bool approval) {
+        var (wasRemote, hadApproval) = TopicOptions(topic);
+        if (!remote && !approval && !wasRemote && !hadApproval)
+            return;
+        _ = db.Exec("INSERT OR REPLACE INTO p_topic_options(topic,remote,approval) VALUES(?,?,?)", topic, remote || wasRemote ? "1" : "0", approval || hadApproval ? "1" : "0");
+    }
+
+    // The topics another machine may ask to join: opened with remote, with one local member and a free seat.
+    public string[] ListedTopics() => ListedTopicsCore();
+
+    private string[] ListedTopicsCore() => [.. db.Query("SELECT o.topic FROM p_topic_options o WHERE o.remote=1 AND instr(o.topic,'@')=0 AND NOT EXISTS (SELECT 1 FROM p_shares s WHERE s.topic=o.topic) " +
+        "AND (SELECT COUNT(*) FROM p_members m WHERE m.topic=o.topic)=1 ORDER BY o.topic").Select(r => r[0]!)];
+
+    public bool IsListed(string topic) => ListedTopicsCore().Contains(topic, StringComparer.Ordinal);
+
+    // The local member of a topic, who answers requests to join it.
+    public Member? LocalMemberOf(string topic) => MembersOf(topic).FirstOrDefault(m => !IsRemoteSeat(m.SessionId));
+
+    // The listing side allowed a join: the machine's seat becomes the topic's second member.
+    public ShareInfo LinkTopic(string fingerprint, string offered, string? senderTool) {
+        Required(offered, "topic");
         return db.Transaction(() => {
             Sweep();
-            var peer = PeerByName(peerName) ?? throw new InvalidOperationException($"No peer is named \"{peerName}\".");
-            if (topic.Contains('@'))
-                throw new InvalidOperationException("A topic shared by a peer cannot be shared again.");
-            if (db.Query("SELECT 1 FROM p_topics WHERE topic=?", topic).Count == 0)
-                throw new InvalidOperationException($"Topic \"{topic}\" does not exist; join it first.");
-            if (db.Query("SELECT 1 FROM p_shares WHERE topic=?", topic).Count != 0)
-                throw new InvalidOperationException($"Topic \"{topic}\" is already shared.");
-            var members = MembersOf(topic);
-            if (members.Length >= 2)
-                throw new InvalidOperationException($"Topic \"{topic}\" already has two members; share a topic with one.");
-            var seat = Seat(peer.Fingerprint, topic);
-            _ = db.Exec("INSERT OR REPLACE INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", seat, RemoteTool, Time());
-            _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", topic, seat, Time());
-            _ = db.Exec("INSERT INTO p_shares(topic,peer,offered,role,share_tool,created) VALUES(?,?,?,'offer',?,?)", topic, peer.Fingerprint, topic, shareTool ? "1" : "0", Time());
-            Enqueue(peer.Fingerprint, "offer", topic, null, checked(now() + 86400000));
-            // Messages already waiting for a second member go to the peer.
-            foreach (var row in db.Query("SELECT id,expires FROM p_messages WHERE topic=? AND recipient IS NULL AND status='queued'", topic)) {
+            var peer = PeerByFingerprint(fingerprint) ?? throw new InvalidOperationException("Unknown machine.");
+            if (!IsListed(offered))
+                throw new InvalidOperationException($"Topic \"{offered}\" is no longer open to other machines.");
+            var seat = Seat(fingerprint, offered);
+            var tool = SafeTool(senderTool);
+            _ = db.Exec("INSERT OR REPLACE INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", seat, tool, Time());
+            _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", offered, seat, Time());
+            _ = db.Exec("INSERT INTO p_shares(topic,peer,offered,role,share_tool,created) VALUES(?,?,?,'offer',1,?)", offered, fingerprint, offered, Time());
+            // Messages already waiting for a second member go to the machine.
+            foreach (var row in db.Query("SELECT id,expires FROM p_messages WHERE topic=? AND recipient IS NULL AND status='queued' AND sender<>?", offered, NoticeSender)) {
                 _ = db.Exec("UPDATE p_messages SET recipient=? WHERE id=?", seat, row[0]);
-                Enqueue(peer.Fingerprint, "message", topic, row[0], Long(row[1]));
+                Enqueue(fingerprint, "message", offered, row[0], Long(row[1]));
             }
 
-            return new ShareInfo(topic, peer.Name, topic, "offer", shareTool);
+            if (LocalMemberOf(offered) is { } local)
+                NoticeCore(local.SessionId, offered, $"{tool} @{peer.Name} joined {offered} from another machine.");
+            return new ShareInfo(offered, peer.Name, offered, "offer", true);
         });
     }
 
-    // Stops sharing a topic this service offered; the peer is told, and its copy of the topic ends.
-    public bool Unshare(string topic) => db.Transaction(() => {
-        var row = db.Query("SELECT topic,peer,offered,role,share_tool FROM p_shares WHERE topic=? AND role='offer'", topic).FirstOrDefault();
-        if (row is null)
-            return false;
-        var share = ToShare(row);
-        EndShareCore(share, row[1]!);
-        Enqueue(row[1]!, "unshare", share.Offered, null, checked(now() + 86400000));
-        return true;
-    });
-
-    private void EndShareCore(ShareInfo share, string fingerprint) {
-        _ = db.Exec("DELETE FROM p_outbox WHERE peer=? AND offered=?", fingerprint, share.Offered);
-        _ = db.Exec("DELETE FROM p_shares WHERE topic=?", share.Topic);
-        if (share.Role == "join") {
-            DeleteTopicCore(share.Topic);
-        }
-        else {
-            var seat = Seat(fingerprint, share.Offered);
-            _ = db.Exec("DELETE FROM p_messages WHERE topic=? AND recipient=? AND status IN ('queued','leased')", share.Topic, seat);
-            _ = db.Exec("DELETE FROM p_members WHERE topic=? AND session=?", share.Topic, seat);
-            if (db.Query("SELECT 1 FROM p_members WHERE topic=?", share.Topic).Count == 0)
-                DeleteTopicCore(share.Topic);
-        }
-
-        _ = db.Exec("DELETE FROM p_sessions WHERE session=? AND NOT EXISTS (SELECT 1 FROM p_members WHERE session=?)", Seat(fingerprint, share.Offered), Seat(fingerprint, share.Offered));
-    }
-
-    // A paired peer offered one of its topics; it appears here as "<offered>@<peer name>", which a
-    // local session can then join. Offering again changes nothing.
-    public ShareInfo AcceptOffer(string fingerprint, string offered, string? senderTool) {
+    // The requesting side was allowed in: the topic appears here as "<offered>@<machine>", with the
+    // requesting session already in it.
+    public ShareInfo LinkJoin(string fingerprint, string offered, string? listingTool, string session, string toolName) {
         Required(offered, "topic");
+        Required(session, "session ID");
+        var tool = CanonicalTool(toolName);
         return db.Transaction(() => {
-            var peer = PeerByFingerprint(fingerprint) ?? throw new InvalidOperationException("Unknown peer.");
-            if (offered.Contains('@'))
-                throw new ArgumentException("Invalid topic");
-            var existing = db.Query("SELECT topic,peer,offered,role,share_tool FROM p_shares WHERE peer=? AND offered=? AND role='join'", fingerprint, offered).FirstOrDefault();
-            if (existing is not null)
-                return ToShare(existing);
+            var peer = PeerByFingerprint(fingerprint) ?? throw new InvalidOperationException("Unknown machine.");
             var topic = offered + "@" + peer.Name;
             if (db.Query("SELECT 1 FROM p_topics WHERE topic=?", topic).Count != 0)
                 throw new InvalidOperationException($"Topic \"{topic}\" already exists here.");
             var seat = Seat(fingerprint, offered);
-            var tool = ToolName(senderTool) is { Length: > 0 and <= 64 } named && !named.Any(char.IsControl) ? named : RemoteTool;
-            _ = db.Exec("INSERT OR REPLACE INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", seat, tool, Time());
+            var remoteTool = SafeTool(listingTool);
+            if (ToolOf(session) is null)
+                _ = db.Exec("INSERT INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", session, tool, Time());
+            _ = db.Exec("INSERT OR REPLACE INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", seat, remoteTool, Time());
             _ = db.Exec("INSERT INTO p_topics(topic,created) VALUES(?,?)", topic, Time());
             _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", topic, seat, Time());
+            _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", topic, session, Time());
             _ = db.Exec("INSERT INTO p_shares(topic,peer,offered,role,share_tool,created) VALUES(?,?,?,'join',1,?)", topic, fingerprint, offered, Time());
+            NoticeCore(session, topic, $"You joined {topic}, with {remoteTool} @{peer.Name} on the other machine. Send on {topic}.");
             return new ShareInfo(topic, peer.Name, offered, "join", true);
         });
     }
 
-    // The peer stopped sharing one of its topics; the local copy ends.
-    public bool ReceiveUnshare(string fingerprint, string offered) => db.Transaction(() => {
-        var row = db.Query("SELECT topic,peer,offered,role,share_tool FROM p_shares WHERE peer=? AND offered=? AND role='join'", fingerprint, offered).FirstOrDefault();
+    // A session that asked to join a topic is known before it is in one, so Pigeon's notices reach it.
+    public void EnsureSession(string toolName, string session) {
+        Required(session, "session ID");
+        var tool = CanonicalTool(toolName);
+        var known = ToolOf(session);
+        if (known is not null && known != tool)
+            throw new InvalidOperationException($"Session {session} already joined using {known}.");
+        _ = known is null
+            ? db.Exec("INSERT INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", session, tool, Time())
+            : db.Exec("UPDATE p_sessions SET last_seen=? WHERE session=?", Time(), session);
+    }
+
+    public bool IsMember(string session, string topic) => db.Query("SELECT 1 FROM p_members WHERE topic=? AND session=?", topic, session).Count != 0;
+    public int MemberCount(string topic) => MembersOf(topic).Length;
+
+    private static string SafeTool(string? tool) => ToolName(tool) is { Length: > 0 and <= 64 } named && !named.Any(char.IsControl) ? named : RemoteTool;
+
+    // Ends a remote topic on this side. A copy of another machine's topic is deleted; a local topic
+    // loses the machine's seat, keeps its local member, and is listed again if it was open.
+    private void EndShareCore(ShareInfo share, string fingerprint, string? notice) {
+        _ = db.Exec("DELETE FROM p_outbox WHERE peer=? AND offered=?", fingerprint, share.Offered);
+        _ = db.Exec("DELETE FROM p_shares WHERE topic=?", share.Topic);
+        var seat = Seat(fingerprint, share.Offered);
+        if (share.Role == "join") {
+            DeleteTopicCore(share.Topic);
+        }
+        else {
+            _ = db.Exec("DELETE FROM p_messages WHERE topic=? AND (recipient=? OR sender=?) AND status IN ('queued','leased')", share.Topic, seat, seat);
+            _ = db.Exec("DELETE FROM p_members WHERE topic=? AND session=?", share.Topic, seat);
+            if (LocalMemberOf(share.Topic) is { } local && notice is not null)
+                NoticeCore(local.SessionId, share.Topic, notice);
+            else if (db.Query("SELECT 1 FROM p_members WHERE topic=?", share.Topic).Count == 0)
+                DeleteTopicCore(share.Topic);
+        }
+
+        _ = db.Exec("DELETE FROM p_sessions WHERE session=? AND NOT EXISTS (SELECT 1 FROM p_members WHERE session=?)", seat, seat);
+    }
+
+    // The other machine's member left: the topic ends on this side.
+    public bool ReceiveLeave(string fingerprint, string offered) => db.Transaction(() => {
+        var row = db.Query($"SELECT {ShareColumns} FROM p_shares WHERE peer=? AND offered=?", fingerprint, offered).FirstOrDefault();
         if (row is null)
             return false;
-        EndShareCore(ToShare(row), fingerprint);
+        var share = ToShare(row);
+        EndShareCore(share, fingerprint, $"@{share.PeerName} left {share.Topic}. The topic is open to other machines again.");
         return true;
     });
 
-    // A message from the peer's member of a shared topic. Returns false when no such share exists
-    // (the peer is told), true when it is stored or was stored before (the same ID twice is a no-op).
-    public bool ReceiveFromPeer(string fingerprint, string offered, string messageId, string? senderTool, string body, long expires) {
+    // A message from the other machine's member of a remote topic. Returns false when no such topic
+    // exists (the sender is told), true when it is stored or was stored before (the same ID is a no-op).
+    // lifetime is the time left before the message expires, so clocks may differ between machines.
+    public bool ReceiveFromPeer(string fingerprint, string offered, string messageId, string? senderTool, string body, long lifetime) {
         Required(offered, "topic");
         Required(messageId, "message ID", 64);
         Required(body, "message", 16384);
@@ -210,20 +268,35 @@ public sealed partial class Mailbox {
             var topic = share[0]!;
             if (db.Query("SELECT 1 FROM p_messages WHERE id=?", messageId).Count != 0)
                 return true;
-            if (expires <= now())
+            if (lifetime <= 0)
                 return true;
-            var sent = int.Parse(db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND created>?", topic, Number(checked(now() - 3600000)))[0][0]!, CultureInfo.InvariantCulture);
+            var sent = int.Parse(db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND created>? AND sender<>?", topic, Number(checked(now() - 3600000)), NoticeSender)[0][0]!, CultureInfo.InvariantCulture);
             if (sent >= maxMessagesPerHour)
                 throw new InvalidOperationException($"Topic \"{offered}\" reached its limit of {maxMessagesPerHour} messages per hour; try again later.");
             var seat = Seat(fingerprint, offered);
             if (ToolName(senderTool) is { Length: > 0 and <= 64 } tool && !tool.Any(char.IsControl))
                 _ = db.Exec("UPDATE p_sessions SET tool=? WHERE session=?", tool, seat);
-            var local = MembersOf(topic).FirstOrDefault(m => !IsRemoteSeat(m.SessionId));
+            var local = LocalMemberOf(topic);
+            var expires = checked(now() + Math.Min(lifetime, DayMilliseconds));
             _ = db.Exec("INSERT INTO p_messages(id,topic,sender,recipient,body,idem,created,expires,status) VALUES(?,?,?,?,?,?,?,?,'queued')", messageId, topic, seat, local?.SessionId, body, "peer:" + messageId, Time(), Number(expires));
             if (local is not null)
                 WakeForNewMessage(local.SessionId);
             return true;
         });
+    }
+
+    // A message from Pigeon itself to one session, delivered and woken like any other.
+    public void Notice(string session, string topic, string text) => db.Transaction(() => {
+        NoticeCore(session, topic, text);
+        return 0;
+    });
+
+    private void NoticeCore(string session, string topic, string text) {
+        if (ToolOf(NoticeSender) is null)
+            _ = db.Exec("INSERT INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", NoticeSender, "pigeon", Time());
+        var id = Guid.NewGuid().ToString("N");
+        _ = db.Exec("INSERT INTO p_messages(id,topic,sender,recipient,body,idem,created,expires,status) VALUES(?,?,?,?,?,?,?,?,'queued')", id, topic, NoticeSender, session, text, id, Time(), Number(checked(now() + DayMilliseconds)));
+        WakeForNewMessage(session);
     }
 
     private void Enqueue(string fingerprint, string kind, string offered, string? messageId, long expires)
@@ -236,22 +309,29 @@ public sealed partial class Mailbox {
             Enqueue(share[0]!, "message", share[1]!, messageId, expires);
     }
 
-    // Items ready to send to one peer, oldest first. Expired ones are dropped, and their messages expire.
+    // Called from Leave: a local member leaving a remote topic ends it on both sides.
+    private bool LeaveRemote(string session, string topic) {
+        var found = ShareOf(topic);
+        if (found is null || IsRemoteSeat(session))
+            return false;
+        var (share, fingerprint) = found.Value;
+        EndShareCore(share, fingerprint, null);
+        Enqueue(fingerprint, "leave", share.Offered, null, checked(now() + DayMilliseconds));
+        return true;
+    }
+
+    // Items ready to send to one machine, oldest first. Expired ones are dropped, and their messages expire.
     public OutboxItem[] DueOutbox(string fingerprint, int max = 50) => db.Transaction(() => {
         Sweep();
         _ = db.Exec("DELETE FROM p_outbox WHERE expires<=?", Time());
         return db.Query(
-            "SELECT o.id,o.peer,o.kind,o.offered,o.message,s.tool,m.body,o.expires,o.attempts,sh.share_tool FROM p_outbox o " +
+            "SELECT o.id,o.peer,o.kind,o.offered,o.message,s.tool,m.body,o.expires,o.attempts FROM p_outbox o " +
             "LEFT JOIN p_messages m ON m.id=o.message LEFT JOIN p_sessions s ON s.session=m.sender " +
-            "LEFT JOIN p_shares sh ON sh.peer=o.peer AND sh.offered=o.offered " +
             "WHERE o.peer=? AND o.next_at<=? AND (o.message IS NULL OR m.status='queued') ORDER BY o.created,o.rowid LIMIT ?", fingerprint, Time(), Number(max))
-            .Select(r => new OutboxItem(r[0]!, r[1]!, r[2]!, r[3]!, r[4], r[9] == "0" ? null : r[5] ?? LocalToolOf(r[3]!), r[6], Long(r[7]), int.Parse(r[8]!, CultureInfo.InvariantCulture))).ToArray();
+            .Select(r => new OutboxItem(r[0]!, r[1]!, r[2]!, r[3]!, r[4], r[5], r[6], Long(r[7]), int.Parse(r[8]!, CultureInfo.InvariantCulture))).ToArray();
     });
 
-    // The tool name sent with an offer: the topic's local member, if it has one.
-    private string? LocalToolOf(string topic) => MembersOf(topic).FirstOrDefault(m => !IsRemoteSeat(m.SessionId))?.Tool;
-
-    // The peer acknowledged the item: a delivered message is done on this side.
+    // The machine acknowledged the item: a delivered message is done on this side.
     public void OutboxDelivered(string id) => db.Transaction(() => {
         var message = db.Query("SELECT message FROM p_outbox WHERE id=?", id).FirstOrDefault()?[0];
         if (message is not null)
@@ -259,11 +339,11 @@ public sealed partial class Mailbox {
         return db.Exec("DELETE FROM p_outbox WHERE id=?", id);
     });
 
-    // Delivery failed or the peer was unreachable: retry later, backing off up to five minutes.
+    // Delivery failed or the machine was unreachable: retry later, backing off up to five minutes.
     public void OutboxFailed(string id) => db.Exec(
         "UPDATE p_outbox SET attempts=attempts+1,next_at=?+MIN(?,5000*(1<<MIN(attempts,10))) WHERE id=?", Time(), Number(MaxRetryDelayMilliseconds), id);
 
-    // The peer does not know the share: the item can never be delivered.
+    // The machine does not know the topic: the item can never be delivered.
     public void OutboxRejected(string id) => db.Transaction(() => {
         var message = db.Query("SELECT message FROM p_outbox WHERE id=?", id).FirstOrDefault()?[0];
         if (message is not null)

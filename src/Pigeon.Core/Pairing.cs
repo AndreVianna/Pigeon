@@ -1,14 +1,9 @@
-using System.Globalization;
-
 namespace Pigeon.Core;
 
-public sealed record PendingPeer(string Fingerprint, string Name, string? Address, string Check, long ExpiresUnixMs);
-
-// Pairings an invitation accepted that wait for the inviter to confirm the check code
-// (`pigeon peer confirm`), and this service's own peer settings.
+// This service's own settings for other machines: its name and where its peer listener runs.
 public sealed partial class Mailbox {
-    private void CreatePairingSchema()
-        => db.Exec("CREATE TABLE IF NOT EXISTS p_pending_peers(fingerprint TEXT PRIMARY KEY, name TEXT NOT NULL, address TEXT, check_code TEXT NOT NULL, expires INTEGER NOT NULL)");
+    // The first alpha.3 design kept pairings waiting for a check code here; joins with a code replaced it.
+    private void CreatePairingSchema() => db.Exec("DROP TABLE IF EXISTS p_pending_peers");
 
     public string? Setting(string key) => db.Query("SELECT value FROM pigeon_metadata WHERE key=?", "peer." + key).FirstOrDefault()?[0];
 
@@ -18,35 +13,4 @@ public sealed partial class Mailbox {
         else
             _ = db.Exec("INSERT OR REPLACE INTO pigeon_metadata(key,value) VALUES(?,?)", "peer." + key, value);
     }
-
-    public void AddPendingPeer(string fingerprint, string name, string? address, string check, long expires) {
-        ValidFingerprint(fingerprint);
-        ValidPeerName(name);
-        _ = db.Exec("INSERT OR REPLACE INTO p_pending_peers(fingerprint,name,address,check_code,expires) VALUES(?,?,?,?,?)", fingerprint, name, address, check, Number(expires));
-    }
-
-    public PendingPeer[] PendingPeers() => db.Transaction(PendingPeersCore);
-
-    private PendingPeer[] PendingPeersCore() {
-        _ = db.Exec("DELETE FROM p_pending_peers WHERE expires<=?", Time());
-        return [.. db.Query("SELECT fingerprint,name,address,check_code,expires FROM p_pending_peers ORDER BY expires")
-            .Select(r => new PendingPeer(r[0]!, r[1]!, r[2], r[3]!, long.Parse(r[4]!, CultureInfo.InvariantCulture)))];
-    }
-
-    // The inviter saw the same check code as the acceptor: the pending peer becomes a paired peer,
-    // named as the acceptor proposed unless a name is given here.
-    public PeerInfo ConfirmPendingPeer(string check, string? name) => db.Transaction(() => {
-        var waiting = PendingPeersCore();
-        // A mistyped code leaves the pairing waiting, so the person can try again; only an empty
-        // list calls for a new invitation.
-        var pending = waiting.FirstOrDefault(p => p.Check == check)
-            ?? throw new InvalidOperationException(waiting.Length == 0
-                ? "No pairing is waiting here: nobody has accepted an invitation, or the pairing expired. Send a new invitation."
-                : $"That check code does not match the pairing waiting here for {string.Join(", ", waiting.Select(p => $"\"{p.Name}\""))}. Check the code with the person who accepted and try again.");
-        if (name is not null)
-            ValidPeerName(name);
-        var peer = AddPeerCore(pending.Fingerprint, name ?? pending.Name, pending.Address);
-        _ = db.Exec("DELETE FROM p_pending_peers WHERE fingerprint=?", pending.Fingerprint);
-        return peer;
-    });
 }

@@ -40,7 +40,7 @@ public sealed class LocalHttpServer(string port, Broker broker, Action? stopRequ
             try {
                 var request = await context.Request.ReadFromJsonAsync<BrokerRequest>(cancellationToken: context.RequestAborted);
                 var stop = request?.Operation == "service_stop" && stopRequested is not null;
-                var peerOperation = request?.Operation is { } op && (op.StartsWith("peer_", StringComparison.Ordinal) || op is "topic_share" or "topic_unshare");
+                var peerOperation = request?.Operation is { } op && op.StartsWith("peer_", StringComparison.Ordinal);
                 var arguments = request is null || request.Arguments.ValueKind == JsonValueKind.Undefined ? JsonDocument.Parse("{}").RootElement : request.Arguments;
                 var result = request is null || request.Operation is null
                     ? new BrokerResult(false, null, "invalid request")
@@ -76,7 +76,7 @@ public static class PigeonVersion {
 
 public static class LocalHttpClient {
     private static readonly HttpClient Client = new(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(3) };
-    // For requests the service answers only after reaching another machine (pairing).
+    // For requests the service answers only after reaching another machine.
     private static readonly HttpClient SlowClient = new(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(40) };
     public static Task<JsonElement> ExecuteAsync(string port, string operation, object args, CancellationToken cancellation = default) => ExecuteAsync(port, operation, args, slow: false, cancellation);
 

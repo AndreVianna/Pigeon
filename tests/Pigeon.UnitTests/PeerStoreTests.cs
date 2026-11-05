@@ -4,8 +4,9 @@ using Xunit;
 
 namespace Pigeon.UnitTests;
 
-// Two mailboxes stand in for Ana's and Bruno's services. Relay() does what the peer link will do:
-// deliver each due outbox item to the other side and report the outcome back.
+// Two mailboxes stand in for Ana's and Bruno's services. Relay() does what the peer link does:
+// deliver each due outbox item to the other side and report the outcome back. Link() does what an
+// allowed join does on each side.
 public sealed class PeerStoreTests : IDisposable {
     private const string AnaPrint = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     private const string BrunoPrint = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -21,14 +22,12 @@ public sealed class PeerStoreTests : IDisposable {
         _ = bruno.AddPeer(AnaPrint, "ana-laptop", "10.0.0.1:49374");
     }
 
-    // Delivers every due item from one side to the other; returns how many were delivered.
-    private static int Relay(Mailbox from, string fromPrint, Mailbox to, string toPrint) {
+    private int Relay(Mailbox from, string fromPrint, Mailbox to, string toPrint) {
         var delivered = 0;
         foreach (var item in from.DueOutbox(toPrint)) {
             var known = item.Kind switch {
-                "offer" => to.AcceptOffer(fromPrint, item.Offered, item.SenderTool) is not null,
-                "unshare" => to.ReceiveUnshare(fromPrint, item.Offered) || true,
-                _ => to.ReceiveFromPeer(fromPrint, item.Offered, item.MessageId!, item.SenderTool, item.Body!, item.ExpiresUnixMs)
+                "leave" => to.ReceiveLeave(fromPrint, item.Offered) || true,
+                _ => to.ReceiveFromPeer(fromPrint, item.Offered, item.MessageId!, item.SenderTool, item.Body!, item.ExpiresUnixMs - now)
             };
             if (known) {
                 from.OutboxDelivered(item.Id);
@@ -43,121 +42,113 @@ public sealed class PeerStoreTests : IDisposable {
 
     private long Expires => now + 86400000;
 
-    [Fact]
-    public void A_shared_topic_carries_messages_both_ways_and_each_side_sees_the_other_as_the_peer() {
-        _ = ana.Join("claude-code", "ana-session", "review");
-        _ = ana.Share("review", "bruno-desktop");
-        Assert.Equal(1, Relay(ana, AnaPrint, bruno, BrunoPrint));
-        var joined = bruno.Join("codex", "bruno-session", "review@ana-laptop");
-        // Bruno sees Ana's member as the peer with her tool name, never her session ID.
-        Assert.Contains(joined.Members, m => m.SessionId == "@ana-laptop" && m.Tool == "claude-code");
+    // Ana opens "review" to other machines and Bruno's session is allowed in.
+    private void Link() {
+        _ = ana.Join("claude-code", "ana-session", "review", remote: true);
+        Assert.Equal(["review"], ana.ListedTopics());
+        _ = ana.LinkTopic(BrunoPrint, "review", "codex");
+        _ = bruno.LinkJoin(AnaPrint, "review", "claude-code", "bruno-session", "codex");
+    }
 
-        var sent = ana.Send("ana-session", "review", "hello from Ana", "k1", Expires);
-        Assert.Equal("@bruno-desktop", sent.Recipient!.SessionId);
+    private static string[] Bodies(Mailbox box, string session, string topic) => [.. box.Take(session, topic).Select(d => d.Body)];
+
+    [Fact]
+    public void A_remote_topic_carries_messages_both_ways_and_each_side_sees_the_other_as_the_machine() {
+        Link();
+        Assert.Empty(ana.ListedTopics());
+        // Both sides were told who is on the other machine.
+        Assert.Contains(ana.Take("ana-session", "review"), d => d.SenderTool == "pigeon" && d.Body.Contains("codex @bruno-desktop joined review"));
+        Assert.Contains(bruno.Take("bruno-session", "review@ana-laptop"), d => d.Body.Contains("You joined review@ana-laptop"));
+
+        _ = ana.Send("ana-session", "review", "hello from Ana", "k1", Expires);
         Assert.Equal(1, Relay(ana, AnaPrint, bruno, BrunoPrint));
         var received = Assert.Single(bruno.Take("bruno-session", "review@ana-laptop"));
-        Assert.Equal(("hello from Ana", "@ana-laptop", "claude-code"), (received.Body, received.SenderSessionId, received.SenderTool));
-        Assert.Equal(sent.MessageId, received.Id);
+        Assert.Equal(("claude-code", "@ana-laptop", "hello from Ana"), (received.SenderTool, received.SenderSessionId, received.Body));
 
         _ = bruno.Send("bruno-session", "review@ana-laptop", "hi Ana", "k2", Expires);
         Assert.Equal(1, Relay(bruno, BrunoPrint, ana, AnaPrint));
-        var reply = Assert.Single(ana.Take("ana-session", "review"));
-        Assert.Equal(("hi Ana", "@bruno-desktop", "codex"), (reply.Body, reply.SenderSessionId, reply.SenderTool));
-        // A delivered message is done on the sending side; nothing is left to send.
+        var back = Assert.Single(ana.Take("ana-session", "review"));
+        Assert.Equal(("codex", "@bruno-desktop", "hi Ana"), (back.SenderTool, back.SenderSessionId, back.Body));
         Assert.Empty(ana.DueOutbox(BrunoPrint));
-        Assert.Equal(0, ana.OutboxCount(BrunoPrint));
     }
 
     [Fact]
-    public void A_message_waits_in_the_outbox_while_the_peer_is_unreachable_and_is_stored_once()  {
-        _ = ana.Join("claude-code", "ana-session", "review");
-        _ = ana.Share("review", "bruno-desktop");
-        _ = Relay(ana, AnaPrint, bruno, BrunoPrint);
-        _ = ana.Send("ana-session", "review", "while away", "k1", Expires);
+    public void A_message_waits_in_the_outbox_while_the_machine_is_unreachable_and_is_stored_once() {
+        Link();
+        _ = ana.Send("ana-session", "review", "while Bruno is away", "k1", Expires);
         var item = Assert.Single(ana.DueOutbox(BrunoPrint));
         ana.OutboxFailed(item.Id);
         Assert.Empty(ana.DueOutbox(BrunoPrint));
-        now += 5000;
+        now += 10000;
         item = Assert.Single(ana.DueOutbox(BrunoPrint));
-        // The first attempt reached Bruno but its acknowledgment was lost; the retry is a no-op there.
-        Assert.True(bruno.ReceiveFromPeer(AnaPrint, item.Offered, item.MessageId!, item.SenderTool, item.Body!, item.ExpiresUnixMs));
-        Assert.Equal(1, Relay(ana, AnaPrint, bruno, BrunoPrint));
-        // Nobody on Bruno's side joined yet: the message waits for whoever joins.
-        var joined = bruno.Join("codex", "bruno-session", "review@ana-laptop");
-        Assert.Equal(1, joined.Waiting);
-        Assert.Single(bruno.Take("bruno-session", "review@ana-laptop"));
+        // The same message delivered twice is stored once.
+        Assert.True(bruno.ReceiveFromPeer(AnaPrint, item.Offered, item.MessageId!, item.SenderTool, item.Body!, 60000));
+        Assert.True(bruno.ReceiveFromPeer(AnaPrint, item.Offered, item.MessageId!, item.SenderTool, item.Body!, 60000));
+        Assert.Equal(["while Bruno is away"], Bodies(bruno, "bruno-session", "review@ana-laptop").Where(b => !b.StartsWith("You joined", StringComparison.Ordinal)));
     }
 
     [Fact]
-    public void Nothing_is_reachable_until_a_person_shares_it() {
-        // An unshared name, and a name that only looks shared, cannot be joined or created.
-        Assert.Throws<InvalidOperationException>(() => bruno.Join("codex", "bruno-session", "secret@ana-laptop"));
-        Assert.Throws<InvalidOperationException>(() => ana.Join("codex", "x", "made-up@bruno-desktop"));
-        // A peer cannot deliver into a topic that was not shared with it.
+    public void Only_topics_opened_to_other_machines_with_a_free_seat_are_listed_or_reachable() {
         _ = ana.Join("claude-code", "ana-session", "private");
-        Assert.False(ana.ReceiveFromPeer(BrunoPrint, "private", "m1", "codex", "let me in", Expires));
-        Assert.Equal(0, ana.Topics("ana-session").Single().Waiting);
-        // A local caller cannot pose as a remote seat.
-        Assert.Throws<ArgumentException>(() => ana.Join("codex", "peer:" + BrunoPrint + ":private", "private"));
-        // Unknown peers are refused.
-        Assert.Throws<InvalidOperationException>(() => ana.AcceptOffer(new string('c', 64), "x", null));
+        _ = ana.Join("claude-code", "ana-session", "open", remote: true);
+        _ = ana.Join("claude-code", "ana-2", "full", remote: true);
+        _ = ana.Join("codex", "ana-3", "full");
+        Assert.Equal(["open"], ana.ListedTopics());
+        Assert.Throws<InvalidOperationException>(() => ana.LinkTopic(BrunoPrint, "private", "codex"));
+        Assert.Throws<InvalidOperationException>(() => ana.LinkTopic(BrunoPrint, "full", "codex"));
+        Assert.False(ana.ReceiveFromPeer(BrunoPrint, "private", "m1", "codex", "let me in", 60000));
+        Assert.Throws<InvalidOperationException>(() => ana.LinkTopic(new string('c', 64), "open", null));
+        // Only the session that opens a topic decides that it is open to other machines.
+        Assert.Throws<InvalidOperationException>(() => ana.Join("codex", "late", "private", remote: true));
+        Assert.Throws<InvalidOperationException>(() => ana.Join("codex", "late", "x@bruno-desktop"));
     }
 
     [Fact]
-    public void Sharing_is_refused_for_full_topics_shared_topics_and_unknown_peers() {
-        _ = ana.Join("claude-code", "a1", "pair");
-        _ = ana.Join("codex", "a2", "pair");
-        Assert.Throws<InvalidOperationException>(() => ana.Share("pair", "bruno-desktop"));
-        _ = ana.Join("claude-code", "a1", "review");
-        _ = ana.Share("review", "bruno-desktop");
-        Assert.Throws<InvalidOperationException>(() => ana.Share("review", "bruno-desktop"));
-        Assert.Throws<InvalidOperationException>(() => ana.Share("review", "nobody"));
-        Assert.Throws<InvalidOperationException>(() => ana.Share("missing", "bruno-desktop"));
-        // The peer's seat fills the topic, so a second local session is refused.
-        Assert.Throws<TopicFullException>(() => ana.Join("codex", "a3", "review"));
-    }
-
-    [Fact]
-    public void The_tool_name_is_withheld_when_the_sharing_side_turns_it_off() {
-        _ = ana.Join("claude-code", "ana-session", "review");
-        _ = ana.Share("review", "bruno-desktop", shareTool: false);
-        _ = Relay(ana, AnaPrint, bruno, BrunoPrint);
-        _ = bruno.Join("codex", "bruno-session", "review@ana-laptop");
-        _ = ana.Send("ana-session", "review", "hello", "k1", Expires);
-        _ = Relay(ana, AnaPrint, bruno, BrunoPrint);
-        var received = Assert.Single(bruno.Take("bruno-session", "review@ana-laptop"));
-        Assert.Equal(("@ana-laptop", "remote"), (received.SenderSessionId, received.SenderTool));
-    }
-
-    [Fact]
-    public void Unsharing_or_removing_the_peer_ends_the_topic_on_both_sides() {
-        _ = ana.Join("claude-code", "ana-session", "review");
-        _ = ana.Share("review", "bruno-desktop");
-        _ = Relay(ana, AnaPrint, bruno, BrunoPrint);
-        _ = bruno.Join("codex", "bruno-session", "review@ana-laptop");
-        Assert.True(ana.Unshare("review"));
-        _ = Relay(ana, AnaPrint, bruno, BrunoPrint);
-        Assert.Empty(bruno.Topics("bruno-session"));
-        // Ana keeps her topic, now with a free second seat.
-        Assert.Single(ana.Topics("ana-session").Single().Members);
-
-        _ = ana.Share("review", "bruno-desktop");
-        _ = Relay(ana, AnaPrint, bruno, BrunoPrint);
-        Assert.True(bruno.RemovePeer("ana-laptop"));
+    public void Leaving_ends_the_topic_on_both_machines_and_the_open_topic_is_listed_again() {
+        Link();
+        _ = bruno.Leave("bruno-session", "review@ana-laptop");
         Assert.Empty(bruno.Shares());
-        Assert.Empty(bruno.Peers());
-        // Removed: anything Ana still sends is refused, and the item is dropped on her side.
-        _ = ana.Send("ana-session", "review", "anyone there?", "k3", Expires);
-        Assert.Equal(0, Relay(ana, AnaPrint, bruno, BrunoPrint));
-        Assert.Equal(0, ana.OutboxCount(BrunoPrint));
+        Assert.Equal(1, Relay(bruno, BrunoPrint, ana, AnaPrint));
+        Assert.Empty(ana.Shares());
+        Assert.Equal(["review"], ana.ListedTopics());
+        Assert.Contains(ana.Take("ana-session", "review"), d => d.Body.Contains("@bruno-desktop left review"));
+
+        // From the other side: Ana leaving deletes Bruno's copy.
+        _ = ana.LinkTopic(BrunoPrint, "review", "codex");
+        _ = bruno.LinkJoin(AnaPrint, "review", "claude-code", "bruno-session", "codex");
+        Assert.True(ana.Leave("ana-session", "review"));
+        Assert.Equal(1, Relay(ana, AnaPrint, bruno, BrunoPrint));
+        Assert.Empty(bruno.Topics());
     }
 
     [Fact]
-    public void Peer_names_and_fingerprints_are_validated_and_unique() {
+    public void Removing_a_machine_ends_its_topics_and_forgets_it() {
+        Link();
+        Assert.True(ana.RemovePeer("bruno-desktop"));
+        Assert.Empty(ana.Shares());
+        Assert.Null(ana.PeerByFingerprint(BrunoPrint));
+        Assert.Equal(["review"], ana.ListedTopics());
+        Assert.False(ana.RemovePeer("bruno-desktop"));
+    }
+
+    [Fact]
+    public void Machine_names_are_validated_and_a_taken_name_gets_a_number() {
         Assert.Throws<ArgumentException>(() => ana.AddPeer("not-hex", "x", null));
         Assert.Throws<ArgumentException>(() => ana.AddPeer(new string('c', 64), "Bad Name", null));
-        Assert.Throws<InvalidOperationException>(() => ana.AddPeer(BrunoPrint, "another-name", null));
-        Assert.Throws<InvalidOperationException>(() => ana.AddPeer(new string('c', 64), "bruno-desktop", null));
+        Assert.Equal("bruno-desktop", ana.AddPeer(BrunoPrint, "another-name", "10.0.0.9:49374").Name);
+        Assert.Equal("10.0.0.9:49374", ana.PeerByFingerprint(BrunoPrint)!.Address);
+        Assert.Equal("bruno-desktop-2", ana.AddPeer(new string('c', 64), "bruno-desktop", null).Name);
+        Assert.Equal("desktop-ab12", Mailbox.TidyName("DESKTOP-AB12"));
+        Assert.Equal("anas-macbook-pro", Mailbox.TidyName("Ana's MacBook Pro.local"));
+    }
+
+    [Fact]
+    public void A_message_from_the_other_machine_keeps_only_the_lifetime_it_had_left() {
+        Link();
+        _ = bruno.Take("bruno-session", "review@ana-laptop");
+        Assert.True(bruno.ReceiveFromPeer(AnaPrint, "review", "m-short", "claude-code", "soon gone", 5000));
+        now += 6000;
+        Assert.Empty(bruno.Take("bruno-session", "review@ana-laptop"));
     }
 
     public void Dispose() {
