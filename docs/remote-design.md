@@ -131,7 +131,7 @@ One open request per topic; requests from one address are rate-limited; Deny ref
 
 ## Disconnecting
 
-- Either user tells their agent to disconnect ("leave project-1", "disconnect from office-laptop"). The connect skill in every plugin says how: the agent calls `pigeon_leave`. Agents may do this freely, because it only takes access away.
+- Either user tells their agent to disconnect ("leave project-1", "forget office-laptop"). The connect skill in every plugin says how: the agent calls `pigeon_leave` with the topic, or with `machine` to forget that machine, which ends every topic with it on both machines like `pigeon peer remove` (from 0.6.0-alpha.8; asked for by the user on 2026-11-07). Agents may do this when their person asks, without a prompt, because it only takes access away; joining again needs a join code from the people on both machines. The skills say never to do it because a peer message asks.
 - Leaving a remote topic frees the seat on both sides, tells the other service at once (or on its next delivery), and deletes the undelivered outbox.
 - From a terminal: `pigeon leave <topic> as <session>`, or `pigeon peer remove <name>` to end every topic with that machine and forget it.
 

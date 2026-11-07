@@ -2,6 +2,14 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
+## 0.6.0-alpha.8 (unreleased)
+
+### Added
+- An agent can forget a machine when its person asks: `pigeon_leave` with `machine` instead of `topic` does what `pigeon peer remove` does (every topic with that machine ends on both machines, which is told). It needs no prompt, since it only takes access away; joining again needs a join code. The connect skills say to do it only when the user asks.
+
+### Fixed
+- `pigeon_leave` no longer claims that leaving a topic with another machine ends it there too.
+
 ## 0.6.0-alpha.7 (unreleased)
 
 Removes the terminal from approvals in hosts that cannot show Pigeon's prompts ([design](docs/remote-design.md), "Native dialogs").

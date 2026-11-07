@@ -2,7 +2,7 @@
 
 Live tests from [the release plan](../../docs/release-plan.md). They check a frozen build in the real hosts (Claude Desktop, Codex and, from 0.6.0-alpha.2, the Antigravity App) against an isolated service on port 49473 with a disposable database, using new test conversations and synthetic messages. Your normal service on port 49372 and your existing conversations are not used.
 
-## 0.6.0-alpha.7 dialog tests (D1–D6)
+## 0.6.0-alpha.7 and alpha.8 dialog tests (D1–D7)
 
 Prepared on 2026-11-07; not run yet. They check that hosts which cannot show Pigeon's prompts get Pigeon's own windows instead of the terminal: Claude Desktop on `dev-desktop` (192.168.2.20) and `office-laptop` (192.168.2.18), then Antigravity on dev-desktop. They also re-run M7 (removal) with alpha.6's fix. Real installs on both machines, new test conversations, topics named `dialog-test*`.
 
@@ -26,8 +26,21 @@ Prepared on 2026-11-07; not run yet. They check that hosts which cannot show Pig
 | D4 | Known machine: Allow or Deny | dev-desktop Claude opens `dialog-test-2` to other machines; the laptop's Claude joins `dialog-test-2@dev-desktop`. Press Deny in dev-desktop's window. | The window has only Allow and Deny; the laptop's Claude is told it was declined; the seat stays free. |
 | D5 | Removal reaches the other side (M7 again) | `pigeon peer remove office-laptop` on dev-desktop. | Within seconds the laptop's `pigeon peer list` shows no machines and its `pigeon topics` no longer lists `dialog-test@dev-desktop`. |
 | D6 | Antigravity with another machine | A new Antigravity conversation on dev-desktop: *"Open the Pigeon topic dialog-test-agy to other machines."* Then the laptop's Claude joins `dialog-test-agy@192.168.2.20` (a first contact again after D5). | Antigravity is no longer refused; the code window on dev-desktop comes from Antigravity's session; the join completes and a message goes each way. |
+| D7 | An agent forgets a machine (alpha.8) | After D6, or a new join of `dialog-test` from the laptop: laptop Claude: *"Forget dev-desktop."* | The agent calls `pigeon_leave` with `machine` and no prompt appears; both machines then show "Known machines: 0", and the shared topics end on both sides. |
 
-Record any prompt that falls back to the terminal, and any window that does not appear in front.
+Record any prompt that falls back to the terminal, and any window that does not appear in front. D7 needs 0.6.0-alpha.8 on both machines (the same install steps with `--version 0.6.0-alpha.8`).
+
+### Results (2026-11-07, in progress)
+
+| Test | Result | Evidence |
+|---|---|---|
+| D1 | Pass | A new Claude Desktop conversation on dev-desktop (`4391a3d4-…`) opened `dialog-test`; `pigeon topics` showed it open to other machines. Its agent already said the question would appear in a small Pigeon window. |
+| D2 | Pass | The laptop's Claude asked to join `dialog-test@192.168.2.20`; "All dialogs opened": the contact window, then the code window. The agent said only that the request waited on its person in a Pigeon window, never mentioned a terminal, and did not see the code. |
+| D3 | Pass (join) | The code entered in dev-desktop's window completed the join: dev-desktop knew office-laptop, `dialog-test` had `claude-code @office-laptop`, no request was left, and both agents were told. Whether a wrong code was tried, and whether the laptop's code window closed by itself, is not recorded yet. |
+| D4 | Pass | `dialog-test-2@dev-desktop` from the known laptop: only an Allow window, no code; Allow joined it. `dialog-test-3`: Deny in the window; the laptop's agent was told it was declined and did not retry; the seat stayed free and the topic stayed open. |
+| D5 | Pass (M7 fixed) | `pigeon peer remove office-laptop` on dev-desktop; the laptop then showed "Known machines: 0" and "No topics." dev-desktop kept its three topics with free seats, open to other machines again. |
+| D6 | Not run | Antigravity on dev-desktop has no Pigeon plugin installed (the alpha.2 tests used a development copy, since removed). |
+| D7 | Not run | Added on 2026-11-07 after D5, when the user asked that agents can forget a machine too. |
 
 ## 0.6.0-alpha.4 two-machine tests with agents (M1–M7)
 

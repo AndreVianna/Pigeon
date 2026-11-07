@@ -189,6 +189,9 @@ public sealed class McpSteps {
         var (openerInput, openerRunning) = await Serve(opener);
         var (joinerInput, joinerRunning) = await Serve(joiner);
         await openerInput.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = "pigeon_join", arguments = new { topic = "guarded", sessionId = ClaudeSession, approval = true } } }));
+        // The opener's join must land first, or the joiner would open the topic itself.
+        for (var i = 0; i < 80 && !(await LocalHttpClient.ExecuteAsync(port, "topics", new { sessionId = ClaudeSession })).GetProperty("Value").EnumerateArray().Any(t => t.GetProperty("Topic").GetString() == "guarded"); i++)
+            await Task.Delay(250);
         var meta = new Dictionary<string, string> { [McpSession.AntigravityConversationKey] = FirstConversation };
         await joinerInput.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = "pigeon_join", arguments = new { topic = "guarded" }, _meta = meta } }));
 

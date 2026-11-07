@@ -116,7 +116,6 @@ public sealed partial class Mailbox {
         return db.Exec("UPDATE p_sessions SET last_seen=? WHERE session LIKE ?", Time(), Seat(fingerprint, "") + "%");
     });
 
-    // Ends every topic with the machine at once and forgets it. Nothing more is sent to it.
     // Forgets a machine and ends every topic with it. The machine is told (found missing in the
     // two-machine test on 2026-11-07, where it kept the topic and retried for a day): a "forget"
     // item goes to its last address, so its side ends the topics and forgets this machine too.

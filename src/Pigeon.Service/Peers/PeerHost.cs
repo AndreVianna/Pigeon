@@ -182,6 +182,16 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
     private static string Text(JsonElement args, string key) => args.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s ? s : throw new ArgumentException("Required argument missing");
     private static string? OptionalText(JsonElement args, string key) => args.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
+    private object Removed(string name) {
+        var removed = broker.RemovePeer(name);
+        return new {
+            removed,
+            text = removed
+                ? $"Forgot {name}: every topic with it ended on both machines, and it was told. Joining it again needs a join code."
+                : $"No known machine is named {name}. pigeon_topics names the machine of each of your topics."
+        };
+    }
+
     public async Task<BrokerResult> ExecuteAsync(string operation, JsonElement args) {
         await gate.WaitAsync(lifetime);
         try {
@@ -189,7 +199,7 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
                 "peer_status" => broker.PeerOverview(identity?.Fingerprint ?? (broker.HasPeers() ? Identity().Fingerprint : null), [.. endpoints.Select(e => e.ToString())]),
                 "peer_name" => SetName(OptionalText(args, "name")),
                 "peer_listen" => await ListenAsync(OptionalText(args, "address")),
-                "peer_remove" => new { removed = broker.RemovePeer(Text(args, "name")) },
+                "peer_remove" => Removed(Text(args, "name")),
                 "peer_address" => SetAddress(Text(args, "name"), Text(args, "address")),
                 "peer_topics" => await TopicsOnAsync(Text(args, "machine")),
                 _ => throw new ArgumentException("Unknown peer operation")

@@ -4,7 +4,7 @@
 // it has been idle for two seconds), and sends the fixed wake prompt when the service grants a wake.
 
 // The CLI and the plugins are versioned in lockstep.
-export const version = "0.6.0-alpha.7"
+export const version = "0.6.0-alpha.8"
 export const mode = "copilot-extension"
 const tools = ["pigeon_join", "pigeon_leave", "pigeon_topics", "pigeon_send", "pigeon_receive", "pigeon_wake_complete"]
 

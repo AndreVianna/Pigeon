@@ -139,10 +139,25 @@ public sealed partial class PeerSteps {
         await Eventually(async () => (await Ok("bruno", "topics")).Contains("second@ana-laptop"));
     }
 
-    // Found in the two-machine test on 2026-11-07: the removed side kept its topic and retried for a day.
-    [Then("when Ana removes Bruno's machine, Bruno's side ends the topics and forgets Ana's machine too")]
+    // Found in the two-machine test on 2026-11-07: the removed side kept its topic and retried for a
+    // day. From 0.6.0-alpha.8 an agent forgets a machine when its person asks, as `pigeon peer remove` does.
+    [Then("when Ana's agent forgets Bruno's machine, Bruno's side ends the topics and forgets Ana's machine too")]
     public async Task Removed() {
-        Assert.Contains("Removed", await Ok("ana", "peer", "remove", "bruno-desktop"));
+        var agent = new Pigeon.Service.McpSession(services["ana"].Port, "claude-code");
+        _ = await agent.HandleAsync("{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\"}}");
+        _ = await agent.HandleAsync("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+        async Task<(bool Error, string Text)> Call(string tool, object args) {
+            using var reply = System.Text.Json.JsonDocument.Parse((await agent.HandleAsync(System.Text.Json.JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 1, method = "tools/call", @params = new { name = tool, arguments = args } })))!);
+            var result = reply.RootElement.GetProperty("result");
+            return (result.GetProperty("isError").GetBoolean(), result.GetProperty("content")[0].GetProperty("text").GetString()!);
+        }
+
+        Assert.False((await Call("pigeon_join", new { topic = "review", sessionId = "ana-session" })).Error);
+        Assert.Contains("not both", (await Call("pigeon_leave", new { topic = "review", machine = "bruno-desktop" })).Text);
+        Assert.Contains("No known machine is named nobody-pc", (await Call("pigeon_leave", new { machine = "nobody-pc" })).Text);
+        var (error, text) = await Call("pigeon_leave", new { machine = "bruno-desktop" });
+        Assert.False(error, text);
+        Assert.Contains("Forgot bruno-desktop: every topic with it ended on both machines", text);
         await Eventually(async () => (await Ok("bruno", "peer", "list")).Contains("Known machines: 0"));
         Assert.DoesNotContain("@ana-laptop", await Ok("bruno", "topics"));
         Assert.Contains("Known machines: 0", await Ok("ana", "peer", "list"));
