@@ -19,9 +19,11 @@ public sealed class McpSession {
     private volatile bool ready;
     private volatile bool elicitation;
     public bool IsReady => ready;
-    // Whether Pigeon can ask this host's person directly (MCP elicitation). Antigravity advertises it
-    // but cancels every prompt, so it is never asked (see docs/remote-design.md).
-    public bool CanPrompt => elicitation && runtime != "antigravity";
+    // Whether Pigeon can ask this host's person directly (MCP elicitation). Antigravity, and Claude
+    // sessions started by the Claude desktop app (seen on 2026-11-07), advertise it but cancel every
+    // prompt without showing it, so they are never asked; their person answers in a terminal.
+    public bool CanPrompt => elicitation && hostShowsPrompts && runtime != "antigravity";
+    private readonly bool hostShowsPrompts = true;
     public string? SessionId => Volatile.Read(ref sessionId);
     public string? RestoreState => Volatile.Read(ref restoreState);
 
@@ -48,9 +50,10 @@ public sealed class McpSession {
 
     // runtime is the tool name configured by the plugin (PIGEON_RUNTIME). With a session ID from
     // the host, the connection restores a previously joined session automatically.
-    public McpSession(string port, string? runtime = null, string? autoRestoreSession = null) {
+    public McpSession(string port, string? runtime = null, string? autoRestoreSession = null, bool hostShowsPrompts = true) {
         this.port = port;
         this.runtime = runtime;
+        this.hostShowsPrompts = hostShowsPrompts;
         // The Copilot runtime starts one MCP server per session and names it in the environment.
         if (runtime == "copilot" && Valid(autoRestoreSession))
             hostSession = autoRestoreSession;
@@ -232,7 +235,7 @@ public sealed class McpSession {
             if (SessionId is not null && SessionId != requested)
                 return Text(id, "This MCP connection is bound to another session and cannot change it.", true);
             var response = tool == "pigeon_join"
-                ? await BridgeAsync("join", new { tool = toolName, sessionId = requested, topic = Arg("topic"), remote = Flag("remote"), approval = Flag("approval") }, cancellation)
+                ? await BridgeAsync("join", new { tool = toolName, sessionId = requested, topic = Arg("topic"), remote = Flag("remote"), approval = Flag("approval"), prompts = CanPrompt }, cancellation)
                 : await BridgeAsync("session_restore", new { tool = toolName, sessionId = requested }, cancellation);
             var ok = response.GetProperty("Ok").GetBoolean();
             lock (identityGate) {
@@ -279,7 +282,7 @@ public sealed class McpSession {
                 _ => "Antigravity did not identify this conversation, so Pigeon cannot tell which session is calling. Pigeon needs Antigravity 2.28 or later."
             }, true);
         if (tool == "pigeon_join") {
-            var joined = await BridgeAsync("join", new { tool = runtime, sessionId = conversation, topic = Arg("topic"), remote = Flag("remote"), approval = Flag("approval") }, cancellation);
+            var joined = await BridgeAsync("join", new { tool = runtime, sessionId = conversation, topic = Arg("topic"), remote = Flag("remote"), approval = Flag("approval"), prompts = CanPrompt }, cancellation);
             if (joined.GetProperty("Ok").GetBoolean())
                 lock (identityGate) {
                     Bind(conversation!);

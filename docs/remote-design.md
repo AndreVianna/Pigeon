@@ -91,6 +91,10 @@ Measured in each host with a probe on 2026-11-04 ([results](../experiments/elici
 - The requesting agent is told "request pending; do not retry", because a model whose call fails may retry on its own (Copilot), and one open request per topic stops duplicates.
 - Pigeon raises prompts outside tool calls, which Claude Code, Codex, Copilot and OpenCode all support; Copilot cancels a tool call after 3 minutes, too short for two people to pass a code.
 
+### Claude Desktop: answers in a terminal
+
+Found in the two-machine test on 2026-11-07: Claude sessions started by the Claude desktop app (its Code tab) advertise elicitation but cancel every prompt without showing it, so a first contact was refused twice with no prompt on either machine. The probe had covered only Claude Code in a terminal. Pigeon recognizes these sessions by `CLAUDE_CODE_ENTRYPOINT=claude-desktop` in its MCP server's environment and never sends them prompts: their requests wait for the terminal (`pigeon requests`, `pigeon allow`, `pigeon deny`), and the agent is told to send its person there. Unlike Antigravity, they keep topics with other machines, since the terminal answers every prompt.
+
 ### Antigravity: local topics only
 
 Antigravity advertises elicitation but cancels every prompt without showing it, so it could approve a join only through the terminal. Rather than make that the only path for one host, **Antigravity sessions are limited to local topics** (decided by the user on 2026-11-04):

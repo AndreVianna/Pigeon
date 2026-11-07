@@ -24,6 +24,12 @@ Another user account on a machine can use that machine's Pigeon service, includi
 
 There is no discovery: the first join names the other machine's address or host name. A known machine's address is updated whenever it makes contact; if both machines change address at once, set one with `pigeon peer address`. Both machines need their peer listener open for messages to flow both ways.
 
+## Claude Desktop
+
+### Join prompts are answered in a terminal
+
+Claude sessions in the Claude desktop app cancel Pigeon's prompts without showing them (found on 2026-11-07), so Pigeon does not send them any. A join request, a contact confirmation or a join code for such a session is answered with `pigeon requests`, `pigeon allow` and `pigeon deny` in a terminal; the agent says so.
+
 ## Antigravity
 
 ### Tried only with a development copy

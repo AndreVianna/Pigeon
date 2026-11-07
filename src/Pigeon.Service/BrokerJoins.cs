@@ -82,13 +82,16 @@ public sealed partial class Broker {
         var topic = Str(args, "topic");
         var remote = Bool(args, "remote");
         var approval = Bool(args, "approval");
+        // False when the host cannot show Pigeon's prompts: the person answers in a terminal instead.
+        // The command line sends no flag; its person is at a terminal already.
+        var prompts = !args.TryGetProperty("prompts", out var p) || p.ValueKind != JsonValueKind.False;
         var antigravity = Mailbox.ToolName(tool) == "antigravity";
         if ((remote || approval) && antigravity)
             throw new InvalidOperationException(AntigravityLocalOnly);
         if (remote && mailbox.Setting("listen") is null)
             throw new InvalidOperationException("Other machines cannot reach this one yet. A person turns that on once, in a terminal: pigeon peer listen");
         if (topic.Contains('@') && !mailbox.Topics().Any(t => t.Topic == topic))
-            return antigravity ? throw new InvalidOperationException(AntigravityLocalOnly) : RemoteJoin(tool, session, topic);
+            return antigravity ? throw new InvalidOperationException(AntigravityLocalOnly) : WithTerminal(RemoteJoin(tool, session, topic), prompts);
         var (_, needsApproval) = mailbox.TopicOptions(topic);
         if (needsApproval && !mailbox.IsMember(session, topic) && mailbox.MemberCount(topic) == 1 && mailbox.LocalMemberOf(topic) is { } opener) {
             if (antigravity)
@@ -137,6 +140,18 @@ public sealed partial class Broker {
         };
         outgoing[request.Id] = request;
         return Pending(request);
+    }
+
+    // A host that cannot show Pigeon's prompts: tell the agent where its person answers instead.
+    private const string TerminalAnswer = " This host cannot show Pigeon's prompts, so tell your person to answer in a terminal: pigeon requests.";
+
+    private static object WithTerminal(object result, bool prompts) {
+        if (prompts || result is not { } value)
+            return result;
+        var json = JsonSerializer.SerializeToElement(value);
+        if (!json.TryGetProperty("text", out var text) || !json.TryGetProperty("request", out var request))
+            return result;
+        return new { pending = true, request = request.GetString(), text = text.GetString() + TerminalAnswer };
     }
 
     private static object Pending(Outgoing r) => new {

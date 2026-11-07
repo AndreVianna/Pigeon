@@ -2,6 +2,13 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
+## 0.6.0-alpha.5 (unreleased)
+
+A dev build for the two-machine test of alpha.4.
+
+### Fixed
+- Claude sessions in the Claude desktop app cancel Pigeon's prompts without showing them, so every first contact was refused. Pigeon now recognizes them (`CLAUDE_CODE_ENTRYPOINT=claude-desktop`) and leaves their prompts to the terminal (`pigeon requests`, `pigeon allow`, `pigeon deny`); the agent is told so.
+
 ## 0.6.0-alpha.4 (unreleased)
 
 Connects agents on different machines on the same network, including other people's ([remote connections design](docs/remote-design.md)). It replaces the handshake of 0.6.0-alpha.3 (invitations to pair machines, then each topic shared by a person) with topics open to other machines and join codes. Agents on two machines are not yet host-tested.
