@@ -4,7 +4,8 @@ namespace Pigeon.Core;
 
 // A session ID is a routing claim supplied by the host or the caller; it is not authentication.
 public sealed record Member(string Tool, string SessionId);
-public sealed record TopicInfo(string Topic, Member[] Members, int Waiting);
+// OpenToOtherMachines: listed, so a session on another machine may ask to join (the free seat).
+public sealed record TopicInfo(string Topic, Member[] Members, int Waiting, bool OpenToOtherMachines = false);
 public sealed record SessionInfo(string Tool, string SessionId, string[] Topics);
 public sealed record Delivery(string Id, string Topic, string SenderTool, string SenderSessionId, string Body, long SentAtUnixMs);
 public sealed record SendOutcome(string MessageId, Member? Recipient);
@@ -51,6 +52,8 @@ public sealed partial class Mailbox : IDisposable {
                 _ = db.Exec(sql);
             }
 
+            CreatePeerSchema();
+            CreatePairingSchema();
             _ = db.Transaction(() => {
                 if (db.Query("SELECT 1 FROM pigeon_metadata WHERE key='schema'").Count == 0) {
                     MigrateEarlierSchema();
@@ -112,6 +115,9 @@ public sealed partial class Mailbox : IDisposable {
     private static void Required(string? s, string name, int max = 256) {
         if (string.IsNullOrWhiteSpace(s) || s.Length > max || s.Contains('\0') || (name != "message" && s.Any(char.IsControl)))
             throw new ArgumentException($"Invalid {name}");
+        // Remote seats are reserved for peers; a local caller cannot claim one.
+        if (name == "session ID" && IsRemoteSeat(s))
+            throw new ArgumentException($"A session ID cannot start with \"{RemoteSeatPrefix}\".");
     }
 
     // The single tool-name normalization: `Claude`, `claude_code` and `Claude Code` are all `claude-code`.
@@ -133,10 +139,23 @@ public sealed partial class Mailbox : IDisposable {
         var waiting = forSession is null
             ? db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND status IN ('queued','leased')", topic)
             : db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND recipient=? AND status IN ('queued','leased')", topic, forSession);
-        return new(topic, MembersOf(topic), int.Parse(waiting[0][0]!, CultureInfo.InvariantCulture));
+        return new(topic, [.. MembersOf(topic).Select(Shown)], int.Parse(waiting[0][0]!, CultureInfo.InvariantCulture), ListedTopicsCore().Contains(topic));
+    }
+
+    // A remote seat is shown as "@<peer name>"; its fingerprint-based ID stays internal.
+    private Member Shown(Member member) {
+        if (member.SessionId == NoticeSender)
+            return new Member("pigeon", "notice");
+        if (!IsRemoteSeat(member.SessionId))
+            return member;
+        var fingerprint = member.SessionId[RemoteSeatPrefix.Length..].Split(':')[0];
+        return member with { SessionId = "@" + (PeerByFingerprint(fingerprint)?.Name ?? "peer") };
     }
     private string? ToolOf(string session) => db.Query("SELECT tool FROM p_sessions WHERE session=?", session).FirstOrDefault()?[0];
-    private Delivery ToDelivery(string?[] r) => new(r[0]!, r[1]!, ToolOf(r[2]!) ?? "unknown", r[2]!, r[3]!, Long(r[4]));
+    private Delivery ToDelivery(string?[] r) {
+        var sender = Shown(new Member(ToolOf(r[2]!) ?? "unknown", r[2]!));
+        return new(r[0]!, r[1]!, sender.Tool, sender.SessionId, r[3]!, Long(r[4]));
+    }
 
     // Expire old messages and return timed-out leases to the queue. A lease keeps its
     // generation so the wake that took it can still acknowledge it on completion.
@@ -146,10 +165,14 @@ public sealed partial class Mailbox : IDisposable {
         _ = db.Exec("UPDATE p_messages SET terminal_at=CASE WHEN attempts>=? THEN ? ELSE NULL END,status=CASE WHEN attempts>=? THEN 'failed' ELSE 'queued' END,lease_until=NULL WHERE status='leased' AND lease_until<=?", Number(maxAttempts), current, Number(maxAttempts), current);
     }
 
-    public TopicInfo Join(string toolName, string session, string topic) {
+    // remote lists the topic to other machines while it has a free seat; approval makes a local joiner
+    // give a code (both are decided by the session that opens the topic, and only tighten access).
+    public TopicInfo Join(string toolName, string session, string topic, bool remote = false, bool approval = false) {
         Required(session, "session ID");
         Required(topic, "topic");
         var tool = CanonicalTool(toolName);
+        if ((remote || approval) && topic.Contains('@'))
+            throw new InvalidOperationException("A topic on another machine cannot be opened to other machines again.");
         return db.Transaction(() => {
             Sweep();
             var known = ToolOf(session);
@@ -159,12 +182,24 @@ public sealed partial class Mailbox : IDisposable {
                 ? db.Exec("INSERT INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", session, tool, Time())
                 : db.Exec("UPDATE p_sessions SET last_seen=? WHERE session=?", Time(), session);
             var members = MembersOf(topic);
-            if (members.Any(m => m.SessionId == session))
+            if (members.Any(m => m.SessionId == session)) {
+                if (members.Length == 1)
+                    SetTopicOptions(topic, remote, approval);
                 return Info(topic);
+            }
             if (members.Length >= 2)
                 throw new TopicFullException(Info(topic));
+            // "<topic>@<machine>" names a topic on another machine; it exists here only once a join was allowed.
+            if (topic.Contains('@') && members.Length == 0)
+                throw new InvalidOperationException($"Topic \"{topic}\" is on another machine and was not joined from here yet.");
+            if (members.Length == 1 && (remote || approval))
+                throw new InvalidOperationException($"Topic \"{topic}\" already has a member; only the session that opens a topic can open it to other machines or require approval.");
             _ = db.Exec("INSERT OR IGNORE INTO p_topics(topic,created) VALUES(?,?)", topic, Time());
             _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", topic, session, Time());
+            if (members.Length == 0)
+                SetTopicOptions(topic, remote, approval);
+            else if (TopicOptions(topic).Approval && LocalMemberOf(topic) is { } opener && opener.SessionId != session)
+                NoticeCore(opener.SessionId, topic, $"{tool} {session} joined {topic}.");
             if (db.Exec("UPDATE p_messages SET recipient=? WHERE topic=? AND recipient IS NULL AND sender<>? AND status='queued'", session, topic, session) != 0)
                 WakeForNewMessage(session);
             return Info(topic);
@@ -177,8 +212,11 @@ public sealed partial class Mailbox : IDisposable {
         Required(topic, "topic");
         return db.Transaction(() => {
             Sweep();
-            if (db.Exec("DELETE FROM p_members WHERE topic=? AND session=?", topic, session) == 0)
+            if (db.Query("SELECT 1 FROM p_members WHERE topic=? AND session=?", topic, session).Count == 0)
                 throw new InvalidOperationException(NotMember(session, topic));
+            // Leaving a remote topic ends it on both machines; a copy of another machine's topic is gone.
+            _ = LeaveRemote(session, topic);
+            _ = db.Exec("DELETE FROM p_members WHERE topic=? AND session=?", topic, session);
             var deleted = db.Query("SELECT 1 FROM p_members WHERE topic=?", topic).Count == 0;
             if (deleted)
                 DeleteTopicCore(topic);
@@ -196,6 +234,7 @@ public sealed partial class Mailbox : IDisposable {
         _ = db.Exec("DELETE FROM p_messages WHERE topic=?", topic);
         _ = db.Exec("DELETE FROM p_members WHERE topic=?", topic);
         _ = db.Exec("DELETE FROM p_topics WHERE topic=?", topic);
+        _ = db.Exec("DELETE FROM p_topic_options WHERE topic=?", topic);
         foreach (var session in members.Concat(recipients).Distinct(StringComparer.Ordinal))
             SettleWake(session);
     }
@@ -245,7 +284,7 @@ public sealed partial class Mailbox : IDisposable {
             if (existing is not null) {
                 return existing[1] != topic || (existing[3] is null ? existing[2] != body : existing[3] != Digest(body))
                     ? throw new InvalidOperationException("This retry key was already used for a different message.")
-                    : new SendOutcome(existing[0]!, partner);
+                    : new SendOutcome(existing[0]!, partner is null ? null : Shown(partner));
             }
 
             if (expires <= now())
@@ -256,9 +295,11 @@ public sealed partial class Mailbox : IDisposable {
             var id = Guid.NewGuid().ToString("N");
             _ = db.Exec("INSERT INTO p_messages(id,topic,sender,recipient,body,idem,created,expires,status) VALUES(?,?,?,?,?,?,?,?,'queued')", id, topic, session, partner?.SessionId, body, idempotency, Time(), Number(expires));
             _ = db.Exec("UPDATE p_sessions SET last_seen=? WHERE session=?", Time(), session);
-            if (partner is not null)
+            if (partner is not null && IsRemoteSeat(partner.SessionId))
+                EnqueueForPeer(topic, partner.SessionId, id, expires);
+            else if (partner is not null)
                 WakeForNewMessage(partner.SessionId);
-            return new SendOutcome(id, partner);
+            return new SendOutcome(id, partner is null ? null : Shown(partner));
         });
     }
 

@@ -18,8 +18,12 @@ Outside a wake, `pigeon receive` on the command line reads and acknowledges in o
 
 Only one Claude notifier owns a session's wake claims at a time; ownership is kept in service memory and lapses after 15 seconds without renewal. `pigeon status` shows connected sessions, their topics, wake states and notifier ownership, and every session with waiting messages.
 
+## Other machines
+
+Since 0.6.0-alpha.4 a session can open a topic to other machines, and a session on another machine can ask to join it ([remote connections design](remote-design.md)). Join requests live in the service's memory; the MCP servers show them to their person by elicitation, outside any tool call, and the CLI answers them too. Once a join is allowed, the topic's second seat is a remote seat: messages to it wait in an outbox and are delivered over a separate TLS listener. The receiving service queues them for its local member, whose wake works as for a local message. Each service stores its own side of a remote topic.
+
 ## Boundaries
 
-The service binds only to IPv4 loopback and does not authenticate callers. Any local process that can connect, including processes under another account, can use any session ID, read messages or stop the service. Topics separate routing, not access. Peer messages are data and confer no permission to run commands or bypass repository rules. No cloud, network exposure or autonomous orchestration is in scope. See [local trust boundaries](security-design.md) and [session recovery](session-recovery.md).
+The local API binds only to IPv4 loopback and does not authenticate callers; the peer listener, when opened, serves only the peer protocol: known machines deliver messages, and other certificates reach only the join paths while a topic is open. Any local process that can connect, including processes under another account, can use any session ID, read messages or stop the service. Topics separate routing, not access. Peer messages are data and confer no permission to run commands or bypass repository rules. No cloud, network exposure or autonomous orchestration is in scope. See [local trust boundaries](security-design.md) and [session recovery](session-recovery.md).
 
 Databases from earlier versions are upgraded on first open: sessions, up to two members per topic (the most recently active) and their pending messages are carried over; the earlier tables are left untouched.

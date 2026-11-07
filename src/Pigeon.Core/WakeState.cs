@@ -193,7 +193,7 @@ public sealed partial class Mailbox {
     // Sessions with messages waiting, for status reports.
     public SessionWakeStatus[] PendingWakeStatuses() => db.Transaction(() => {
         Sweep();
-        return db.Query("SELECT DISTINCT m.recipient,s.tool FROM p_messages m JOIN p_sessions s ON s.session=m.recipient WHERE m.status IN ('queued','leased') ORDER BY m.recipient LIMIT 100")
+        return db.Query("SELECT DISTINCT m.recipient,s.tool FROM p_messages m JOIN p_sessions s ON s.session=m.recipient WHERE m.status IN ('queued','leased') AND m.recipient NOT LIKE 'peer:%' ORDER BY m.recipient LIMIT 100")
             .Select(r => new SessionWakeStatus(r[1]!, r[0]!, StatusCore(r[0]!))).ToArray();
     });
 }

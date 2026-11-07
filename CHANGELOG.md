@@ -2,6 +2,90 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
+## 0.6.0-beta.1 (unreleased)
+
+The first beta of 0.6.0, promoted by the user on 2026-11-07 after the two-machine host tests with agents (M1–M7, D1–D7): Claude Desktop on two Windows machines and Antigravity, with join codes in Pigeon's own windows. Together with alpha.1 to alpha.8 it adds macOS and Linux builds, the Antigravity, OpenCode and Copilot hosts, and agents on other machines of the same network.
+
+Not yet tried: agents on macOS or Linux (including Pigeon's windows there), Tailscale, and the hosts' own prompts (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
+
+### Changed
+- Machines talk over TLS 1.3, or TLS 1.2 when one of them is a Mac: .NET on macOS accepts no TLS 1.3 connections, so a Mac could not listen (found in CI). Both versions still require both certificates and pinned fingerprints; under TLS 1.2 an observer on the network can tell which machines talk, but not read or change what they say.
+
+### Fixed
+- Forgetting a machine says that each shared topic stays on the machine that opened it, with a free seat; "ended on both machines" made an agent think the topics were gone (dialog host test D7, found on alpha.8).
+- The plugins no longer describe Pigeon as limited to this computer.
+
+## 0.6.0-alpha.8 (unreleased)
+
+### Added
+- An agent can forget a machine when its person asks: `pigeon_leave` with `machine` instead of `topic` does what `pigeon peer remove` does (every topic with that machine ends on both machines, which is told). It needs no prompt, since it only takes access away; joining again needs a join code. The connect skills say to do it only when the user asks.
+
+### Fixed
+- `pigeon_leave` no longer claims that leaving a topic with another machine ends it there too.
+
+## 0.6.0-alpha.7 (unreleased)
+
+Removes the terminal from approvals in hosts that cannot show Pigeon's prompts ([design](docs/remote-design.md), "Native dialogs").
+
+### Added
+- **Pigeon's own windows** for hosts that cannot show its prompts (the Claude desktop app, Antigravity, hosts without elicitation): Allow and Deny, a field for the join code, and the code to pass on with a Copy button, kept open until the join completes. Windows uses Windows PowerShell, macOS `osascript`, Linux `zenity` or `kdialog`. The text from the other machine is never put into a script. `PIGEON_PROMPTS=terminal` turns the windows off.
+
+### Changed
+- Antigravity sessions may open and join topics with other machines, and topics that require approval; they were limited to local topics.
+- A local join that needs approval from a host that cannot show prompts says to answer in a terminal, as remote joins do.
+- The connect skills say that leaving reports what happens to the topic on the other machine, instead of claiming it ends on both.
+
+## 0.6.0-alpha.6 (unreleased)
+
+A dev build from the two-machine test of alpha.4 (Claude Desktop on both machines).
+
+### Fixed
+- Removing a machine now tells it: a "forget" notice goes to its last address (kept for up to a day), and that machine ends the shared topics and forgets this one too. Before, the removed side kept the topic and retried its messages for a day.
+- Topic lists (`pigeon topics` and the agents' `pigeon_topics`) say which topics are open to other machines.
+- Leaving a topic on another machine explains that the topic stays there with a free seat; an agent had concluded it ended on both sides.
+- A message to another machine is described as on its way (delivered within seconds while reachable), not as merely queued; agents reported every message as undelivered.
+- A completed join counts as contact with the other machine in `pigeon peer list`.
+- The Claude connect skill says that in the Claude desktop app join requests are answered in a terminal.
+
+## 0.6.0-alpha.5 (unreleased)
+
+A dev build for the two-machine test of alpha.4.
+
+### Fixed
+- Claude sessions in the Claude desktop app cancel Pigeon's prompts without showing them, so every first contact was refused. Pigeon now recognizes them (`CLAUDE_CODE_ENTRYPOINT=claude-desktop`) and leaves their prompts to the terminal (`pigeon requests`, `pigeon allow`, `pigeon deny`); the agent is told so.
+
+## 0.6.0-alpha.4 (unreleased)
+
+Connects agents on different machines on the same network, including other people's ([remote connections design](docs/remote-design.md)). It replaces the handshake of 0.6.0-alpha.3 (invitations to pair machines, then each topic shared by a person) with topics open to other machines and join codes. Agents on two machines are not yet host-tested.
+
+### Changed
+- Removed `pigeon peer invite`, `accept` and `confirm`, and `pigeon topic share` and `unshare`. Pending pairings from alpha.3 are dropped when the database is opened.
+
+### Added
+- **Topics open to other machines.** A session opens a topic with `remote: true` (`pigeon join … --remote`); another machine joins `<topic>@<address>` the first time and `<topic>@<machine>` after that. Only open topics with a free seat are listed, and only to known machines (`pigeon_topics` with `machine`, `pigeon topics on <machine>`).
+- **Join codes.** The first join between two machines fixes a 6-digit code from random values both sides commit to in turn, and from both certificates. The requesting person confirms the contact and sees the code; the listing person enters it; then the machines pin each other's certificate. Joins from a known machine get Allow or Deny.
+- **Prompts outside the conversation.** Pigeon's MCP server asks the person by MCP elicitation as soon as a request arrives, outside any tool call, so no model turn is spent. The model never sees a code. Every prompt has a 10-minute limit; no reply, Decline and Esc all mean Deny, and late or replayed answers are ignored. Checked in Claude Code, Codex, Copilot CLI and OpenCode with a probe (`experiments/elicitation-probe`).
+- **Terminal fallback:** `pigeon requests [--show <request>]`, `pigeon allow <request> [<code>]` and `pigeon deny <request>`.
+- **Opt-in approval for local topics** (`approval: true`, `--approval`): a local joiner gives a code in the same way. Pigeon tells the waiting session who joined.
+- **Disconnecting:** leaving a remote topic ends it on both machines, and the other side is told.
+- `pigeon peer listen` with no address listens on the machine's LAN and Tailscale addresses, never virtual adapters or public addresses. The machine name defaults to the tidied host name, and addresses may be host names.
+- Each service has an ECDSA P-256 identity in the user's certificate store (`PIGEON_IDENTITY_DIR` keeps it in a folder instead, for tests). Machines talk over TLS 1.3 with mutual authentication; the listener serves only the peer protocol (version 2), with rate limits.
+- Messages to another machine wait in an outbox and are retried with backoff. They carry their remaining lifetime, so clocks that differ do not matter, and each delivery updates the sender's address.
+
+### Not available
+- Antigravity sessions are limited to local topics: Antigravity advertises elicitation but cancels every prompt.
+
+## 0.6.0-alpha.3 (unreleased)
+
+Connects Pigeon services on different machines on the same network, including other people's ([remote connections design](docs/remote-design.md)). Tried on 2026-11-04 between two Windows machines on a home Wi-Fi network with the CLI at both ends. Its handshake was replaced in 0.6.0-alpha.4 before release.
+
+### Added
+- `pigeon peer` commands: name the service, open the peer listener on one chosen address (port 49374 by default), invite, accept and confirm with a 6-digit check code both people compare, list, remove, and update a peer's address.
+- `pigeon topic share <topic> with <peer>` and `pigeon topic unshare <topic>`: pairing grants nothing until a person shares a topic; the peer's agent joins it as `<topic>@<peer>`.
+- Each service has an ECDSA P-256 identity in the user's certificate store (`PIGEON_IDENTITY_DIR` keeps it in a folder instead, for tests). Peers talk over TLS 1.3 with mutual authentication and pinned fingerprints; the listener is off by default and serves only the peer protocol, with per-peer rate limits.
+- Messages to another machine wait in an outbox and are retried with backoff until delivered or expired; a delivered message is stored once. A remote member appears as `@<peer>` with its tool name (unless withheld), never its session ID.
+- `pigeon status` lists peers once they are used.
+
 ## 0.6.0-alpha.2 (unreleased)
 
 Adds three hosts: the Antigravity App, host-tested in the Antigravity App 2.28 on Windows (A1–A8 in `experiments/host-test`), OpenCode 2, host-tested with OpenCode 2.2.5 on Windows (O1–O6), and GitHub Copilot, host-tested in VS Code 1.145 and the GitHub Copilot app on Windows (C1–C6).

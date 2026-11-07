@@ -1,12 +1,15 @@
 using System.Text.Json;
 
 using Pigeon.Core;
+using Pigeon.Service.Peers;
+
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Pigeon.UnitTests")]
 
 namespace Pigeon.Service;
 
 public sealed record BrokerResult(bool Ok, object? Value, string? Error);
 
-public sealed class Broker : IDisposable {
+public sealed partial class Broker : IDisposable {
     private readonly Mailbox mailbox;
     private readonly long? bodyRetentionMilliseconds;
     private readonly long abandonedTopicMilliseconds;
@@ -58,8 +61,15 @@ public sealed class Broker : IDisposable {
                 Maintain();
                 var result = operation switch {
                     "topics" => mailbox.Topics(Optional(args, "sessionId")),
-                    "join" => mailbox.Join(Str(args, "tool"), Str(args, "sessionId"), Str(args, "topic")),
-                    "leave" => new { deleted = mailbox.Leave(Str(args, "sessionId"), Str(args, "topic")) },
+                    "join" => Join(args),
+                    "prompts_next" => PromptsNext(args),
+                    "prompts_open" => PromptsOpen(args),
+                    "prompt_answer" => Answer(Str(args, "id"), Str(args, "action"), Optional(args, "code")),
+                    "requests" => Requests(),
+                    "request_show" => RequestCode(Str(args, "id")),
+                    "request_allow" => RequestAnswer(Str(args, "id"), true, Optional(args, "code")),
+                    "request_deny" => RequestAnswer(Str(args, "id"), false, null),
+                    "leave" => LeaveResult(Str(args, "topic"), mailbox.Leave(Str(args, "sessionId"), Str(args, "topic"))),
                     "send" => Send(args),
                     "take" => mailbox.Take(Str(args, "sessionId"), Str(args, "topic")),
                     "session" => mailbox.Session(Str(args, "sessionId")),
@@ -121,7 +131,8 @@ public sealed class Broker : IDisposable {
     private object Send(JsonElement args) {
         var topic = Str(args, "topic");
         var outcome = mailbox.Send(Str(args, "sessionId"), topic, Str(args, "message"), Optional(args, "retryKey") ?? Guid.NewGuid().ToString("N"), checked(clock() + 86400000));
-        var delivery = outcome.Recipient is null ? "no-recipient" : Connected(outcome.Recipient.SessionId) ? "sent" : "recipient-offline";
+        // A remote member ("@<peer>") is reached through the outbox; delivery to the peer happens later.
+        var delivery = outcome.Recipient is null ? "no-recipient" : outcome.Recipient.SessionId.StartsWith('@') ? "queued-for-peer" : Connected(outcome.Recipient.SessionId) ? "sent" : "recipient-offline";
         return new { messageId = outcome.MessageId, delivery, text = Phrases.SendResult(delivery, topic) };
     }
 
@@ -295,13 +306,137 @@ public sealed class Broker : IDisposable {
         lock (gate)
             mailbox.Dispose();
     }
+
+    private static object LeaveResult(string topic, bool deleted) {
+        var at = topic.LastIndexOf('@');
+        var text = at > 0
+            ? $"Left {topic}. Your copy of it is gone; on {topic[(at + 1)..]} the topic stays, with its seat free for someone else."
+            : deleted ? $"Left {topic}. Nobody was left, so the topic was deleted." : $"Left {topic}.";
+        return new { deleted, text };
+    }
+
+    // The peer link (see docs/remote-design.md). These are called by the peer listener and the
+    // delivery loop under the same lock as every other operation, never through the local API.
+    internal bool IsPeer(string fingerprint) {
+        lock (gate)
+            return mailbox.PeerByFingerprint(fingerprint) is not null;
+    }
+
+    internal bool HasPeers() {
+        lock (gate)
+            return mailbox.Peers().Length != 0;
+    }
+
+    internal bool RemovePeer(string name) {
+        lock (gate)
+            return mailbox.RemovePeer(name);
+    }
+
+    internal void SetPeerAddress(string name, string address) {
+        lock (gate)
+            mailbox.SetPeerAddress(name, address);
+    }
+
+    // What `pigeon peer list` and `pigeon status` show.
+    internal object PeerOverview(string? fingerprint, string[] addresses) {
+        lock (gate) {
+            ExpireRequests();
+            return new {
+                name = mailbox.Setting("name") ?? Pigeon.Service.Peers.PeerHost.DefaultName(),
+                listen = mailbox.Setting("listen"),
+                addresses,
+                fingerprint,
+                peers = mailbox.Peers().Select(p => new { p.Name, p.Address, p.Fingerprint, p.LastContactUnixMs, outbox = mailbox.OutboxCount(p.Fingerprint) }).ToArray(),
+                listed = mailbox.ListedTopics(),
+                shares = mailbox.Shares(),
+                requests = incoming.Values.Count(r => r.State == "open") + outgoing.Values.Count(r => r.State is "confirm" or "contact" or "waiting") + localJoins.Values.Count(r => r.State == "open")
+            };
+        }
+    }
+
+    // Items delivered by a known machine. Each result is "ok", "unknown" (no such topic; the sender
+    // drops the item) or "limited" (rate or size limit; the sender retries later).
+    internal string[] FromPeer(string fingerprint, string? address, PeerItem[] items) {
+        lock (gate) {
+            Maintain();
+            if (mailbox.PeerByFingerprint(fingerprint) is null)
+                return [.. items.Select(_ => "unknown")];
+            mailbox.TouchPeer(fingerprint, address);
+            return [.. items.Select(item => {
+                try {
+                    var known = item.Kind switch {
+                        "leave" => mailbox.ReceiveLeave(fingerprint, item.Offered) || true,
+                        "forget" => mailbox.ReceiveForget(fingerprint) || true,
+                        "message" when item.MessageId is not null && item.Body is not null => mailbox.ReceiveFromPeer(fingerprint, item.Offered, item.MessageId, item.SenderTool, item.Body, item.LifetimeMs),
+                        _ => false
+                    };
+                    return known ? "ok" : "unknown";
+                }
+                catch (InvalidOperationException) {
+                    return "limited";
+                }
+                catch (ArgumentException) {
+                    return "unknown";
+                }
+            })];
+        }
+    }
+
+    // Machines with an address and items due for them.
+    internal (PeerInfo Peer, OutboxItem[] Items)[] DueForPeers() {
+        lock (gate) {
+            return [.. mailbox.Peers().Where(peer => peer.Address is not null).Concat(mailbox.Farewells())
+                .Select(peer => (peer, mailbox.DueOutbox(peer.Fingerprint)))
+                .Where(due => due.Item2.Length != 0)];
+        }
+    }
+
+    internal long Now() => clock();
+
+    internal void SetPeerSetting(string key, string? value) {
+        lock (gate)
+            mailbox.SetSetting(key, value);
+    }
+
+    internal string? PeerSetting(string key) {
+        lock (gate)
+            return mailbox.Setting(key);
+    }
+
+    // "ok" delivered, "unknown" rejected for good, anything else (including no answer) retried later.
+    internal void PeerOutcome(string fingerprint, string itemId, string? outcome) {
+        lock (gate) {
+            // A farewell to a removed machine: answered either way, it is done.
+            if (mailbox.PeerByFingerprint(fingerprint) is null) {
+                if (outcome is "ok" or "unknown")
+                    mailbox.FarewellDone(fingerprint);
+                else
+                    mailbox.OutboxFailed(itemId);
+                return;
+            }
+
+            if (outcome == "ok")
+                mailbox.OutboxDelivered(itemId);
+            else if (outcome == "unknown")
+                mailbox.OutboxRejected(itemId);
+            else
+                mailbox.OutboxFailed(itemId);
+            if (outcome is "ok" or "unknown" or "limited")
+                mailbox.TouchPeer(fingerprint);
+        }
+    }
 }
+
+// One item on the peer link: a message of a remote topic, or a member leaving it. LifetimeMs is the
+// time the message has left, so clocks may differ between machines.
+public sealed record PeerItem(string Kind, string Offered, string? MessageId, string? SenderTool, string? Body, long LifetimeMs);
 
 // Wording shared by the CLI and the MCP tools.
 public static class Phrases {
     public static string SendResult(string delivery, string topic) => delivery switch {
         "sent" => "Sent.",
         "recipient-offline" => "The recipient is unavailable right now; your message will wait until it returns (up to 24 hours).",
+        "queued-for-peer" => "On its way to the other machine: Pigeon delivers it within seconds while that machine is reachable, and keeps trying for up to 24 hours if it is not.",
         _ => $"The recipient is unavailable: nobody else is in {topic}. Your message is held until someone joins (up to 24 hours)."
     };
 }

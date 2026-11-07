@@ -1,6 +1,30 @@
 # Known issues and technical debt
 
-This list reflects 0.6.0-alpha.2. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+This list reflects 0.6.0-beta.1. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+
+## Other machines
+
+### Tried across two Windows machines only
+
+Agents on other machines were tried on 2026-11-07 between two Windows machines on a home Wi-Fi network, with Claude Desktop on both and Antigravity on one (host tests M1–M7 and D1–D7 in `experiments/host-test`); every build is also tested with two services on one machine over real TLS on loopback. Not yet tried: macOS, Linux, Tailscale, and the hosts that show Pigeon's prompts themselves (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
+
+### Accepted limits of the join handshake
+
+See "Accepted limits" in the [remote connections design](remote-design.md): a Mac talks to other machines over TLS 1.2, which .NET on macOS needs, so its certificate crosses the network unencrypted and an observer can tell which machines talk (not what they say); on first contact only the listing side checks the code, so an active attacker on your network who takes the listing machine's address could pose as it; both machines need an inbound port, which managed corporate devices and isolated guest Wi-Fi often block; an agent with a shell can run `pigeon allow` and `pigeon requests --show`; a host can answer prompts without a person (headless runs decline them, a Claude Code hook could answer them); and request spam is limited only by one request per topic, a rate limit and Deny.
+
+### The local API is still unauthenticated
+
+Another user account on a machine can use that machine's Pigeon service, including its topics with other machines and the commands that answer join requests. Use topics with other machines only on single-user machines. Authenticating the local API is planned for later.
+
+### Addresses are fixed
+
+There is no discovery: the first join names the other machine's address or host name. A known machine's address is updated whenever it makes contact; if both machines change address at once, set one with `pigeon peer address`. Both machines need their peer listener open for messages to flow both ways.
+
+## Claude Desktop
+
+### Join prompts appear in Pigeon's own window
+
+Claude sessions in the Claude desktop app cancel Pigeon's prompts without showing them (found on 2026-11-07), and so does Antigravity. From 0.6.0-alpha.7 Pigeon shows their join requests, contact confirmations and join codes in a small window of its own. The window comes from the session's Pigeon MCP server, so it appears only while the host has that server running; otherwise, or where no window can be shown (Linux without `zenity` or `kdialog`, no desktop session), the terminal answers as before. The macOS and Linux windows are not yet tried on a real machine, and Antigravity's not yet host-tested.
 
 ## Antigravity
 

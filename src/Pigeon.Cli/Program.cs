@@ -83,6 +83,8 @@ internal static class ServiceCommands {
 
         if (args[0] == "start" && args.Length == 1)
             return await StartAsync(port);
+        if (args[0] is "peer" or "requests" or "allow" or "deny")
+            return await PeerCommands.RunAsync(port, args);
         if (args[0] == "stop") {
             var stopped = await LocalHttpClient.ExecuteAsync(port, "service_stop", new { });
             if (!stopped.GetProperty("Ok").GetBoolean())
@@ -147,7 +149,17 @@ internal static class ServiceCommands {
                 e.Cancel = true;
                 stop.Cancel();
             };
-            var host = new LocalHttpServer(port, broker, stop.Cancel);
+            // The identity toward peers lives in the user's certificate store; PIGEON_IDENTITY_DIR
+            // keeps it in a folder instead, for tests and isolated runs.
+            var identityDirectory = Environment.GetEnvironmentVariable("PIGEON_IDENTITY_DIR");
+            if (identityDirectory is not null && !Path.IsPathFullyQualified(identityDirectory))
+                throw new ArgumentException("PIGEON_IDENTITY_DIR must be a full path.");
+            Pigeon.Service.Peers.IIdentityStore identityStore = identityDirectory is not null
+                ? new Pigeon.Service.Peers.FileIdentityStore(identityDirectory)
+                : new Pigeon.Service.Peers.UserCertificateStore(Path.Combine(parent, "identity.thumbprint"));
+            using var peers = new Pigeon.Service.Peers.PeerHost(broker, identityStore);
+            var host = new LocalHttpServer(port, broker, stop.Cancel, peers);
+            var peerWork = peers.RunAsync(stop.Token);
             var server = host.RunAsync(stop.Token);
             if (await Task.WhenAny(server, host.Ready) == server)
                 await server;
@@ -159,6 +171,8 @@ internal static class ServiceCommands {
             }
 
             await server;
+            await stop.CancelAsync();
+            await peerWork;
 
             return 0;
         }
@@ -175,7 +189,9 @@ internal static class ServiceCommands {
                 "copilot" => Environment.GetEnvironmentVariable("COPILOT_AGENT_SESSION_ID"),
                 _ => null
             };
-            var session = new McpSession(port, runtime, autoSession);
+            // Claude sessions started by the Claude desktop app advertise prompts but cancel them unseen.
+            var desktopClaude = runtime == "claude-code" && Environment.GetEnvironmentVariable("CLAUDE_CODE_ENTRYPOINT") == "claude-desktop";
+            var session = new McpSession(port, runtime, autoSession, hostShowsPrompts: !desktopClaude, dialogs: NativeDialog.ForThisMachine());
             var codexQueue = args.Length == 2 ? new CodexQueueNotifier(port, () => session.SessionId) : null;
             await McpStdio.RunAsync(Console.In, Console.Out, session, nextNotification: codexQueue is null ? null : codexQueue.TickAsync);
             return 0;
@@ -183,6 +199,13 @@ internal static class ServiceCommands {
 
         if (args[0] == "status")
             return await StatusAsync(port);
+        if (args[0] == "topics" && args.Length == 3) {
+            var remote = await Call(port, "peer_topics", new { machine = args[2] }, slow: true);
+            var open = remote.GetProperty("topics").EnumerateArray().Select(t => t.GetString()).ToArray();
+            Console.WriteLine(open.Length == 0 ? $"{args[2]} has no topic open to other machines." : string.Join("\n", open.Select(t => $"{t}@{args[2]}")));
+            return 0;
+        }
+
         if (args[0] == "topics") {
             var topics = (await Call(port, "topics", new { })).EnumerateArray().ToArray();
             if (topics.Length == 0)
@@ -190,14 +213,20 @@ internal static class ServiceCommands {
             foreach (var topic in topics) {
                 var members = topic.GetProperty("Members").EnumerateArray().Select(m => $"{m.GetProperty("Tool").GetString()} {m.GetProperty("SessionId").GetString()}").ToArray();
                 var partnerText = members.Length < 2 ? " (waiting for a partner)" : "";
-                Console.WriteLine($"{topic.GetProperty("Topic").GetString()}: {string.Join(" and ", members)}{partnerText} | {topic.GetProperty("Waiting").GetInt32()} waiting");
+                var open = topic.TryGetProperty("OpenToOtherMachines", out var o) && o.GetBoolean() ? " | open to other machines" : "";
+                Console.WriteLine($"{topic.GetProperty("Topic").GetString()}: {string.Join(" and ", members)}{partnerText} | {topic.GetProperty("Waiting").GetInt32()} waiting{open}");
             }
 
             return 0;
         }
 
         if (args[0] == "join") {
-            var topic = await Call(port, "join", new { topic = args[1], sessionId = args[3], tool = args[5] });
+            var topic = await Call(port, "join", new { topic = args[1], sessionId = args[3], tool = args[5], remote = args.Contains("--remote"), approval = args.Contains("--approval") });
+            if (topic.TryGetProperty("pending", out _)) {
+                Console.WriteLine($"{topic.GetProperty("text").GetString()!.Replace(" Do not call pigeon_join again; you will be told the outcome.", "")}\nRequest {topic.GetProperty("request").GetString()}: see pigeon requests.");
+                return 0;
+            }
+
             var partner = topic.GetProperty("Members").EnumerateArray().FirstOrDefault(m => m.GetProperty("SessionId").GetString() != args[3]);
             Console.WriteLine(partner.ValueKind == JsonValueKind.Object
                 ? $"Joined {args[1]} with {partner.GetProperty("Tool").GetString()} {partner.GetProperty("SessionId").GetString()}."
@@ -234,8 +263,8 @@ internal static class ServiceCommands {
     }
 
     // Calls the service and turns its rejection into a message for the user.
-    private static async Task<JsonElement> Call(string port, string operation, object args) {
-        var result = await LocalHttpClient.ExecuteAsync(port, operation, args);
+    private static async Task<JsonElement> Call(string port, string operation, object args, bool slow = false) {
+        var result = await LocalHttpClient.ExecuteAsync(port, operation, args, slow);
         if (!result.GetProperty("Ok").GetBoolean()) {
             var error = result.GetProperty("Error").GetString();
             throw new CommandException(error is null or "invalid request" ? "The service rejected the request." : error);
@@ -297,6 +326,23 @@ internal static class ServiceCommands {
             var nextText = next.ValueKind == JsonValueKind.Null ? "none" : DateTimeOffset.FromUnixTimeMilliseconds(next.GetInt64()).ToString("u");
             var waiting = wake.GetProperty("Queued").GetInt32() + wake.GetProperty("Leased").GetInt32();
             Console.WriteLine($"  {item.GetProperty("Tool").GetString()} {item.GetProperty("SessionId").GetString()} | waiting: {waiting} | wake: {wake.GetProperty("State").GetString()} | attempts since progress: {wake.GetProperty("Attempts").GetInt32()} | last transport: {wake.GetProperty("LastOutcome").GetString() ?? "none"} | next attempt: {nextText}");
+        }
+
+        // Other machines appear only once they are used; 'pigeon peer list' has the details.
+        var peers = await LocalHttpClient.ExecuteAsync(port, "peer_status", new { });
+        if (peers.GetProperty("Ok").GetBoolean()) {
+            var overview = peers.GetProperty("Value");
+            var paired = overview.GetProperty("peers").EnumerateArray().ToArray();
+            var addresses = overview.GetProperty("addresses").EnumerateArray().Select(e => e.GetString()).ToArray();
+            if (paired.Length != 0 || addresses.Length != 0) {
+                Console.WriteLine($"Known machines: {paired.Length} | listening: {(addresses.Length == 0 ? "off" : string.Join(", ", addresses))}");
+                if (overview.GetProperty("requests").GetInt32() is > 0 and var requests)
+                    Console.WriteLine($"Requests waiting: {requests} (pigeon requests)");
+                foreach (var peer in paired) {
+                    var contact = peer.GetProperty("LastContactUnixMs");
+                    Console.WriteLine($"  {peer.GetProperty("Name").GetString()} | last contact: {(contact.ValueKind == JsonValueKind.Number ? DateTimeOffset.FromUnixTimeMilliseconds(contact.GetInt64()).ToString("u") : "never")} | waiting to send: {peer.GetProperty("outbox").GetInt32()}");
+                }
+            }
         }
 
         return 0;

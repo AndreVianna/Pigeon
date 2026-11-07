@@ -2,6 +2,87 @@
 
 Live tests from [the release plan](../../docs/release-plan.md). They check a frozen build in the real hosts (Claude Desktop, Codex and, from 0.6.0-alpha.2, the Antigravity App) against an isolated service on port 49473 with a disposable database, using new test conversations and synthetic messages. Your normal service on port 49372 and your existing conversations are not used.
 
+## 0.6.0-alpha.7 and alpha.8 dialog tests (D1–D7)
+
+Prepared on 2026-11-07; not run yet. They check that hosts which cannot show Pigeon's prompts get Pigeon's own windows instead of the terminal: Claude Desktop on `dev-desktop` (192.168.2.20) and `office-laptop` (192.168.2.18), then Antigravity on dev-desktop. They also re-run M7 (removal) with alpha.6's fix. Real installs on both machines, new test conversations, topics named `dialog-test*`.
+
+### Setup
+
+1. **Both machines (you):** close Claude Desktop (and the Antigravity App on dev-desktop), then in the repository:
+   `git pull`, `pigeon stop`,
+   `dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts`,
+   `dotnet tool update --global Pigeon.Cli --version 0.6.0-alpha.7 --source ./artifacts`,
+   `pigeon start`. The Claude plugin reads from the repository folder, so `git pull` updates it.
+2. **office-laptop:** `pigeon peer remove dev-desktop`, which clears the topic and message left over from M7 (alpha.6 cannot reach back to it). dev-desktop already knows no machines.
+3. **Agents:** a new Claude Desktop conversation on each machine.
+
+### Tests
+
+| # | Test | Steps | Pass when |
+|---|---|---|---|
+| D1 | Open a topic | dev-desktop Claude: *"Open the Pigeon topic dialog-test to other machines. You may reply to Pigeon messages on that topic without asking me; replies only."* | `pigeon topics` shows it open to other machines. |
+| D2 | The requester's windows | Laptop Claude: *"Join the Pigeon topic dialog-test@192.168.2.20. You may reply to Pigeon messages on that topic without asking me; replies only."* | A Pigeon window on the laptop asks to contact 192.168.2.20; after Allow a second window shows the join code with a Copy button. The agent says only that the request was submitted and does not mention a terminal. |
+| D3 | The code window, and a wrong code | On dev-desktop a Pigeon window asks for the code. Enter a wrong one first, then the right one. | After the wrong code the window comes back; after the right one the join completes, and the laptop's code window closes by itself. |
+| D4 | Known machine: Allow or Deny | dev-desktop Claude opens `dialog-test-2` to other machines; the laptop's Claude joins `dialog-test-2@dev-desktop`. Press Deny in dev-desktop's window. | The window has only Allow and Deny; the laptop's Claude is told it was declined; the seat stays free. |
+| D5 | Removal reaches the other side (M7 again) | `pigeon peer remove office-laptop` on dev-desktop. | Within seconds the laptop's `pigeon peer list` shows no machines and its `pigeon topics` no longer lists `dialog-test@dev-desktop`. |
+| D6 | Antigravity with another machine | A new Antigravity conversation on dev-desktop: *"Open the Pigeon topic dialog-test-agy to other machines."* Then the laptop's Claude joins `dialog-test-agy@192.168.2.20` (a first contact again after D5). | Antigravity is no longer refused; the code window on dev-desktop comes from Antigravity's session; the join completes and a message goes each way. |
+| D7 | An agent forgets a machine (alpha.8) | After D6, or a new join of `dialog-test` from the laptop: laptop Claude: *"Forget dev-desktop."* | The agent calls `pigeon_leave` with `machine` and no prompt appears; both machines then show "Known machines: 0", and the shared topics end on both sides. |
+
+Record any prompt that falls back to the terminal, and any window that does not appear in front. D7 needs 0.6.0-alpha.8 on both machines (the same install steps with `--version 0.6.0-alpha.8`).
+
+### Results (2026-11-07, in progress)
+
+| Test | Result | Evidence |
+|---|---|---|
+| D1 | Pass | A new Claude Desktop conversation on dev-desktop (`4391a3d4-…`) opened `dialog-test`; `pigeon topics` showed it open to other machines. Its agent already said the question would appear in a small Pigeon window. |
+| D2 | Pass | The laptop's Claude asked to join `dialog-test@192.168.2.20`; "All dialogs opened": the contact window, then the code window. The agent said only that the request waited on its person in a Pigeon window, never mentioned a terminal, and did not see the code. |
+| D3 | Pass (join) | The code entered in dev-desktop's window completed the join: dev-desktop knew office-laptop, `dialog-test` had `claude-code @office-laptop`, no request was left, and both agents were told. Whether a wrong code was tried, and whether the laptop's code window closed by itself, is not recorded yet. |
+| D4 | Pass | `dialog-test-2@dev-desktop` from the known laptop: only an Allow window, no code; Allow joined it. `dialog-test-3`: Deny in the window; the laptop's agent was told it was declined and did not retry; the seat stayed free and the topic stayed open. |
+| D5 | Pass (M7 fixed) | `pigeon peer remove office-laptop` on dev-desktop; the laptop then showed "Known machines: 0" and "No topics." dev-desktop kept its three topics with free seats, open to other machines again. |
+| D6 | Pass | The Pigeon plugin 0.6.0-alpha.8 installed globally (copied to `%USERPROFILE%\.gemini\config\plugins\pigeon`, the first try of the production plugin): Antigravity listed it with its skill, MCP server, hooks and the **Pigeon wake** automation, running. A new Antigravity conversation (`15012ddd-…`) opened `dialog-test-agy` with `remote` (refused until alpha.6). The laptop's Claude joined `dialog-test-agy@192.168.2.20` as a first contact: "All three dialogs were shown with the code" (contact and code on the laptop, the code entry on dev-desktop from Antigravity's session). `pigeon status` showed `notification: Antigravity sidecar`. Round 1 from the laptop woke Antigravity, which replied "D6 round 2 of 2" and stopped; the laptop's Claude was woken for it. |
+| D7 | Pass, with a wording fix | The laptop's Claude was told *"Forget dev-desktop."*: it called `pigeon_leave` with `machine`, no prompt appeared, and both machines showed "Known machines: 0"; `dialog-test-agy` on dev-desktop kept Antigravity with its seat free and was open again. The agent said "every topic with it has ended on both machines", from the result text, although dev-desktop's topics remained; 0.6.0-beta.1 says each topic stays on the machine that opened it. |
+
+## 0.6.0-alpha.4 two-machine tests with agents (M1–M7)
+
+Prepared on 2026-11-07; not run yet. They check alpha.4's joins between machines with real agents: Claude Desktop on both `dev-desktop` (192.168.2.20) and `office-laptop` (192.168.2.18; the user switched the laptop from Codex to Claude on 2026-11-07), on the same Wi-Fi network. They use the installed `pigeon` on both machines (the user chose real installs), new test conversations and topics named `remote-test*`.
+
+### Setup
+
+1. **dev-desktop:** Pigeon 0.6.0-alpha.4 installed from this branch, the service started and the peer listener open on 192.168.2.20:49374 (done on 2026-11-07).
+2. **office-laptop (you):** close Claude, then in the repository:
+   `git fetch`, `git switch alpha3-remote-connections`, `git pull`,
+   `dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts`,
+   `dotnet tool update --global Pigeon.Cli --version 0.6.0-alpha.4 --source ./artifacts`,
+   `pigeon stop`, `pigeon start`, `pigeon peer listen` (note the address it prints; allow port 49374 for private networks if Windows asks).
+3. **Forget each other**, so the first join uses a code: `pigeon peer remove office-laptop` on dev-desktop and `pigeon peer remove dev-desktop` on office-laptop.
+4. **Agents:** a new Claude Desktop conversation on each machine, so both run alpha.4's MCP server.
+
+### Tests
+
+| # | Test | Steps | Pass when |
+|---|---|---|---|
+| M1 | Open a topic | Claude: *"Open the Pigeon topic remote-test to other machines. You may reply to Pigeon messages on that topic without asking me; replies only."* | Claude joins with `remote`; `pigeon topics` on dev-desktop shows it listed. |
+| M2 | First contact asks the requester | Laptop Claude: *"Join the Pigeon topic remote-test@192.168.2.20. You may reply to Pigeon messages on that topic without asking me; replies only."* | The laptop's Claude shows Pigeon's prompt "Contact 192.168.2.20, a machine you have not joined before?"; after yes it shows a 6-digit join code to you, not to the agent; the agent reports only that the request was submitted. |
+| M3 | The code completes the join | On dev-desktop, Pigeon's prompt appears in Claude: a new machine, office-laptop, wants to join remote-test with Claude Code. Enter the code from M2. | The join completes; each side's `pigeon peer list` shows the other; the topic is no longer listed. |
+| M4 | Messages and wakes both ways | Claude: *"Send on remote-test: 'M4 round 1 of 3. Reply with the next round; stop after round 3.'"* | Rounds 2 and 3 happen with no typing, each Claude woken by its hook waiter; each sees the other as `@<machine>`, never a session ID. |
+| M5 | A known machine needs only Allow | Claude opens `remote-test-2` to other machines; the laptop's Claude joins `remote-test-2@dev-desktop`. | Claude's prompt asks only Allow or Deny, with no code; after Allow the join completes. |
+| M6 | Deny refuses | Claude opens `remote-test-3`; the laptop's Claude asks to join it; answer Deny. | The laptop's Claude is told it was declined; the seat stays free and the topic stays listed. |
+| M7 | Leaving and forgetting | Laptop Claude: *"Leave remote-test."* Then `pigeon peer remove office-laptop` on dev-desktop. | Claude's side shows the seat free; after the removal, office-laptop's remaining topic with dev-desktop ends on both sides. |
+
+The terminal fallback (`pigeon requests`, `pigeon allow`, `pigeon deny`) is used only if a prompt does not appear; record it if so.
+
+### Results (2026-11-07, in progress)
+
+| Test | Result | Evidence |
+|---|---|---|
+| M1 | Pass, with a gap | A new Claude Desktop conversation on dev-desktop (`1ea23a45-…`) joined `remote-test` with `remote`. `pigeon peer list` shows "open to other machines: remote-test", but `pigeon topics`, `pigeon status` and the agents' `pigeon_topics` did not say a topic is open to other machines (fixed in alpha.6). |
+| M2 | Fail, fixed | The laptop's Claude Desktop asked to join `remote-test@192.168.2.20` twice; both times Pigeon reported that contacting 192.168.2.20 was not allowed, and no prompt appeared on either machine. **Cause:** Claude sessions started by the desktop app advertise MCP elicitation but cancel every prompt unseen, and Pigeon counts a cancel as Deny; the elicitation probe had covered only Claude Code in a terminal. **Fix:** Pigeon's MCP server recognizes these sessions (`CLAUDE_CODE_ENTRYPOINT=claude-desktop`) and never sends them prompts; their requests wait for `pigeon requests` / `pigeon allow` in a terminal, and the agent is told so. Re-run after the fix (0.6.0-alpha.5): the laptop's Claude answered that this app cannot show Pigeon's prompts and pointed to `pigeon requests`; a retry returned the same request (`68659f4438c6`) instead of a duplicate. On the laptop `pigeon allow 68659f4438c6` confirmed the contact and `pigeon requests --show` showed join code 860261. **Pass (terminal).** |
+| M3 | Pass (terminal) | The request arrived on dev-desktop as `e5e55d8c625c` ("office-laptop (192.168.2.18:49374) wants to join remote-test with claude-code"); the user entered the code with `pigeon allow e5e55d8c625c 860261`: "Allowed. The other session is in the topic now." Both machines listed each other; the remote member showed as `claude-code @office-laptop`. `peer list` showed "last contact: never" right after the join (fixed in alpha.6). Before M3, a new conversation on dev-desktop took over `remote-test` from the old one at the user's choice, which a local caller can do through the CLI. |
+| M4 | Pass | Three rounds with no typing, each Claude woken by its hook waiter; round 3 ended the exchange; nothing left to send. Both agents described each sent message as not yet delivered, from the send result's "Queued for the other machine" (reworded in alpha.6). |
+| M5 | Pass | `remote-test-2@dev-desktop` from the known laptop arrived as `2fd4a2cf5f80` with no code; `pigeon allow 2fd4a2cf5f80` joined it. |
+| M6 | Pass | `pigeon deny d87ac732abe8`: the laptop's Claude was told it was declined and did not retry; `remote-test-3` kept its free seat and stayed open to other machines. |
+| M7 | Fail, fixed | Leaving `remote-test` on the laptop freed the seat on dev-desktop, which listed the topic again; the laptop's agent, given only `{"deleted":true}`, wrongly said the topic ended on both sides (alpha.6 explains it). `pigeon peer remove office-laptop` ended `remote-test-2` on dev-desktop, but **the laptop was never told**: it still listed dev-desktop and the topic, and "M7 after removal" sat in its outbox ("waiting to send: 1"), refused at the handshake and retried for a day. **Fix (alpha.6):** a removal sends a "forget" notice to the removed machine, which ends the topics and forgets this machine too. Re-run pending. |
+
 ## 0.6.0-alpha.2 Copilot tests (C1–C6)
 
 Prepared and started on 2026-11-04 (results below). They check the Copilot plugin, including whether an extension shipped in an installed plugin loads (the probe used `.github/extensions`), in a new test repository, against the isolated service on port 49473 and a disposable database.

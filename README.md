@@ -20,7 +20,7 @@ Everything stays on your computer. Pigeon runs a small background service that o
 
 ```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.2 --source ./artifacts
+dotnet tool install --global Pigeon.Cli --version 0.6.0-beta.1 --source ./artifacts
 ```
 
 The agent tools start `pigeon` by name, so the .NET tools folder (`~/.dotnet/tools` on macOS and Linux) must be on the `PATH` they see; `dotnet` says how to add it the first time. To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.
@@ -53,6 +53,23 @@ From then on, each message wakes the other agent, which reads it and can answer 
 
 A topic holds two sessions. To talk to a third agent, use another topic, such as `parser-review-cursor`.
 
+## Connect agents on other machines
+
+New in 0.6.0-alpha.3, with the join codes below since alpha.4. Agents on two machines on the same network, such as a LAN or a Tailscale network, can share a topic, including a colleague's machine. The services talk over TLS and pin each other's certificate; nothing is exposed to the internet, and Pigeon never changes the firewall.
+
+1. **Each machine, once:** a person runs `pigeon peer listen`. It listens on the machine's LAN and Tailscale addresses (port 49374; allow it in the firewall if your system asks) and prints them. The machine's name is its host name; change it with `pigeon peer name`.
+2. **Open a topic:** ask your agent to open a topic to other machines (`pigeon_join` with `remote: true`, or `pigeon join review as <session> using <tool> --remote`).
+3. **Join it from the other machine:** ask the agent there to join `review@<address>` the first time, for example `review@192.168.2.20`, and `review@<machine name>` after that.
+4. **Approve it:** Pigeon asks the people directly, in the agent app, never through the agent.
+   - The first time, the person asking confirms the contact and is shown a 6-digit join code. They give it to the person at the other machine by any means (in person, a call, a chat), who enters it. The two machines then know each other.
+   - After that, joins from a known machine get a plain Allow or Deny.
+
+Either person ends it at any time by telling their agent to leave the topic or to forget the other machine, or with `pigeon leave` or `pigeon peer remove <machine>`. Each side sees the other as `<tool> @<machine>`, never its session ID, and a machine reaches only the topics it was allowed to join.
+
+**Where the prompts appear.** Claude Code, Codex, Copilot CLI and OpenCode show them in their own interface. The Claude desktop app and Antigravity cannot, so Pigeon shows them in a small window of its own (Windows, macOS, and Linux with `zenity` or `kdialog`). When nobody is at the session, in a headless run, or with `PIGEON_PROMPTS=terminal`, use the terminal: `pigeon requests` lists what waits, `pigeon requests --show <request>` shows your join code, and `pigeon allow <request> [<code>]` or `pigeon deny <request>` answers.
+
+**Use this on single-user machines.** The local Pigeon service has no authentication, so another account on the same computer could use your topics with other machines. See the [remote connections design](docs/remote-design.md) for the full model and its accepted limits.
+
 ## Commands
 
 Words such as `as`, `using`, `from`, `to` and `for` are part of the commands. A *session ID* is the ID your agent tool gives its conversation; the plugins find it for you, so you need it only when you use the commands yourself. `pigeon status` and `pigeon topics` show the session IDs in use.
@@ -67,6 +84,8 @@ Words such as `as`, `using`, `from`, `to` and `for` are part of the commands. A 
 | `pigeon leave <topic> as <session-id>` | Leaves a topic. The last one to leave deletes it. |
 | `pigeon send from <session-id> to <topic> "<message>"` | Sends a message to the other member. Use `-` as the message to read it from standard input. |
 | `pigeon receive for <session-id> from <topic>` | Shows the messages waiting for that session and removes them from the queue. |
+| `pigeon peer <name\|listen\|invite\|accept\|confirm\|list\|remove\|address> ...` | Pairs with Pigeon services on other machines (see above). |
+| `pigeon topic share <topic> with <peer>`, `pigeon topic unshare <topic>` | Shares one topic with a paired peer, or stops sharing it. |
 | `pigeon --help`, `pigeon <command> --help` | Shows help. `pigeon --version` shows the version. |
 
 `pigeon mcp` and `pigeon hook` are used by the plugins; you do not run them yourself.
@@ -98,7 +117,7 @@ Commands exit with code 0 when they succeed (including when a message is held fo
 
 - **Agents are woken only while their conversation is open.** A closed conversation cannot be woken. When you reopen it, its messages are waiting, and the plugin restores its topics.
 - **Claude renewals.** To stay reachable, the Claude plugin's background waiter is renewed every 12 hours with a short turn that you may see in an idle conversation. It is not a message, and Claude ends it without doing anything else.
-- **No passwords.** Pigeon does not verify who is who. Any program running on this computer, under any account, can read Pigeon's messages, use a session ID, or stop the service. Do not send secrets through it.
+- **No passwords on this computer.** Pigeon does not verify who is who locally. Any program running on this computer, under any account, can read Pigeon's messages, use a session ID, stop the service, or send on topics shared with other machines as you. Share topics only from a computer that only you use, and do not send secrets through Pigeon.
 - **At least once.** If an agent stops halfway through reading, its messages are delivered again, so the same message can occasionally arrive twice.
 
 More detail is in [known issues](docs/known-issues.md) and [local trust boundaries](docs/security-design.md).

@@ -30,6 +30,10 @@ Feature: Agent tools
     Given a running service with two agent connections
     Then one Antigravity server process shows both of its conversations as connected, and a message to either is delivered as sent
 
+  Scenario: Hosts that cannot show prompts get them in Pigeon's own windows
+    Given a running service with two agent connections
+    Then a Claude desktop opener enters the code in a window, a wrong code is asked again, and the Antigravity joiner's code window stays until the join completes
+
   Scenario: An Antigravity wake waits until the conversation has been idle
     Given a running service with a test clock
     Then a wake is claimed only after the conversation's hooks report it idle for two seconds, never during a turn, and a lost wake is retried after its retry time

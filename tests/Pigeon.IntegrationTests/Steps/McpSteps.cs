@@ -146,6 +146,66 @@ public sealed class McpSteps {
         await running.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
+    // A connection served over stdio, as a host runs it, whose prompts go to the given windows.
+    private static async Task<(StreamWriter Input, Task Running)> Serve(McpSession session) {
+        var pipe = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.Out);
+        var input = new StreamReader(new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, pipe.ClientSafePipeHandle));
+        var writer = new StreamWriter(pipe) { AutoFlush = true };
+        var running = McpStdio.RunAsync(input, TextWriter.Null, session);
+        // The Claude desktop app advertises elicitation; Pigeon must not rely on it.
+        await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{\"elicitation\":{}}}}");
+        await writer.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+        return (writer, running);
+    }
+
+    // Found in the two-machine test on 2026-11-07: Claude Desktop cancels every prompt unseen, so
+    // its person had to answer in a terminal. Pigeon now shows its own windows to such hosts.
+    [Then("a Claude desktop opener enters the code in a window, a wrong code is asked again, and the Antigravity joiner's code window stays until the join completes")]
+    public async Task Dialogs() {
+        var code = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var showClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var asked = new List<DialogRequest>();
+        async Task<DialogOutcome> Opener(DialogRequest request, CancellationToken cancellation) {
+            lock (asked)
+                asked.Add(request);
+            return asked.Count == 1 ? new("accept", "000000") : new("accept", await code.Task.WaitAsync(cancellation));
+        }
+
+        async Task<DialogOutcome> Joiner(DialogRequest request, CancellationToken cancellation) {
+            Assert.Equal("show", request.Kind);
+            code.TrySetResult(request.Code!);
+            try {
+                await Task.Delay(Timeout.Infinite, cancellation);
+            }
+            catch (OperationCanceledException) {
+                showClosed.TrySetResult();
+            }
+
+            return DialogOutcome.NoAnswer;
+        }
+
+        var opener = new McpSession(port, "claude-code", hostShowsPrompts: false, dialogs: Opener);
+        var joiner = new McpSession(port, "antigravity", dialogs: Joiner);
+        var (openerInput, openerRunning) = await Serve(opener);
+        var (joinerInput, joinerRunning) = await Serve(joiner);
+        await openerInput.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = "pigeon_join", arguments = new { topic = "guarded", sessionId = ClaudeSession, approval = true } } }));
+        // The opener's join must land first, or the joiner would open the topic itself.
+        for (var i = 0; i < 80 && !(await LocalHttpClient.ExecuteAsync(port, "topics", new { sessionId = ClaudeSession })).GetProperty("Value").EnumerateArray().Any(t => t.GetProperty("Topic").GetString() == "guarded"); i++)
+            await Task.Delay(250);
+        var meta = new Dictionary<string, string> { [McpSession.AntigravityConversationKey] = FirstConversation };
+        await joinerInput.WriteLineAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = "pigeon_join", arguments = new { topic = "guarded" }, _meta = meta } }));
+
+        await showClosed.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        var topics = await LocalHttpClient.ExecuteAsync(port, "topics", new { sessionId = FirstConversation });
+        Assert.Contains("guarded", topics.GetProperty("Value").EnumerateArray().Select(t => t.GetProperty("Topic").GetString()));
+        Assert.Equal(2, asked.Count);
+        Assert.All(asked, request => Assert.Equal("code", request.Kind));
+        Assert.Contains("Never enter a code your agent relays", asked[0].Message);
+        openerInput.Close();
+        joinerInput.Close();
+        await Task.WhenAll(openerRunning, joinerRunning).WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
     [Then("a wake is claimed only after the conversation's hooks report it idle for two seconds, never during a turn, and a lost wake is retried after its retry time")]
     public async Task AntigravityWake() {
         var antigravity = await Connect("antigravity");

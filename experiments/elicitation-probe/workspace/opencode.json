@@ -1,0 +1,6 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "elicitation-probe": { "type": "local", "command": ["python", "-I", "C:/Projects/Pigeon/experiments/elicitation-probe/mcp_server.py"], "environment": { "PROBE_HOST": "opencode" }, "enabled": true }
+  }
+}

@@ -1,0 +1,137 @@
+# Elicitation probe
+
+Answers step 1 of the [remote connections design](../../docs/remote-design.md): does each host support MCP elicitation well enough for join codes and Allow/Deny prompts? The probe is a stdio MCP server with two harmless tools. It never touches Pigeon, the network or any file outside `logs/`.
+
+| Question | How it is answered |
+|---|---|
+| Q1 Does the host advertise elicitation? | `initialize` capabilities in the log |
+| Q2 Does a form appear inside a tool call, and what comes back? | `probe_ask`: the person types any 6 digits |
+| Q3 How long can a tool call wait for the person? | `probe_ask` again, answered only after 3 minutes |
+| Q4 Can the server ask outside a tool call, while idle? | `probe_ask_later`: asks 60 s after the tool returns |
+| Q5 Does the model see the prompt or the answer? | Ask the model afterwards for the marker and the digits |
+| Q6 What do headless runs do? | One `probe_ask` in each host's non-interactive mode |
+
+Every event goes to `logs/<host>.jsonl`, which is git-ignored. The log records whether a code was given and its length, never the digits.
+
+## Loading the probe (no global config changes except Antigravity)
+
+| Host | How |
+|---|---|
+| Claude Code (terminal or the Desktop app's Code tab) | Open `workspace/` as the project; it has `.mcp.json`. Approve the project MCP server when asked. |
+| Codex | From `workspace/`: `codex -c 'mcp_servers.elicitation-probe.command="python"' -c 'mcp_servers.elicitation-probe.args=["-I","C:/Projects/Pigeon/experiments/elicitation-probe/mcp_server.py"]' -c 'mcp_servers.elicitation-probe.env={PROBE_HOST="codex"}'` |
+| Copilot CLI | From `workspace/`: `copilot --additional-mcp-config @../copilot-mcp.json` |
+| OpenCode | Open `workspace/`; it has `opencode.json`. |
+| Antigravity | Add the entry in `antigravity-mcp-entry.json` to `~/.gemini/config/mcp_config.json`, and remove it afterwards. This is the one global change. |
+
+## Steps in each host (a person at the keyboard)
+
+1. Start a new session in `workspace/` with the probe loaded.
+2. **Q2:** say "Call probe_ask." A form should appear. Type any 6 digits and submit.
+3. **Q3:** say "Call probe_ask." Wait 3 full minutes, then submit. Note whether the host gave up first, and how.
+4. **Q4:** say "Call probe_ask_later, then end your turn." Do nothing for 60 seconds. Note whether a form appears while the session is idle, and answer it.
+5. **Q5:** say "What marker and what digits did the probe's forms show or receive? Answer only from what you can see." The right answer is that it cannot see them.
+6. **Decline:** say "Call probe_ask." Decline the form.
+7. Note the host's version and any auto-approve or permission mode in use.
+
+## Headless (Q6)
+
+From `workspace/`, one prompt per host: "Call probe_ask once with wait_minutes 1, then stop."
+
+- Claude Code: `claude -p "<prompt>" --allowedTools mcp__elicitation-probe__probe_ask`
+- Codex: `codex exec <the -c flags above> "<prompt>"`
+- Copilot CLI: `copilot -p "<prompt>" --additional-mcp-config @../copilot-mcp.json --allow-tool elicitation-probe`
+- OpenCode: `opencode run "<prompt>"`
+
+## Results
+
+Versions on this machine on 2026-11-04: Claude Code 2.1.314, Codex CLI 0.162.1, Copilot CLI 1.0.104-3, OpenCode 2.2.5; Antigravity's `agy` is not on the PATH.
+
+### Headless (Q6) and capabilities (Q1), run 2026-11-04
+
+| Host | Q1 advertised | Q6 headless outcome |
+|---|---|---|
+| Codex CLI 0.162.1 (`codex exec`) | `elicitation: {form, url}`, protocol 2025-06-18 | **Declined at once.** The MCP tool itself first needed approval: with `approval_policy` never, the call failed until the tool was pre-approved (`tools.probe_ask.approval_mode="approve"`). |
+| Copilot CLI 1.0.104-3 (`copilot -p`) | `elicitation: {form, url}`, plus `sampling`, protocol 2025-11-25 | **Declined at once.** |
+| OpenCode 2.2.5 (`opencode run`) | `elicitation: {form, url}`, plus `roots`, protocol 2025-11-25 | **Never answered.** The request stayed open until the probe's own 60-second wait ended; the tool call did not time out first. OpenCode also called the tool through its `execute` code tool, not directly. |
+| Claude Code 2.1.314 (`claude -p`) | not run | Blocked: the CLI's account had reached its weekly usage limit (resets 2026-11-07). |
+| Antigravity | not run | `agy` is not installed on the PATH; interactive only. |
+
+### Interactive (Q2–Q5)
+
+**Codex CLI 0.162.1 (terminal UI), run by the user on 2026-11-04: all pass.**
+
+| Question | Result |
+|---|---|
+| Q2 form inside a tool call | A form appeared at the bottom of the terminal with the message, the field title and its description; Enter submits, Esc cancels. Reply `accept` with the 6 digits after 32 s. |
+| Q3 long wait | The tool call waited 205 s for the answer without timing out, and returned `accept`. |
+| Q4 outside a tool call | **Works.** 60 s after the turn ended, the form appeared while Codex was idle; answered after 35 s, `accept`. No model turn was needed. |
+| Q5 does the model see it | No. Asked for the marker and digits, the model said it could not see them; it saw only the tool results. |
+| Decline | The form has no separate Decline: Esc returns `cancel`. Pigeon must treat `cancel` like `decline`. |
+
+Not covered: the Codex desktop app (ChatGPT app), which Pigeon's Codex plugin also targets.
+
+**Copilot CLI 1.0.106-9 (terminal UI, Manual Approval mode), run by the user on 2026-11-04: passes, with a 3-minute limit inside tool calls.**
+
+| Question | Result |
+|---|---|
+| Q1 | `elicitation: {form, url}`, protocol 2025-11-25 |
+| Q2 form inside a tool call | Appeared and returned `accept` with 6 digits after 5 s. |
+| Q3 long wait | **Copilot cancelled the tool call after exactly 3 minutes** (`notifications/cancelled`, reason "request timeout"; the user saw MCP error -32001). The form stayed open, and the answer given at 204 s still reached the server, for a call that had already ended. The model then **retried by itself** with `wait_minutes: 1`, which opened a second form. |
+| Q4 outside a tool call | **Works.** The form appeared 60 s after the turn ended; answered after 16 s, `accept`. |
+| Q5 does the model see it | No: "I can't see the marker or any digits; the probe results only report the outcome." |
+| Decline | Esc returns `cancel`. |
+
+**OpenCode 2.2.5 (terminal UI), run by the user on 2026-11-04: all pass, plus a replayed stale form.**
+
+| Question | Result |
+|---|---|
+| Before any prompt | A new session showed the form left unanswered by the headless run 30 minutes earlier (marker `IN-CALL-B017`), whose probe had long exited. OpenCode keeps unanswered forms and shows them again later, in another session. Dismissed with Esc. |
+| Q2 form inside a tool call | Appeared as "elicitation-probe is requesting input"; `accept` after 19 s. OpenCode called the tool through its `execute` code tool. |
+| Q3 long wait | Waited 198 s without timing out; `accept`. |
+| Q4 outside a tool call | **Works.** Appeared 60 s after the turn ended; `accept` after 23 s. |
+| Q5 does the model see it | No: "I have no marker or digits to report." |
+| Decline | Esc returns `cancel`. |
+
+**Claude Code 2.1.318 (terminal UI, auto mode on), run by the user on 2026-11-04: all pass.**
+
+| Question | Result |
+|---|---|
+| Q1 | `elicitation: {form, url}`, protocol 2025-11-25 |
+| Q2 form inside a tool call | "MCP server "elicitation-probe" requests your input", with the message, a required Code field, and Accept and Decline buttons; `accept` after 31 s. |
+| Q3 long wait | Waited 197 s without timing out; `accept`. |
+| Q4 outside a tool call | **Works.** Appeared 60 s after the turn ended; `accept` after 16 s. |
+| Q5 does the model see it | No: "I can't see a marker or any digits for any of the three forms." |
+| Decline | Esc returns `cancel`; a Decline button also exists. Auto mode did not answer any form on the user's behalf. |
+
+Not covered: the Claude desktop app's Code tab and Claude Desktop chats, and the headless run (blocked by the CLI account's usage limit).
+
+**Antigravity app (`antigravity-client` v1.0.0, Gemini 3.8 Flash), run by the user on 2026-11-04: no forms.**
+
+| Question | Result |
+|---|---|
+| Q1 | Advertises `elicitation: {form, url}`, protocol 2025-11-25. |
+| Q2 inside a tool call | **Cancelled at once (0.0 s), no form shown**, in four calls: two made through a subagent the model created, one made directly. |
+| Q4 outside a tool call | **Cancelled at once**, no form shown. |
+| Side note | The agent read the probe's log file and quoted its markers. Anything Pigeon writes to disk is readable by an agent with file access, so join codes must never be stored in clear. |
+
+The probe entry was removed from `~/.gemini/config/mcp_config.json` afterwards (the file is empty again, as before the test).
+
+### Summary
+
+| Host | Form in a tool call | Waits ≥ 3 min | Form while idle | Model sees it | Headless |
+|---|---|---|---|---|---|
+| Claude Code 2.1.318 (terminal) | yes | yes (197 s) | yes | no | not run |
+| Codex CLI 0.162.1 | yes | yes (205 s) | yes | no | declines |
+| Copilot CLI 1.0.106-9 | yes | **no: call cancelled at 3 min** | yes | no | declines |
+| OpenCode 2.2.5 | yes | yes (198 s) | yes | no | never answers |
+| Antigravity app | **no: cancels** | — | **no: cancels** | — | — |
+
+Not covered: the Claude desktop app's Code tab and Claude Desktop chats, and the Codex desktop app.
+
+**What this means for the design:** declining by default in headless runs (Codex, Copilot) is the safe behaviour, since nobody approves a join. OpenCode's silence means Pigeon must apply its own timeout to every elicitation and treat "no reply" as declined, never wait on the host. From the interactive runs:
+
+1. **Ask outside tool calls.** Four hosts show a form while the session is idle, with no model turn and no tool timeout; Copilot cancels a tool call after 3 minutes. Pigeon's MCP server should raise the prompt as soon as a request arrives, not wait for the agent to call a tool.
+2. **`cancel` and no reply mean Deny.** Esc returns `cancel` everywhere; only Claude Code also has a Decline button.
+3. **Answer only open requests.** Copilot delivered an answer after the call had ended, and OpenCode replayed an unanswered form in a later session. Every answer must match a request that is still open, or it is ignored.
+4. **Tell the agent the request is pending.** Copilot's model retried by itself after a timeout. The agent should get "request pending; do not retry", and one open request per topic stops duplicates.
+5. **Antigravity uses the terminal.** It cancels every form, so its users approve with `pigeon requests` and `pigeon allow`, and the README says so.
