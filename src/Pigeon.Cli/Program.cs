@@ -213,7 +213,8 @@ internal static class ServiceCommands {
             foreach (var topic in topics) {
                 var members = topic.GetProperty("Members").EnumerateArray().Select(m => $"{m.GetProperty("Tool").GetString()} {m.GetProperty("SessionId").GetString()}").ToArray();
                 var partnerText = members.Length < 2 ? " (waiting for a partner)" : "";
-                Console.WriteLine($"{topic.GetProperty("Topic").GetString()}: {string.Join(" and ", members)}{partnerText} | {topic.GetProperty("Waiting").GetInt32()} waiting");
+                var open = topic.TryGetProperty("OpenToOtherMachines", out var o) && o.GetBoolean() ? " | open to other machines" : "";
+                Console.WriteLine($"{topic.GetProperty("Topic").GetString()}: {string.Join(" and ", members)}{partnerText} | {topic.GetProperty("Waiting").GetInt32()} waiting{open}");
             }
 
             return 0;

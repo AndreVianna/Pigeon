@@ -27,6 +27,7 @@ public sealed class PeerStoreTests : IDisposable {
         foreach (var item in from.DueOutbox(toPrint)) {
             var known = item.Kind switch {
                 "leave" => to.ReceiveLeave(fromPrint, item.Offered) || true,
+                "forget" => to.ReceiveForget(fromPrint) || true,
                 _ => to.ReceiveFromPeer(fromPrint, item.Offered, item.MessageId!, item.SenderTool, item.Body!, item.ExpiresUnixMs - now)
             };
             if (known) {
@@ -129,6 +130,31 @@ public sealed class PeerStoreTests : IDisposable {
         Assert.Null(ana.PeerByFingerprint(BrunoPrint));
         Assert.Equal(["review"], ana.ListedTopics());
         Assert.False(ana.RemovePeer("bruno-desktop"));
+    }
+
+    // Found in the two-machine test on 2026-11-07: the removed side kept the topic and retried for a day.
+    [Fact]
+    public void Removing_a_machine_tells_it_so_it_ends_the_topic_and_forgets_this_machine_too() {
+        Link();
+        Assert.True(ana.RemovePeer("bruno-desktop"));
+        Assert.Empty(ana.Peers());
+        var farewell = Assert.Single(ana.Farewells());
+        Assert.Equal((BrunoPrint, "10.0.0.2:49374"), (farewell.Fingerprint, farewell.Address));
+        Assert.Equal(1, Relay(ana, AnaPrint, bruno, BrunoPrint));
+        ana.FarewellDone(BrunoPrint);
+        Assert.Empty(ana.Farewells());
+        // Bruno's side ended the topic, was told why, and forgot Ana.
+        Assert.Empty(bruno.Peers());
+        Assert.DoesNotContain(bruno.Topics(), t => t.Topic == "review@ana-laptop");
+    }
+
+    [Fact]
+    public void Joining_again_cancels_a_farewell_that_was_not_delivered_yet() {
+        Link();
+        _ = ana.RemovePeer("bruno-desktop");
+        _ = ana.AddPeer(BrunoPrint, "bruno-desktop", "10.0.0.2:49374");
+        Assert.Empty(ana.Farewells());
+        Assert.DoesNotContain(ana.DueOutbox(BrunoPrint), i => i.Kind == "forget");
     }
 
     [Fact]

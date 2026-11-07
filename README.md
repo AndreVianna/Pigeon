@@ -20,7 +20,7 @@ Everything stays on your computer. Pigeon runs a small background service that o
 
 ```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.5 --source ./artifacts
+dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.6 --source ./artifacts
 ```
 
 The agent tools start `pigeon` by name, so the .NET tools folder (`~/.dotnet/tools` on macOS and Linux) must be on the `PATH` they see; `dotnet` says how to add it the first time. To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.

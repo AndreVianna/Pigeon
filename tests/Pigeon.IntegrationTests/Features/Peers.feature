@@ -12,6 +12,7 @@ Feature: Agents on other machines
     Then a message from each side reaches the other, from the machine and never a session ID
     And each side lists the other as a known machine with nothing left to send
     And a second topic from the known machine is allowed without a code
+    And when Ana removes Bruno's machine, Bruno's side ends the topics and forgets Ana's machine too
 
   Scenario: Nothing is reachable without a person's answer
     Given two isolated services, each listening for other machines

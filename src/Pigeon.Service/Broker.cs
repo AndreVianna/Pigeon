@@ -68,7 +68,7 @@ public sealed partial class Broker : IDisposable {
                     "request_show" => RequestCode(Str(args, "id")),
                     "request_allow" => RequestAnswer(Str(args, "id"), true, Optional(args, "code")),
                     "request_deny" => RequestAnswer(Str(args, "id"), false, null),
-                    "leave" => new { deleted = mailbox.Leave(Str(args, "sessionId"), Str(args, "topic")) },
+                    "leave" => LeaveResult(Str(args, "topic"), mailbox.Leave(Str(args, "sessionId"), Str(args, "topic"))),
                     "send" => Send(args),
                     "take" => mailbox.Take(Str(args, "sessionId"), Str(args, "topic")),
                     "session" => mailbox.Session(Str(args, "sessionId")),
@@ -306,6 +306,14 @@ public sealed partial class Broker : IDisposable {
             mailbox.Dispose();
     }
 
+    private static object LeaveResult(string topic, bool deleted) {
+        var at = topic.LastIndexOf('@');
+        var text = at > 0
+            ? $"Left {topic}. Your copy of it is gone; on {topic[(at + 1)..]} the topic stays, with its seat free for someone else."
+            : deleted ? $"Left {topic}. Nobody was left, so the topic was deleted." : $"Left {topic}.";
+        return new { deleted, text };
+    }
+
     // The peer link (see docs/remote-design.md). These are called by the peer listener and the
     // delivery loop under the same lock as every other operation, never through the local API.
     internal bool IsPeer(string fingerprint) {
@@ -357,6 +365,7 @@ public sealed partial class Broker : IDisposable {
                 try {
                     var known = item.Kind switch {
                         "leave" => mailbox.ReceiveLeave(fingerprint, item.Offered) || true,
+                        "forget" => mailbox.ReceiveForget(fingerprint) || true,
                         "message" when item.MessageId is not null && item.Body is not null => mailbox.ReceiveFromPeer(fingerprint, item.Offered, item.MessageId, item.SenderTool, item.Body, item.LifetimeMs),
                         _ => false
                     };
@@ -375,7 +384,7 @@ public sealed partial class Broker : IDisposable {
     // Machines with an address and items due for them.
     internal (PeerInfo Peer, OutboxItem[] Items)[] DueForPeers() {
         lock (gate) {
-            return [.. mailbox.Peers().Where(peer => peer.Address is not null)
+            return [.. mailbox.Peers().Where(peer => peer.Address is not null).Concat(mailbox.Farewells())
                 .Select(peer => (peer, mailbox.DueOutbox(peer.Fingerprint)))
                 .Where(due => due.Item2.Length != 0)];
         }
@@ -396,6 +405,15 @@ public sealed partial class Broker : IDisposable {
     // "ok" delivered, "unknown" rejected for good, anything else (including no answer) retried later.
     internal void PeerOutcome(string fingerprint, string itemId, string? outcome) {
         lock (gate) {
+            // A farewell to a removed machine: answered either way, it is done.
+            if (mailbox.PeerByFingerprint(fingerprint) is null) {
+                if (outcome is "ok" or "unknown")
+                    mailbox.FarewellDone(fingerprint);
+                else
+                    mailbox.OutboxFailed(itemId);
+                return;
+            }
+
             if (outcome == "ok")
                 mailbox.OutboxDelivered(itemId);
             else if (outcome == "unknown")
@@ -417,7 +435,7 @@ public static class Phrases {
     public static string SendResult(string delivery, string topic) => delivery switch {
         "sent" => "Sent.",
         "recipient-offline" => "The recipient is unavailable right now; your message will wait until it returns (up to 24 hours).",
-        "queued-for-peer" => "Queued for the other machine; it is delivered when that machine is reachable (up to 24 hours).",
+        "queued-for-peer" => "On its way to the other machine: Pigeon delivers it within seconds while that machine is reachable, and keeps trying for up to 24 hours if it is not.",
         _ => $"The recipient is unavailable: nobody else is in {topic}. Your message is held until someone joins (up to 24 hours)."
     };
 }

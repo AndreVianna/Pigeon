@@ -4,7 +4,8 @@ namespace Pigeon.Core;
 
 // A session ID is a routing claim supplied by the host or the caller; it is not authentication.
 public sealed record Member(string Tool, string SessionId);
-public sealed record TopicInfo(string Topic, Member[] Members, int Waiting);
+// OpenToOtherMachines: listed, so a session on another machine may ask to join (the free seat).
+public sealed record TopicInfo(string Topic, Member[] Members, int Waiting, bool OpenToOtherMachines = false);
 public sealed record SessionInfo(string Tool, string SessionId, string[] Topics);
 public sealed record Delivery(string Id, string Topic, string SenderTool, string SenderSessionId, string Body, long SentAtUnixMs);
 public sealed record SendOutcome(string MessageId, Member? Recipient);
@@ -138,7 +139,7 @@ public sealed partial class Mailbox : IDisposable {
         var waiting = forSession is null
             ? db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND status IN ('queued','leased')", topic)
             : db.Query("SELECT COUNT(*) FROM p_messages WHERE topic=? AND recipient=? AND status IN ('queued','leased')", topic, forSession);
-        return new(topic, [.. MembersOf(topic).Select(Shown)], int.Parse(waiting[0][0]!, CultureInfo.InvariantCulture));
+        return new(topic, [.. MembersOf(topic).Select(Shown)], int.Parse(waiting[0][0]!, CultureInfo.InvariantCulture), ListedTopicsCore().Contains(topic));
     }
 
     // A remote seat is shown as "@<peer name>"; its fingerprint-based ID stays internal.

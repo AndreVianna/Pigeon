@@ -2,6 +2,18 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
+## 0.6.0-alpha.6 (unreleased)
+
+A dev build from the two-machine test of alpha.4 (Claude Desktop on both machines).
+
+### Fixed
+- Removing a machine now tells it: a "forget" notice goes to its last address (kept for up to a day), and that machine ends the shared topics and forgets this one too. Before, the removed side kept the topic and retried its messages for a day.
+- Topic lists (`pigeon topics` and the agents' `pigeon_topics`) say which topics are open to other machines.
+- Leaving a topic on another machine explains that the topic stays there with a free seat; an agent had concluded it ended on both sides.
+- A message to another machine is described as on its way (delivered within seconds while reachable), not as merely queued; agents reported every message as undelivered.
+- A completed join counts as contact with the other machine in `pigeon peer list`.
+- The Claude connect skill says that in the Claude desktop app join requests are answered in a terminal.
+
 ## 0.6.0-alpha.5 (unreleased)
 
 A dev build for the two-machine test of alpha.4.

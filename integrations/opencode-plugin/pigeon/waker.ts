@@ -4,7 +4,7 @@
 // Kept free of OpenCode imports so it can be tested on its own.
 
 // The CLI and the plugins are versioned in lockstep.
-export const version = "0.6.0-alpha.5"
+export const version = "0.6.0-alpha.6"
 export const mode = "opencode-prompt"
 const maxSessions = 1024
 

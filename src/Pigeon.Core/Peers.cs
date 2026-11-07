@@ -37,7 +37,10 @@ public sealed partial class Mailbox {
             "CREATE TABLE IF NOT EXISTS p_outbox(id TEXT PRIMARY KEY, peer TEXT NOT NULL, kind TEXT NOT NULL, offered TEXT NOT NULL, message TEXT, created INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL, expires INTEGER NOT NULL)",
             "CREATE INDEX IF NOT EXISTS p_outbox_due ON p_outbox(peer,next_at)",
             // remote: listed to other machines while a seat is free. approval: a local joiner needs a code.
-            "CREATE TABLE IF NOT EXISTS p_topic_options(topic TEXT PRIMARY KEY, remote INTEGER NOT NULL, approval INTEGER NOT NULL)"
+            "CREATE TABLE IF NOT EXISTS p_topic_options(topic TEXT PRIMARY KEY, remote INTEGER NOT NULL, approval INTEGER NOT NULL)",
+            // A removed machine is told, so its side ends too: its address and a "forget" item are
+            // kept for up to a day after the machine itself is forgotten.
+            "CREATE TABLE IF NOT EXISTS p_farewells(fingerprint TEXT PRIMARY KEY, address TEXT NOT NULL, expires INTEGER NOT NULL)"
         })
             _ = db.Exec(sql);
     }
@@ -84,6 +87,8 @@ public sealed partial class Mailbox {
             return PeerByFingerprint(fingerprint) ?? known;
         }
 
+        // Known again: a farewell still waiting to be delivered must not end the new connection.
+        FarewellDoneCore(fingerprint);
         var unique = name;
         for (var n = 2; PeerByName(unique) is not null; n++)
             unique = $"{(name.Length > 60 ? name[..60] : name)}-{n}";
@@ -112,16 +117,55 @@ public sealed partial class Mailbox {
     });
 
     // Ends every topic with the machine at once and forgets it. Nothing more is sent to it.
+    // Forgets a machine and ends every topic with it. The machine is told (found missing in the
+    // two-machine test on 2026-11-07, where it kept the topic and retried for a day): a "forget"
+    // item goes to its last address, so its side ends the topics and forgets this machine too.
     public bool RemovePeer(string name) => db.Transaction(() => {
         var peer = PeerByName(name);
         if (peer is null)
             return false;
-        foreach (var share in SharesWith(peer.Fingerprint))
-            EndShareCore(share, peer.Fingerprint, $"{name} was removed, so {share.Topic} no longer reaches it.");
-        _ = db.Exec("DELETE FROM p_outbox WHERE peer=?", peer.Fingerprint);
-        _ = db.Exec("DELETE FROM p_peers WHERE fingerprint=?", peer.Fingerprint);
+        RemovePeerCore(peer, topic => $"{name} was removed, so {topic} no longer reaches it.");
+        if (peer.Address is not null) {
+            var expires = checked(now() + DayMilliseconds);
+            _ = db.Exec("INSERT OR REPLACE INTO p_farewells(fingerprint,address,expires) VALUES(?,?,?)", peer.Fingerprint, peer.Address, Number(expires));
+            Enqueue(peer.Fingerprint, "forget", "-", null, expires);
+        }
+
         return true;
     });
+
+    private void RemovePeerCore(PeerInfo peer, Func<string, string> notice) {
+        foreach (var share in SharesWith(peer.Fingerprint))
+            EndShareCore(share, peer.Fingerprint, notice(share.Topic));
+        _ = db.Exec("DELETE FROM p_outbox WHERE peer=?", peer.Fingerprint);
+        _ = db.Exec("DELETE FROM p_peers WHERE fingerprint=?", peer.Fingerprint);
+    }
+
+    // The other machine removed this one: end its topics here and forget it as well.
+    public bool ReceiveForget(string fingerprint) => db.Transaction(() => {
+        var peer = PeerByFingerprint(fingerprint);
+        if (peer is null)
+            return false;
+        RemovePeerCore(peer, topic => $"{peer.Name} removed this machine, so {topic} no longer reaches it.");
+        return true;
+    });
+
+    // Removed machines still to be told, as peers to deliver to (name "removed").
+    public PeerInfo[] Farewells() => db.Transaction(() => {
+        foreach (var gone in db.Query("SELECT fingerprint FROM p_farewells WHERE expires<=?", Time()))
+            FarewellDoneCore(gone[0]!);
+        return db.Query("SELECT fingerprint,address FROM p_farewells").Select(r => new PeerInfo(r[0]!, "removed", r[1], 0, null)).ToArray();
+    });
+
+    public void FarewellDone(string fingerprint) => db.Transaction(() => {
+        FarewellDoneCore(fingerprint);
+        return 0;
+    });
+
+    private void FarewellDoneCore(string fingerprint) {
+        if (db.Exec("DELETE FROM p_farewells WHERE fingerprint=?", fingerprint) != 0)
+            _ = db.Exec("DELETE FROM p_outbox WHERE peer=? AND kind='forget'", fingerprint);
+    }
 
     private ShareInfo ToShare(string?[] r) => new(r[0]!, PeerByFingerprint(r[1]!)?.Name ?? r[1]!, r[2]!, r[3]!, r[4] == "1");
     private const string ShareColumns = "topic,peer,offered,role,share_tool";
@@ -168,6 +212,8 @@ public sealed partial class Mailbox {
             _ = db.Exec("INSERT OR REPLACE INTO p_sessions(session,tool,last_seen) VALUES(?,?,?)", seat, tool, Time());
             _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", offered, seat, Time());
             _ = db.Exec("INSERT INTO p_shares(topic,peer,offered,role,share_tool,created) VALUES(?,?,?,'offer',1,?)", offered, fingerprint, offered, Time());
+            // A completed join is contact with that machine (it showed "never" in the two-machine test).
+            _ = db.Exec("UPDATE p_peers SET last_contact=? WHERE fingerprint=?", Time(), fingerprint);
             // Messages already waiting for a second member go to the machine.
             foreach (var row in db.Query("SELECT id,expires FROM p_messages WHERE topic=? AND recipient IS NULL AND status='queued' AND sender<>?", offered, NoticeSender)) {
                 _ = db.Exec("UPDATE p_messages SET recipient=? WHERE id=?", seat, row[0]);
@@ -200,6 +246,8 @@ public sealed partial class Mailbox {
             _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", topic, seat, Time());
             _ = db.Exec("INSERT INTO p_members(topic,session,joined) VALUES(?,?,?)", topic, session, Time());
             _ = db.Exec("INSERT INTO p_shares(topic,peer,offered,role,share_tool,created) VALUES(?,?,?,'join',1,?)", topic, fingerprint, offered, Time());
+            // A completed join is contact with that machine (it showed "never" in the two-machine test).
+            _ = db.Exec("UPDATE p_peers SET last_contact=? WHERE fingerprint=?", Time(), fingerprint);
             NoticeCore(session, topic, $"You joined {topic}, with {remoteTool} @{peer.Name} on the other machine. Send on {topic}.");
             return new ShareInfo(topic, peer.Name, offered, "join", true);
         });

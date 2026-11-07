@@ -108,7 +108,7 @@ public sealed partial class PeerSteps {
 
     [Then("a message from each side reaches the other, from the machine and never a session ID")]
     public async Task Exchange() {
-        Assert.StartsWith("Queued for the other machine", await Ok("ana", "send", "from", "ana-session", "to", "review", "hello from Ana"));
+        Assert.StartsWith("On its way to the other machine", await Ok("ana", "send", "from", "ana-session", "to", "review", "hello from Ana"));
         string received = "";
         await Eventually(async () => (received = await Ok("bruno", "receive", "for", "bruno-session", "from", "review@ana-laptop")).Contains("hello from Ana"));
         Assert.Contains("claude-code @ana-laptop: hello from Ana", received);
@@ -129,12 +129,23 @@ public sealed partial class PeerSteps {
     [Then("a second topic from the known machine is allowed without a code")]
     public async Task KnownMachine() {
         _ = await Ok("ana", "join", "second", "as", "ana-2", "using", "claude-code", "--remote");
+        // Found in the two-machine test: topic lists did not say which topics other machines can join.
+        Assert.Contains("second: claude-code ana-2 (waiting for a partner) | 0 waiting | open to other machines", await Ok("ana", "topics"));
         Assert.Contains("second@ana-laptop", await Ok("bruno", "topics", "on", "ana-laptop"));
         Assert.Contains("Request submitted to ana-laptop", await Ok("bruno", "join", "second@ana-laptop", "as", "bruno-2", "using", "codex"));
         var id = await RequestId("ana", "wants to join second");
         Assert.Contains($"pigeon allow {id}   or", await Ok("ana", "requests"));
         Assert.Contains("Allowed.", await Ok("ana", "allow", id));
         await Eventually(async () => (await Ok("bruno", "topics")).Contains("second@ana-laptop"));
+    }
+
+    // Found in the two-machine test on 2026-11-07: the removed side kept its topic and retried for a day.
+    [Then("when Ana removes Bruno's machine, Bruno's side ends the topics and forgets Ana's machine too")]
+    public async Task Removed() {
+        Assert.Contains("Removed", await Ok("ana", "peer", "remove", "bruno-desktop"));
+        await Eventually(async () => (await Ok("bruno", "peer", "list")).Contains("Known machines: 0"));
+        Assert.DoesNotContain("@ana-laptop", await Ok("bruno", "topics"));
+        Assert.Contains("Known machines: 0", await Ok("ana", "peer", "list"));
     }
 
     [Then("a wrong code is refused, a denied request joins nothing, and Antigravity stays local")]
