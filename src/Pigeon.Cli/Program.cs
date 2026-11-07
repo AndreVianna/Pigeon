@@ -191,7 +191,7 @@ internal static class ServiceCommands {
             };
             // Claude sessions started by the Claude desktop app advertise prompts but cancel them unseen.
             var desktopClaude = runtime == "claude-code" && Environment.GetEnvironmentVariable("CLAUDE_CODE_ENTRYPOINT") == "claude-desktop";
-            var session = new McpSession(port, runtime, autoSession, hostShowsPrompts: !desktopClaude);
+            var session = new McpSession(port, runtime, autoSession, hostShowsPrompts: !desktopClaude, dialogs: NativeDialog.ForThisMachine());
             var codexQueue = args.Length == 2 ? new CodexQueueNotifier(port, () => session.SessionId) : null;
             await McpStdio.RunAsync(Console.In, Console.Out, session, nextNotification: codexQueue is null ? null : codexQueue.TickAsync);
             return 0;

@@ -63,6 +63,7 @@ public sealed partial class Broker : IDisposable {
                     "topics" => mailbox.Topics(Optional(args, "sessionId")),
                     "join" => Join(args),
                     "prompts_next" => PromptsNext(args),
+                    "prompts_open" => PromptsOpen(args),
                     "prompt_answer" => Answer(Str(args, "id"), Str(args, "action"), Optional(args, "code")),
                     "requests" => Requests(),
                     "request_show" => RequestCode(Str(args, "id")),

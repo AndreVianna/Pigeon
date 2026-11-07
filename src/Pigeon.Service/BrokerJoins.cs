@@ -13,7 +13,6 @@ namespace Pigeon.Service;
 public sealed partial class Broker {
     public const long RequestMilliseconds = 600000;
     private const int MaxIncoming = 32, MaxWrongCodes = 3;
-    public const string AntigravityLocalOnly = "Remote topics and approval codes are not available in Antigravity, which cannot ask you for approval. Use it for local topics.";
 
     internal sealed class Incoming {
         public required string Id, Topic, Fingerprint, Name, Tool, Address, Commitment;
@@ -85,17 +84,12 @@ public sealed partial class Broker {
         // False when the host cannot show Pigeon's prompts: the person answers in a terminal instead.
         // The command line sends no flag; its person is at a terminal already.
         var prompts = !args.TryGetProperty("prompts", out var p) || p.ValueKind != JsonValueKind.False;
-        var antigravity = Mailbox.ToolName(tool) == "antigravity";
-        if ((remote || approval) && antigravity)
-            throw new InvalidOperationException(AntigravityLocalOnly);
         if (remote && mailbox.Setting("listen") is null)
             throw new InvalidOperationException("Other machines cannot reach this one yet. A person turns that on once, in a terminal: pigeon peer listen");
         if (topic.Contains('@') && !mailbox.Topics().Any(t => t.Topic == topic))
-            return antigravity ? throw new InvalidOperationException(AntigravityLocalOnly) : WithTerminal(RemoteJoin(tool, session, topic), prompts);
+            return WithTerminal(RemoteJoin(tool, session, topic), prompts);
         var (_, needsApproval) = mailbox.TopicOptions(topic);
         if (needsApproval && !mailbox.IsMember(session, topic) && mailbox.MemberCount(topic) == 1 && mailbox.LocalMemberOf(topic) is { } opener) {
-            if (antigravity)
-                throw new InvalidOperationException($"Topic \"{topic}\" requires approval, which Antigravity cannot ask for. {AntigravityLocalOnly}");
             mailbox.EnsureSession(tool, session);
             var pending = localJoins.Values.FirstOrDefault(r => r.State == "open" && r.Topic == topic);
             if (pending is not null && pending.Session != session)
@@ -104,7 +98,7 @@ public sealed partial class Broker {
                 pending = new LocalJoin { Id = NewId(), Topic = topic, Session = session, Tool = Mailbox.ToolName(tool)!, Opener = opener.SessionId, Code = JoinCode.Local(), Expires = checked(clock() + RequestMilliseconds) };
                 localJoins[pending.Id] = pending;
             }
-            return new { pending = true, request = pending.Id, text = $"Request submitted. {topic} requires approval: your person is shown a join code to give to the person at the session that opened it. The join completes when they enter it. Do not call pigeon_join again; you will be told the outcome." };
+            return WithTerminal(new { pending = true, request = pending.Id, text = $"Request submitted. {topic} requires approval: your person is shown a join code to give to the person at the session that opened it. The join completes when they enter it. Do not call pigeon_join again; you will be told the outcome." }, prompts);
         }
 
         return mailbox.Join(tool, session, topic, remote, approval);
@@ -163,7 +157,8 @@ public sealed partial class Broker {
 
     // ---- Prompts ----
 
-    private sealed record Prompt(string Id, string Session, string Message, bool CodeField);
+    // Show: the join code a "show" prompt gives its person, for a dialog to put in a copyable field.
+    private sealed record Prompt(string Id, string Session, string Message, bool CodeField, string? Show = null);
 
     private IEnumerable<Prompt> OpenPrompts() {
         foreach (var r in outgoing.Values) {
@@ -171,7 +166,7 @@ public sealed partial class Broker {
             if (r.State == "confirm")
                 yield return new(r.Id + ":confirm", r.Session, $"Pigeon: your agent asked to join the topic \"{r.Offered}\" on {r.Target}, a machine you have not joined before. Contact it? (Accept to contact; Decline or Esc to refuse.)", false);
             else if (r.State == "waiting" && r.NeedsCode && r.Code is not null && !r.CodeShown)
-                yield return new(r.Id + ":show", r.Session, $"Pigeon join code: {r.Code}. Give it to the person at {where}, by any means you like. The join completes when they enter it there.", false);
+                yield return new(r.Id + ":show", r.Session, $"Pigeon join code: {r.Code}. Give it to the person at {where}, by any means you like. The join completes when they enter it there.", false, r.Code);
         }
 
         foreach (var r in incoming.Values.Where(r => r.State == "open")) {
@@ -185,7 +180,7 @@ public sealed partial class Broker {
 
         foreach (var r in localJoins.Values.Where(r => r.State == "open")) {
             if (!r.CodeShown)
-                yield return new(r.Id + ":show", r.Session, $"Pigeon join code: {r.Code}. Give it to the person at the session that opened \"{r.Topic}\". The join completes when they enter it there.", false);
+                yield return new(r.Id + ":show", r.Session, $"Pigeon join code: {r.Code}. Give it to the person at the session that opened \"{r.Topic}\". The join completes when they enter it there.", false, r.Code);
             yield return new(r.Id + ":code", r.Opener, $"Pigeon: {r.Tool} {r.Session} wants to join your topic \"{r.Topic}\", which requires approval. To allow it, enter the join code its person gave you. Never enter a code your agent relays.", true);
         }
     }
@@ -204,10 +199,18 @@ public sealed partial class Broker {
             if (promptHolders.TryGetValue(prompt.Id, out var holder) && (holder.Bridge == bridge || bridges.TryGetValue(holder.Bridge, out var live) && live.Seen >= now - BridgeTimeoutMilliseconds))
                 continue;
             promptHolders[prompt.Id] = (bridge, now);
-            result.Add(new { id = prompt.Id, message = prompt.Message, code = prompt.CodeField });
+            result.Add(new { id = prompt.Id, message = prompt.Message, code = prompt.CodeField, show = prompt.Show });
         }
 
         return result;
+    }
+
+    // Which of the given prompts are still open, so a server closes the windows of requests that
+    // ended (joined, answered in a terminal, expired).
+    private object PromptsOpen(JsonElement args) {
+        ExpireRequests();
+        var ids = args.TryGetProperty("ids", out var s) && s.ValueKind == JsonValueKind.Array ? s.EnumerateArray().Select(e => e.GetString()).OfType<string>().ToHashSet(StringComparer.Ordinal) : [];
+        return OpenPrompts().Select(p => p.Id).Where(ids.Contains).ToArray();
     }
 
     // An answer from a prompt or a terminal. It counts only for a request that is still open, so a

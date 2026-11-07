@@ -148,7 +148,7 @@ public sealed partial class PeerSteps {
         Assert.Contains("Known machines: 0", await Ok("ana", "peer", "list"));
     }
 
-    [Then("a wrong code is refused, a denied request joins nothing, and Antigravity stays local")]
+    [Then("a wrong code is refused, a denied request joins nothing, and Antigravity may ask too")]
     public async Task Refusals() {
         await AskByAddress("review");
         var id = await RequestId("ana", "wants to join review");
@@ -160,9 +160,8 @@ public sealed partial class PeerSteps {
         Assert.DoesNotContain("review@", await Ok("bruno", "topics"));
         Assert.DoesNotContain("bruno", await Ok("ana", "peer", "list"));
 
-        var (agyExit, _, agyError) = await Run("bruno", null, "join", $"review@127.0.0.1:{services["ana"].PeerPort}", "as", "agy-1", "using", "antigravity");
-        Assert.Equal(1, agyExit);
-        Assert.Contains("not available in Antigravity", agyError);
+        // Until 0.6.0-alpha.6 Antigravity was limited to local topics.
+        Assert.Contains("a machine you have not joined before", await Ok("bruno", "join", $"review@127.0.0.1:{services["ana"].PeerPort}", "as", "agy-1", "using", "antigravity"));
     }
 
     [Then("invalid peer, request and join commands exit with a usage error")]

@@ -2,6 +2,18 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
+## 0.6.0-alpha.7 (unreleased)
+
+Removes the terminal from approvals in hosts that cannot show Pigeon's prompts ([design](docs/remote-design.md), "Native dialogs").
+
+### Added
+- **Pigeon's own windows** for hosts that cannot show its prompts (the Claude desktop app, Antigravity, hosts without elicitation): Allow and Deny, a field for the join code, and the code to pass on with a Copy button, kept open until the join completes. Windows uses Windows PowerShell, macOS `osascript`, Linux `zenity` or `kdialog`. The text from the other machine is never put into a script. `PIGEON_PROMPTS=terminal` turns the windows off.
+
+### Changed
+- Antigravity sessions may open and join topics with other machines, and topics that require approval; they were limited to local topics.
+- A local join that needs approval from a host that cannot show prompts says to answer in a terminal, as remote joins do.
+- The connect skills say that leaving reports what happens to the topic on the other machine, instead of claiming it ends on both.
+
 ## 0.6.0-alpha.6 (unreleased)
 
 A dev build from the two-machine test of alpha.4 (Claude Desktop on both machines).

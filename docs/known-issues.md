@@ -12,10 +12,6 @@ This list reflects 0.6.0-alpha.4. A topic is a private conversation between two 
 
 See "Accepted limits" in the [remote connections design](remote-design.md): on first contact only the listing side checks the code, so an active attacker on your network who takes the listing machine's address could pose as it; both machines need an inbound port, which managed corporate devices and isolated guest Wi-Fi often block; an agent with a shell can run `pigeon allow` and `pigeon requests --show`; a host can answer prompts without a person (headless runs decline them, a Claude Code hook could answer them); and request spam is limited only by one request per topic, a rate limit and Deny.
 
-### Antigravity is local only
-
-Antigravity advertises MCP elicitation but cancels every prompt, so its sessions cannot open or join topics with other machines, or require approval on local topics.
-
 ### The local API is still unauthenticated
 
 Another user account on a machine can use that machine's Pigeon service, including its topics with other machines and the commands that answer join requests. Use topics with other machines only on single-user machines. Authenticating the local API is planned for later.
@@ -26,9 +22,9 @@ There is no discovery: the first join names the other machine's address or host 
 
 ## Claude Desktop
 
-### Join prompts are answered in a terminal
+### Join prompts appear in Pigeon's own window
 
-Claude sessions in the Claude desktop app cancel Pigeon's prompts without showing them (found on 2026-11-07), so Pigeon does not send them any. A join request, a contact confirmation or a join code for such a session is answered with `pigeon requests`, `pigeon allow` and `pigeon deny` in a terminal; the agent says so.
+Claude sessions in the Claude desktop app cancel Pigeon's prompts without showing them (found on 2026-11-07), and so does Antigravity. From 0.6.0-alpha.7 Pigeon shows their join requests, contact confirmations and join codes in a small window of its own. The window comes from the session's Pigeon MCP server, so it appears only while the host has that server running; otherwise, or where no window can be shown (Linux without `zenity` or `kdialog`, no desktop session), the terminal answers as before. The macOS and Linux windows are not yet tried on a real machine, and Antigravity's not yet host-tested.
 
 ## Antigravity
 

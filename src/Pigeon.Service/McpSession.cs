@@ -21,9 +21,18 @@ public sealed class McpSession {
     public bool IsReady => ready;
     // Whether Pigeon can ask this host's person directly (MCP elicitation). Antigravity, and Claude
     // sessions started by the Claude desktop app (seen on 2026-11-07), advertise it but cancel every
-    // prompt without showing it, so they are never asked; their person answers in a terminal.
+    // prompt without showing it, so they are never asked that way.
     public bool CanPrompt => elicitation && hostShowsPrompts && runtime != "antigravity";
     private readonly bool hostShowsPrompts = true;
+    // A host that cannot ask gets the prompts in native dialogs, when this machine shows them; the
+    // host's own prompt always comes first. Without either, the person answers in a terminal.
+    private readonly Func<DialogRequest, CancellationToken, Task<DialogOutcome>>? dialogs;
+    private volatile bool dialogsFailed;
+    public bool UsesDialogs => !CanPrompt && dialogs is not null && !dialogsFailed;
+    public bool ShowsPrompts => CanPrompt || UsesDialogs;
+    public Task<DialogOutcome> DialogAsync(DialogRequest request, CancellationToken cancellation) => dialogs!(request, cancellation);
+    // After a window that could not be shown, this connection leaves its prompts to the terminal.
+    public void DialogsFailed() => dialogsFailed = true;
     public string? SessionId => Volatile.Read(ref sessionId);
     public string? RestoreState => Volatile.Read(ref restoreState);
 
@@ -50,10 +59,11 @@ public sealed class McpSession {
 
     // runtime is the tool name configured by the plugin (PIGEON_RUNTIME). With a session ID from
     // the host, the connection restores a previously joined session automatically.
-    public McpSession(string port, string? runtime = null, string? autoRestoreSession = null, bool hostShowsPrompts = true) {
+    public McpSession(string port, string? runtime = null, string? autoRestoreSession = null, bool hostShowsPrompts = true, Func<DialogRequest, CancellationToken, Task<DialogOutcome>>? dialogs = null) {
         this.port = port;
         this.runtime = runtime;
         this.hostShowsPrompts = hostShowsPrompts;
+        this.dialogs = dialogs;
         // The Copilot runtime starts one MCP server per session and names it in the environment.
         if (runtime == "copilot" && Valid(autoRestoreSession))
             hostSession = autoRestoreSession;
@@ -235,7 +245,7 @@ public sealed class McpSession {
             if (SessionId is not null && SessionId != requested)
                 return Text(id, "This MCP connection is bound to another session and cannot change it.", true);
             var response = tool == "pigeon_join"
-                ? await BridgeAsync("join", new { tool = toolName, sessionId = requested, topic = Arg("topic"), remote = Flag("remote"), approval = Flag("approval"), prompts = CanPrompt }, cancellation)
+                ? await BridgeAsync("join", new { tool = toolName, sessionId = requested, topic = Arg("topic"), remote = Flag("remote"), approval = Flag("approval"), prompts = ShowsPrompts }, cancellation)
                 : await BridgeAsync("session_restore", new { tool = toolName, sessionId = requested }, cancellation);
             var ok = response.GetProperty("Ok").GetBoolean();
             lock (identityGate) {
@@ -282,7 +292,7 @@ public sealed class McpSession {
                 _ => "Antigravity did not identify this conversation, so Pigeon cannot tell which session is calling. Pigeon needs Antigravity 2.28 or later."
             }, true);
         if (tool == "pigeon_join") {
-            var joined = await BridgeAsync("join", new { tool = runtime, sessionId = conversation, topic = Arg("topic"), remote = Flag("remote"), approval = Flag("approval"), prompts = CanPrompt }, cancellation);
+            var joined = await BridgeAsync("join", new { tool = runtime, sessionId = conversation, topic = Arg("topic"), remote = Flag("remote"), approval = Flag("approval"), prompts = ShowsPrompts }, cancellation);
             if (joined.GetProperty("Ok").GetBoolean())
                 lock (identityGate) {
                     Bind(conversation!);

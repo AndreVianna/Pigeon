@@ -69,18 +69,79 @@ public static class McpStdio {
         }
 
         // Join requests and codes are shown to the person by elicitation as soon as they arrive,
-        // outside any tool call, so no model turn is spent and no tool-call timeout applies.
+        // outside any tool call, so no model turn is spent and no tool-call timeout applies. A host
+        // that cannot show them gets native dialogs instead, one window per request.
+        var windows = new Dictionary<string, CancellationTokenSource>(StringComparer.Ordinal);
+        async Task WindowAsync(string id, DialogRequest request, CancellationTokenSource closed) {
+            DialogOutcome outcome;
+            try {
+                outcome = await session.DialogAsync(request, closed.Token);
+            }
+            catch (Exception e) when (e is IOException or InvalidOperationException or System.ComponentModel.Win32Exception) {
+                outcome = DialogOutcome.Broken;
+            }
+
+            // The window is forgotten before the answer goes, so a wrong code is asked again.
+            lock (windows)
+                _ = windows.Remove(id);
+            closed.Dispose();
+            if (outcome.Failed)
+                session.DialogsFailed();
+            if (outcome.Action is null || stopped.IsCancellationRequested)
+                return;
+            try {
+                _ = await session.BridgeAsync("prompt_answer", new { id, action = outcome.Action, code = outcome.Code }, stopped.Token);
+            }
+            catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException or OperationCanceledException) { }
+        }
+
+        async Task CloseEndedWindowsAsync() {
+            string[] showing;
+            lock (windows)
+                showing = [.. windows.Keys];
+            if (showing.Length == 0)
+                return;
+            var open = await session.BridgeAsync("prompts_open", new { ids = showing }, stopped.Token);
+            if (!open.GetProperty("Ok").GetBoolean())
+                return;
+            var still = open.GetProperty("Value").EnumerateArray().Select(e => e.GetString()).ToHashSet(StringComparer.Ordinal);
+            lock (windows) {
+                foreach (var id in showing.Where(id => !still.Contains(id)))
+                    if (windows.TryGetValue(id, out var window))
+                        window.Cancel();
+            }
+        }
+
         async Task PromptsAsync() {
             while (!stopped.IsCancellationRequested) {
                 await Task.Delay(1000, stopped.Token);
-                if (!session.IsReady || !session.CanPrompt || session.ServedSessions() is not { Length: > 0 } sessions)
+                if (!session.IsReady || !session.ShowsPrompts || session.ServedSessions() is not { Length: > 0 } sessions)
                     continue;
                 try {
+                    if (session.UsesDialogs)
+                        await CloseEndedWindowsAsync();
                     var next = await session.BridgeAsync("prompts_next", new { bridgeId, sessions }, stopped.Token);
                     if (!next.GetProperty("Ok").GetBoolean())
                         continue;
-                    foreach (var prompt in next.GetProperty("Value").EnumerateArray())
-                        await WriteAsync(McpSession.PromptRequest(prompt.GetProperty("id").GetString()!, prompt.GetProperty("message").GetString()!, prompt.GetProperty("code").GetBoolean()), stopped.Token);
+                    foreach (var prompt in next.GetProperty("Value").EnumerateArray()) {
+                        var id = prompt.GetProperty("id").GetString()!;
+                        var message = prompt.GetProperty("message").GetString()!;
+                        var codeField = prompt.GetProperty("code").GetBoolean();
+                        if (!session.UsesDialogs) {
+                            await WriteAsync(McpSession.PromptRequest(id, message, codeField), stopped.Token);
+                            continue;
+                        }
+
+                        var show = prompt.TryGetProperty("show", out var s) && s.ValueKind == System.Text.Json.JsonValueKind.String ? s.GetString() : null;
+                        var request = new DialogRequest(show is not null ? "show" : codeField ? "code" : "ask", message, show);
+                        lock (windows) {
+                            if (windows.ContainsKey(id))
+                                continue;
+                            var closed = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
+                            windows[id] = closed;
+                            _ = WindowAsync(id, request, closed);
+                        }
+                    }
                 }
                 catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException) { }
                 catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { }
@@ -119,6 +180,12 @@ public static class McpStdio {
                 await prompts;
             }
             catch (OperationCanceledException) when (stopped.IsCancellationRequested) { }
+
+            // Windows close with the connection; their requests stay open for the terminal.
+            lock (windows) {
+                foreach (var window in windows.Values)
+                    window.Cancel();
+            }
 
             try {
                 await heartbeat;

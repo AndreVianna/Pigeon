@@ -91,40 +91,35 @@ Measured in each host with a probe on 2026-11-04 ([results](../experiments/elici
 - The requesting agent is told "request pending; do not retry", because a model whose call fails may retry on its own (Copilot), and one open request per topic stops duplicates.
 - Pigeon raises prompts outside tool calls, which Claude Code, Codex, Copilot and OpenCode all support; Copilot cancels a tool call after 3 minutes, too short for two people to pass a code.
 
-### Claude Desktop: answers in a terminal
+### Claude Desktop: prompts it cannot show
 
-Found in the two-machine test on 2026-11-07: Claude sessions started by the Claude desktop app (its Code tab) advertise elicitation but cancel every prompt without showing it, so a first contact was refused twice with no prompt on either machine. The probe had covered only Claude Code in a terminal. Pigeon recognizes these sessions by `CLAUDE_CODE_ENTRYPOINT=claude-desktop` in its MCP server's environment and never sends them prompts: their requests wait for the terminal (`pigeon requests`, `pigeon allow`, `pigeon deny`), and the agent is told to send its person there. Unlike Antigravity, they keep topics with other machines, since the terminal answers every prompt.
+Found in the two-machine test on 2026-11-07: Claude sessions started by the Claude desktop app (its Code tab) advertise elicitation but cancel every prompt without showing it, so a first contact was refused twice with no prompt on either machine. The probe had covered only Claude Code in a terminal. Pigeon recognizes these sessions by `CLAUDE_CODE_ENTRYPOINT=claude-desktop` in its MCP server's environment and never sends them prompts: their requests wait for the terminal (`pigeon requests`, `pigeon allow`, `pigeon deny`), and the agent is told to send its person there. From 0.6.0-alpha.7 their prompts appear in native dialogs instead (below); the terminal stays as the fallback.
 
-### Antigravity: local topics only
+### Antigravity: dialogs, like Claude Desktop
 
-Antigravity advertises elicitation but cancels every prompt without showing it, so it could approve a join only through the terminal. Rather than make that the only path for one host, **Antigravity sessions are limited to local topics** (decided by the user on 2026-11-04):
+Antigravity advertises elicitation but cancels every prompt without showing it. From 2026-11-04 to 0.6.0-alpha.6 its sessions were limited to local topics; with native dialogs (below) that limit is lifted (decided by the user on 2026-11-07), and Antigravity sessions open and join topics with other machines like any other host. Pigeon recognizes the host by the tool name its plugin reports. That is a product limit, not a security boundary: any local program can claim another tool name.
 
-- `pigeon_join` with `remote: true` or a `<topic>@<machine>` name, and `pigeon_topics` with a machine, are refused for an Antigravity session: "Remote topics are not available in Antigravity, which cannot ask you for approval. Use it for local topics."
-- Opt-in approval on local topics is not offered to Antigravity sessions either, for the same reason; its local topics work as before.
-- Pigeon recognizes the host by the tool name its plugin reports. That is a product limit, not a security boundary: any local program can claim another tool name.
-- The README lists it as a host limitation. It is lifted if Antigravity starts showing prompts; the [elicitation probe](../experiments/elicitation-probe/README.md) re-checks that in a few minutes.
+### Native dialogs: when the host cannot ask
 
-### Native dialogs: when the host cannot ask (draft for review, 2026-11-07)
-
-**Status: proposed by the user on 2026-11-07, not built.** Today a host that cannot show Pigeon's prompts (the Claude desktop app, Antigravity, headless runs) leaves them to the terminal. The user does not want approvals to depend on the terminal. Instead, Pigeon shows the same prompt in a small window of the operating system, which no model can answer:
+**Status: proposed by the user on 2026-11-07 and accepted the same day, with the answers below; built in 0.6.0-alpha.7.** Today a host that cannot show Pigeon's prompts (the Claude desktop app, Antigravity, headless runs) leaves them to the terminal. The user does not want approvals to depend on the terminal. Instead, Pigeon shows the same prompt in a small window of the operating system, which no model can answer:
 
 - **Who shows it:** the session's own Pigeon MCP server, the process the host started for that session on the user's desktop. It already receives the session's prompts (`prompts_next`); for a host that cannot show them it opens a dialog instead of sending `elicitation/create`, and returns the answer through `prompt_answer` exactly as an elicitation reply. A request for a session with no MCP server running stays in the terminal.
 - **What it shows:** the prompt's existing text: the contact confirmation, the join code to give the other person, the code entry ("Never enter a code your agent relays"), or Allow and Deny for a known machine. Names and tools from the other machine are shown as their claims, as now.
 - **Answers:** Allow or Deny, and a text field when a code is needed. Closing the window, Deny or no answer within Pigeon's 10 minutes is Deny; an answer to a request that already ended is ignored. One window per request.
 - **How, without a new package:**
-  - Windows: Windows PowerShell's built-in input box (`Microsoft.VisualBasic.Interaction.InputBox`) and message box, started as a child process with the text passed in environment variables, never pasted into the script, so a claimed machine name cannot inject commands.
+  - Windows: a small Windows Forms window from Windows PowerShell (`powershell.exe`, part of every Windows), started as a child process with a fixed script; the text is passed in environment variables, never pasted into the script, so a claimed machine name cannot inject commands.
   - macOS: `osascript` `display dialog`, with the text again read from an environment variable (`system attribute`).
-  - Linux: `zenity` or `kdialog` when one is installed and a desktop session is present (`DISPLAY` or `WAYLAND_DISPLAY`).
+  - Linux: `zenity` or `kdialog` when one is installed and a desktop session is present (`DISPLAY` or `WAYLAND_DISPLAY`). The text goes as an argument, never through a shell, with markup characters escaped.
   - Otherwise, or with `PIGEON_PROMPTS=terminal`, the terminal as today.
-- **Hosts it covers:** Claude Desktop at once. Antigravity could then open and join topics with other machines too, lifting its local-only limit; that is a separate decision (below).
-- **The requesting side:** the contact confirmation and the join code appear in a dialog on the requester's machine, so neither person needs a terminal.
+- **Hosts it covers:** every host that cannot show Pigeon's prompts: the Claude desktop app, Antigravity, and hosts without elicitation.
+- **The requesting side:** the contact confirmation and the join code appear in a dialog on the requester's machine, so neither person needs a terminal. The code stays in its window, with a Copy button, until the join completes or the person closes it; `pigeon requests --show` still shows it.
 
 **Security.** A dialog is outside the conversation, like a host prompt: the model cannot read the code in it or press its buttons through any Pigeon tool. Two things stay as accepted limits, as they are for the terminal today: an agent that can run shell commands could run `pigeon allow` itself, and an agent with computer-use tools could click a dialog. Pigeon does not try to stop either; a person who gives an agent those powers trusts it with them.
 
-**Open questions for review:**
-1. Should a dialog also be used when the host *can* prompt but the person is not at the conversation (for example, a minimized window)? Proposed: no; the host's prompt stays first.
-2. Lift Antigravity's local-only limit once dialogs exist? Proposed: yes, in the same build, with an Antigravity host test.
-3. Should the requester's join code stay visible in its dialog until the join completes, or show once? Proposed: stay visible, with a Copy button where the platform has one.
+**Decisions (accepted by the user on 2026-11-07):**
+1. A dialog is used only when the host cannot show the prompt; when it can, the host's prompt stays first, even if nobody is at the conversation.
+2. Antigravity's local-only limit is lifted in the same build, with an Antigravity host test.
+3. The requester's join code stays visible until the join completes, with a Copy button where the platform has one.
 
 ### Without elicitation or dialogs
 
@@ -223,7 +218,7 @@ Kept as built: identity and key storage, the listener and TLS setup, the outbox 
 7. The requesting person confirms before Pigeon contacts a new machine, and sees the code in that same prompt.
 8. Elicitation support is confirmed in every host before building: Claude Code, Codex, Copilot, OpenCode and Antigravity. Hosts without it use the terminal fallback, and the README says which. **Done on 2026-11-04:** the four CLIs show prompts inside tool calls and while idle, and their models see neither the prompt nor the answer; Antigravity cancels every prompt. The Claude desktop app's Code tab and the Codex desktop app are still to check.
 9. The middle ground after the independent review: the cheap fixes are in this design, and the rest are the accepted limits above.
-10. Antigravity is limited to local topics, because it cannot show prompts; the terminal fallback stays for the other hosts.
+10. Hosts that cannot show prompts (the Claude desktop app, Antigravity) get native dialogs instead (0.6.0-alpha.7); the terminal stays for headless runs and `PIGEON_PROMPTS=terminal`.
 
 ## Implementation outline
 

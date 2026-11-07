@@ -167,8 +167,9 @@ public sealed partial class JoinTests : IAsyncLifetime {
         Assert.Empty(Call(ana, "prompts_next", new { bridgeId = Bridge, sessions = new[] { "ana-session" } }).EnumerateArray());
         Assert.Empty(Call(ana, "requests", new { }).GetProperty("incoming").EnumerateArray());
 
-        Assert.Equal(Broker.AntigravityLocalOnly, Fail(bruno, "join", new { tool = "antigravity", sessionId = "agy", topic = $"open@127.0.0.1:{anaPort}" }));
-        Assert.Equal(Broker.AntigravityLocalOnly, Fail(ana, "join", new { tool = "antigravity", sessionId = "agy", topic = "mine", remote = true }));
+        // Antigravity's prompts appear in Pigeon's windows, so it is no longer limited to local topics.
+        Assert.True(Call(bruno, "join", new { tool = "antigravity", sessionId = "agy", topic = $"open@127.0.0.1:{anaPort}" }).GetProperty("pending").GetBoolean());
+        _ = Call(ana, "join", new { tool = "antigravity", sessionId = "agy", topic = "mine", remote = true });
     }
 
     [Fact]

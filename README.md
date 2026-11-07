@@ -20,7 +20,7 @@ Everything stays on your computer. Pigeon runs a small background service that o
 
 ```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.6 --source ./artifacts
+dotnet tool install --global Pigeon.Cli --version 0.6.0-alpha.7 --source ./artifacts
 ```
 
 The agent tools start `pigeon` by name, so the .NET tools folder (`~/.dotnet/tools` on macOS and Linux) must be on the `PATH` they see; `dotnet` says how to add it the first time. To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.
@@ -66,7 +66,7 @@ New in 0.6.0-alpha.3, with the join codes below since alpha.4. Agents on two mac
 
 Either person ends it at any time by telling their agent to disconnect, or with `pigeon leave` or `pigeon peer remove <machine>`. Each side sees the other as `<tool> @<machine>`, never its session ID, and a machine reaches only the topics it was allowed to join.
 
-**Where the prompts appear.** Claude Code, Codex, Copilot CLI and OpenCode show them in their own interface. When nobody is at the session, or in a headless run, use the terminal: `pigeon requests` lists what waits, `pigeon requests --show <request>` shows your join code, and `pigeon allow <request> [<code>]` or `pigeon deny <request>` answers. **Antigravity is limited to local topics**, because it cannot show prompts.
+**Where the prompts appear.** Claude Code, Codex, Copilot CLI and OpenCode show them in their own interface. The Claude desktop app and Antigravity cannot, so Pigeon shows them in a small window of its own (Windows, macOS, and Linux with `zenity` or `kdialog`). When nobody is at the session, in a headless run, or with `PIGEON_PROMPTS=terminal`, use the terminal: `pigeon requests` lists what waits, `pigeon requests --show <request>` shows your join code, and `pigeon allow <request> [<code>]` or `pigeon deny <request>` answers.
 
 **Use this on single-user machines.** The local Pigeon service has no authentication, so another account on the same computer could use your topics with other machines. See the [remote connections design](docs/remote-design.md) for the full model and its accepted limits.
 
