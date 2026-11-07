@@ -16,14 +16,26 @@ Everything stays on your computer. Pigeon runs a small background service that o
 
 ## Install
 
-**1. Install the `pigeon` command.** Pigeon is not on nuget.org yet. Build the package from this repository and install it as a .NET tool:
+**1. Install the `pigeon` command.** Download the installer for your system from the [releases](https://github.com/AndreVianna/Pigeon/releases). It needs no .NET and no administrator rights on Windows:
+
+| System | File | Installs |
+|---|---|---|
+| Windows (x64) | `Pigeon-<version>-win-x64.msi` | `%LOCALAPPDATA%\Programs\Pigeon\pigeon.exe`, added to your `PATH` |
+| macOS (Apple Silicon or Intel) | `Pigeon-<version>-osx-arm64.pkg` or `-osx-x64.pkg` | `/usr/local/bin/pigeon` |
+| Debian, Ubuntu | `pigeon_<version>_amd64.deb` or `_arm64.deb` | `/usr/bin/pigeon` |
+| Fedora, RHEL, openSUSE | `pigeon-<version>.x86_64.rpm` or `.aarch64.rpm` | `/usr/bin/pigeon` |
+| Other Linux | `pigeon-<version>-linux-x64.tar.gz` or `-linux-arm64.tar.gz` | unpack it anywhere on your `PATH` |
+
+The installers are not signed yet, so Windows and macOS ask you to confirm them; the [beta testing guide](docs/beta-testing.md) says how. Close your agent apps before you install or upgrade, and open them again afterwards so they find `pigeon` on the new `PATH`. On Linux, Pigeon's approval windows need `zenity` or `kdialog`.
+
+If you installed Pigeon earlier as a .NET tool, remove it first (`pigeon stop`, then `dotnet tool uninstall --global Pigeon.Cli`), so only one `pigeon` is on your `PATH`. The .NET tool still works if you prefer it; it needs the .NET 11 runtime:
 
 ```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
 dotnet tool install --global Pigeon.Cli --version 0.6.0-beta.1 --source ./artifacts
 ```
 
-The agent tools start `pigeon` by name, so the .NET tools folder (`~/.dotnet/tools` on macOS and Linux) must be on the `PATH` they see; `dotnet` says how to add it the first time. To update an earlier version, use `dotnet tool update` with the same arguments, then run `pigeon stop` and `pigeon start` so the service runs the new version.
+The agent tools start `pigeon` by name, so it must be on the `PATH` they see. To update, install the new version the same way, then run `pigeon stop` and `pigeon start` so the service runs it.
 
 **2. Start the service.**
 

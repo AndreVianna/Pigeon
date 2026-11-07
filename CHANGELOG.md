@@ -8,6 +8,10 @@ The first beta of 0.6.0, promoted by the user on 2026-11-07 after the two-machin
 
 Not yet tried: agents on macOS or Linux (including Pigeon's windows there), Tailscale, and the hosts' own prompts (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
 
+### Added
+- **Installers for each system**, with no .NET needed: a per-user `.msi` for Windows, a `.pkg` for each Mac processor, and `.deb`, `.rpm` and `.tar.gz` for Linux (x64 and arm64). Each holds one self-contained, trimmed and compressed `pigeon` (about 18 MB) and registers no service. The **Installers** workflow builds them, installs each on a clean runner and checks the installed program; a `v*` tag makes a draft prerelease with them. They are not signed yet.
+- A [beta testing guide](docs/beta-testing.md) and an issue form for beta reports.
+
 ### Changed
 - Machines talk over TLS 1.3, or TLS 1.2 when one of them is a Mac: .NET on macOS accepts no TLS 1.3 connections, so a Mac could not listen (found in CI). Both versions still require both certificates and pinned fingerprints; under TLS 1.2 an observer on the network can tell which machines talk, but not read or change what they say.
 

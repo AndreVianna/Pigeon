@@ -1,0 +1,165 @@
+name: Installers
+
+# Builds Pigeon's installers, installs each on a clean runner and checks the installed program.
+# On a v* tag it also creates a draft prerelease with them, which a person reviews and publishes.
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'src/**'
+      - 'global.json'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Version
+        id: version
+        shell: bash
+        run: echo "value=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/Pigeon.Cli/Pigeon.Cli.csproj)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        run: dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r win-x64 -o artifacts/win-x64
+
+      - name: Build the MSI
+        shell: pwsh
+        run: dotnet build packaging/windows/Pigeon.Installer.wixproj -c Release -p:PigeonVersion=${{ steps.version.outputs.value }} "-p:PublishDir=$((Resolve-Path artifacts/win-x64).Path)" -o artifacts/out
+
+      - name: Install, check and uninstall
+        shell: pwsh
+        run: |
+          $msi = (Resolve-Path artifacts/out/*.msi).Path
+          $install = Start-Process msiexec -ArgumentList '/i', "`"$msi`"", '/qn', '/l*v', 'install.log' -Wait -PassThru
+          if ($install.ExitCode -ne 0) { Get-Content install.log -Tail 40; throw "msiexec /i exited $($install.ExitCode)" }
+          $folder = Join-Path $env:LOCALAPPDATA 'Programs\Pigeon'
+          if (-not (Test-Path (Join-Path $folder 'pigeon.exe'))) { throw "pigeon.exe is not in $folder" }
+          $path = [Environment]::GetEnvironmentVariable('PATH', 'User')
+          if (-not ($path -split ';' -contains $folder)) { throw "The user PATH does not contain $folder" }
+          & (Join-Path $env:ProgramFiles 'Git\bin\bash.exe') packaging/smoke-test.sh "$folder\pigeon.exe" '${{ steps.version.outputs.value }}'
+          if ($LASTEXITCODE -ne 0) { throw 'The smoke test failed' }
+          $remove = Start-Process msiexec -ArgumentList '/x', "`"$msi`"", '/qn' -Wait -PassThru
+          if ($remove.ExitCode -ne 0) { throw "msiexec /x exited $($remove.ExitCode)" }
+          if (Test-Path (Join-Path $folder 'pigeon.exe')) { throw 'pigeon.exe is still there after uninstalling' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows
+          path: artifacts/out/*.msi
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Version
+        id: version
+        run: echo "value=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/Pigeon.Cli/Pigeon.Cli.csproj)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish and package
+        run: |
+          for rid in osx-arm64 osx-x64; do
+            dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r "$rid" -o "artifacts/$rid"
+            sh packaging/macos/build-pkg.sh '${{ steps.version.outputs.value }}' "$rid" "artifacts/$rid" artifacts/out
+          done
+
+      # The runner is an Apple Silicon Mac: the arm64 package installs, the Intel one refuses.
+      - name: Install and check
+        run: |
+          version='${{ steps.version.outputs.value }}'
+          sudo installer -pkg "artifacts/out/Pigeon-$version-osx-arm64.pkg" -target /
+          sh packaging/smoke-test.sh /usr/local/bin/pigeon "$version"
+          if sudo installer -pkg "artifacts/out/Pigeon-$version-osx-x64.pkg" -target / 2>/dev/null; then
+            echo "The Intel package installed on an Apple Silicon Mac." >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-macos
+          path: artifacts/out/*.pkg
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Version
+        id: version
+        run: echo "value=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/Pigeon.Cli/Pigeon.Cli.csproj)" >> "$GITHUB_OUTPUT"
+
+      - name: Install rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Publish and package
+        run: |
+          for rid in linux-x64 linux-arm64; do
+            dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r "$rid" -o "artifacts/$rid"
+            sh packaging/linux/build-packages.sh '${{ steps.version.outputs.value }}' "$rid" "artifacts/$rid" artifacts/out
+          done
+          ls -la artifacts/out
+
+      - name: Install and check
+        run: |
+          sudo apt-get install -y ./artifacts/out/pigeon_*_amd64.deb
+          sh packaging/smoke-test.sh /usr/bin/pigeon '${{ steps.version.outputs.value }}'
+          rpm -qip artifacts/out/pigeon-*.x86_64.rpm
+          rpm -qlp artifacts/out/pigeon-*.x86_64.rpm | grep -qx /usr/bin/pigeon
+          tar -tzf artifacts/out/pigeon-*-linux-x64.tar.gz | grep -q '/pigeon$'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-linux
+          path: |
+            artifacts/out/*.deb
+            artifacts/out/*.rpm
+            artifacts/out/*.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          path: installers
+          merge-multiple: true
+
+      # A draft: a person reads it and publishes it.
+      - name: Create a draft prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/Pigeon.Cli/Pigeon.Cli.csproj)
+          tag=${GITHUB_REF#refs/tags/}
+          if [ "$tag" != "v$version" ]; then
+            echo "The tag $tag does not match the version $version." >&2
+            exit 1
+          fi
+          prerelease=
+          case "$version" in *-*) prerelease=--prerelease ;; esac
+          gh release create "$tag" --draft $prerelease --title "Pigeon $version" \
+            --notes "Installers for Windows, macOS and Linux. Testers: start with [the beta testing guide](https://github.com/${{ github.repository }}/blob/$tag/docs/beta-testing.md). Changes: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/$tag/CHANGELOG.md)." \
+            installers/*

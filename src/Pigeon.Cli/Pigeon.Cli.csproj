@@ -9,18 +9,36 @@
     <ToolCommandName>pigeon</ToolCommandName>
     <PackageId>Pigeon.Cli</PackageId>
     <Version>0.6.0-beta.1</Version>
-    <Description>Private conversations between AI agent sessions on the same computer.</Description>
+    <Description>Private conversations between AI agent sessions, on this computer or with other machines.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Authors>Andre Vianna</Authors>
     <RepositoryUrl>https://github.com/AndreVianna/Pigeon</RepositoryUrl>
   </PropertyGroup>
+  <!-- The installers' build: one self-contained file per platform, no .NET needed (decided by the
+       user on 2026-11-07). Trimming touches only assemblies marked trimmable, which leaves Pigeon's
+       reflection-based JSON intact; compression made the file both smaller and faster to start
+       (measured on Windows: 18.5 MB and 237 ms, against 30 MB and 286 ms uncompressed). -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
-    <Content Include="../../integrations/codex-plugin/**/*" Link="integrations/codex-plugin/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" Pack="false" />
-    <Content Include="../../integrations/claude-plugin/**/*" Exclude="../../integrations/claude-plugin/scripts/*.ps1" Link="integrations/claude-plugin/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" Pack="false" />
-    <Content Include="../../.claude-plugin/marketplace.json" Link=".claude-plugin/marketplace.json" CopyToPublishDirectory="PreserveNewest" Pack="false" />
-    <Content Include="../../.agents/plugins/marketplace.json" Link=".agents/plugins/marketplace.json" CopyToPublishDirectory="PreserveNewest" Pack="false" />
+    <Content Condition="'$(RuntimeIdentifier)' == ''" Include="../../integrations/codex-plugin/**/*" Link="integrations/codex-plugin/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" Pack="false" />
+    <Content Condition="'$(RuntimeIdentifier)' == ''" Include="../../integrations/claude-plugin/**/*" Exclude="../../integrations/claude-plugin/scripts/*.ps1" Link="integrations/claude-plugin/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" Pack="false" />
+    <Content Condition="'$(RuntimeIdentifier)' == ''" Include="../../.claude-plugin/marketplace.json" Link=".claude-plugin/marketplace.json" CopyToPublishDirectory="PreserveNewest" Pack="false" />
+    <Content Condition="'$(RuntimeIdentifier)' == ''" Include="../../.agents/plugins/marketplace.json" Link=".agents/plugins/marketplace.json" CopyToPublishDirectory="PreserveNewest" Pack="false" />
     <ProjectReference Include="../Pigeon.Core/Pigeon.Core.csproj" />
     <ProjectReference Include="../Pigeon.Adapters/Pigeon.Adapters.csproj" />
     <ProjectReference Include="../Pigeon.Service/Pigeon.Service.csproj" />
