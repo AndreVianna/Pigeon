@@ -9,7 +9,9 @@ work=$(mktemp -d)
 # Git Bash on Windows: Pigeon needs Windows paths.
 native=$work
 command -v cygpath >/dev/null 2>&1 && native=$(cygpath -w "$work")
-export PIGEON_PORT=49681 PIGEON_DATABASE="$native/smoke.db" PIGEON_IDENTITY_DIR="$native/identity"
+# Ports below 49152: Windows reserves blocks of the dynamic range (Hyper-V, WinNAT), and a bind
+# there fails with "access forbidden".
+export PIGEON_PORT=38681 PIGEON_DATABASE="$native/smoke.db" PIGEON_IDENTITY_DIR="$native/identity"
 cleanup() { "$pigeon" stop >/dev/null 2>&1 || true; rm -rf "$work"; }
 trap cleanup EXIT
 
@@ -20,5 +22,5 @@ actual=$("$pigeon" --version)
 "$pigeon" join smoke as smoke-b using claude-code
 "$pigeon" send from smoke-a to smoke "hello from the smoke test"
 "$pigeon" receive for smoke-b from smoke | grep -q "hello from the smoke test"
-"$pigeon" peer listen 127.0.0.1:49682 | grep -q "127.0.0.1:49682"
+"$pigeon" peer listen 127.0.0.1:38682 | grep -q "127.0.0.1:38682"
 echo "Pigeon $actual works."
