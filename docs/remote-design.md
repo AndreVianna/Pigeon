@@ -104,7 +104,29 @@ Antigravity advertises elicitation but cancels every prompt without showing it, 
 - Pigeon recognizes the host by the tool name its plugin reports. That is a product limit, not a security boundary: any local program can claim another tool name.
 - The README lists it as a host limitation. It is lifted if Antigravity starts showing prompts; the [elicitation probe](../experiments/elicitation-probe/README.md) re-checks that in a few minutes.
 
-### Without elicitation
+### Native dialogs: when the host cannot ask (draft for review, 2026-11-07)
+
+**Status: proposed by the user on 2026-11-07, not built.** Today a host that cannot show Pigeon's prompts (the Claude desktop app, Antigravity, headless runs) leaves them to the terminal. The user does not want approvals to depend on the terminal. Instead, Pigeon shows the same prompt in a small window of the operating system, which no model can answer:
+
+- **Who shows it:** the session's own Pigeon MCP server, the process the host started for that session on the user's desktop. It already receives the session's prompts (`prompts_next`); for a host that cannot show them it opens a dialog instead of sending `elicitation/create`, and returns the answer through `prompt_answer` exactly as an elicitation reply. A request for a session with no MCP server running stays in the terminal.
+- **What it shows:** the prompt's existing text: the contact confirmation, the join code to give the other person, the code entry ("Never enter a code your agent relays"), or Allow and Deny for a known machine. Names and tools from the other machine are shown as their claims, as now.
+- **Answers:** Allow or Deny, and a text field when a code is needed. Closing the window, Deny or no answer within Pigeon's 10 minutes is Deny; an answer to a request that already ended is ignored. One window per request.
+- **How, without a new package:**
+  - Windows: Windows PowerShell's built-in input box (`Microsoft.VisualBasic.Interaction.InputBox`) and message box, started as a child process with the text passed in environment variables, never pasted into the script, so a claimed machine name cannot inject commands.
+  - macOS: `osascript` `display dialog`, with the text again read from an environment variable (`system attribute`).
+  - Linux: `zenity` or `kdialog` when one is installed and a desktop session is present (`DISPLAY` or `WAYLAND_DISPLAY`).
+  - Otherwise, or with `PIGEON_PROMPTS=terminal`, the terminal as today.
+- **Hosts it covers:** Claude Desktop at once. Antigravity could then open and join topics with other machines too, lifting its local-only limit; that is a separate decision (below).
+- **The requesting side:** the contact confirmation and the join code appear in a dialog on the requester's machine, so neither person needs a terminal.
+
+**Security.** A dialog is outside the conversation, like a host prompt: the model cannot read the code in it or press its buttons through any Pigeon tool. Two things stay as accepted limits, as they are for the terminal today: an agent that can run shell commands could run `pigeon allow` itself, and an agent with computer-use tools could click a dialog. Pigeon does not try to stop either; a person who gives an agent those powers trusts it with them.
+
+**Open questions for review:**
+1. Should a dialog also be used when the host *can* prompt but the person is not at the conversation (for example, a minimized window)? Proposed: no; the host's prompt stays first.
+2. Lift Antigravity's local-only limit once dialogs exist? Proposed: yes, in the same build, with an Antigravity host test.
+3. Should the requester's join code stay visible in its dialog until the join completes, or show once? Proposed: stay visible, with a Copy button where the platform has one.
+
+### Without elicitation or dialogs
 
 Requests with nobody at the session, and headless runs (Codex and Copilot decline at once; OpenCode never answers), use the terminal: `pigeon requests` lists open requests on both sides, `pigeon requests --show <request>` shows the requesting side its code (only in a terminal, never through the MCP server), and `pigeon allow <request> [<code>]` or `pigeon deny <request>` answers on the listing side.
 
