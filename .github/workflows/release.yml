@@ -46,7 +46,8 @@ jobs:
           $folder = Join-Path $env:LOCALAPPDATA 'Programs\Pigeon'
           if (-not (Test-Path (Join-Path $folder 'pigeon.exe'))) { throw "pigeon.exe is not in $folder" }
           $path = [Environment]::GetEnvironmentVariable('PATH', 'User')
-          if (-not ($path -split ';' -contains $folder)) { throw "The user PATH does not contain $folder" }
+          # Windows Installer writes folder properties with a trailing backslash.
+          if (-not (($path -split ';' | ForEach-Object { $_.TrimEnd('\') }) -contains $folder)) { throw "The user PATH does not contain $folder" }
           & (Join-Path $env:ProgramFiles 'Git\bin\bash.exe') packaging/smoke-test.sh "$folder\pigeon.exe" '${{ steps.version.outputs.value }}'
           if ($LASTEXITCODE -ne 0) { throw 'The smoke test failed' }
           $remove = Start-Process msiexec -ArgumentList '/x', "`"$msi`"", '/qn' -Wait -PassThru
