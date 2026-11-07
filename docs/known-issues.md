@@ -1,12 +1,12 @@
 # Known issues and technical debt
 
-This list reflects 0.6.0-alpha.4. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+This list reflects 0.6.0-beta.1. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
 
 ## Other machines
 
-### Tried across two machines with the CLI only
+### Tried across two Windows machines only
 
-0.6.0-alpha.4 is tested with two services on one machine over real TLS on loopback. The alpha.3 version (invitations and per-topic sharing) was tried on 2026-11-04 between two Windows machines on a home Wi-Fi network; the join codes that replaced it, agents on two machines, macOS, Linux and Tailscale are not yet tried.
+Agents on other machines were tried on 2026-11-07 between two Windows machines on a home Wi-Fi network, with Claude Desktop on both and Antigravity on one (host tests M1–M7 and D1–D7 in `experiments/host-test`); every build is also tested with two services on one machine over real TLS on loopback. Not yet tried: macOS, Linux, Tailscale, and the hosts that show Pigeon's prompts themselves (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
 
 ### Accepted limits of the join handshake
 

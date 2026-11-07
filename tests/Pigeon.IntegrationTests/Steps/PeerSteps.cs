@@ -157,7 +157,8 @@ public sealed partial class PeerSteps {
         Assert.Contains("No known machine is named nobody-pc", (await Call("pigeon_leave", new { machine = "nobody-pc" })).Text);
         var (error, text) = await Call("pigeon_leave", new { machine = "bruno-desktop" });
         Assert.False(error, text);
-        Assert.Contains("Forgot bruno-desktop: every topic with it ended on both machines", text);
+        // Found in the dialog host test (D7): "ended on both machines" made an agent think the topics were gone.
+        Assert.Contains("Forgot bruno-desktop, and it was told. You no longer share any topic with it", text);
         await Eventually(async () => (await Ok("bruno", "peer", "list")).Contains("Known machines: 0"));
         Assert.DoesNotContain("@ana-laptop", await Ok("bruno", "topics"));
         Assert.Contains("Known machines: 0", await Ok("ana", "peer", "list"));

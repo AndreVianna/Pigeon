@@ -2,6 +2,16 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
+## 0.6.0-beta.1 (unreleased)
+
+The first beta of 0.6.0, promoted by the user on 2026-11-07 after the two-machine host tests with agents (M1–M7, D1–D7): Claude Desktop on two Windows machines and Antigravity, with join codes in Pigeon's own windows. Together with alpha.1 to alpha.8 it adds macOS and Linux builds, the Antigravity, OpenCode and Copilot hosts, and agents on other machines of the same network.
+
+Not yet tried: agents on macOS or Linux (including Pigeon's windows there), Tailscale, and the hosts' own prompts (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
+
+### Fixed
+- Forgetting a machine says that each shared topic stays on the machine that opened it, with a free seat; "ended on both machines" made an agent think the topics were gone (dialog host test D7, found on alpha.8).
+- The plugins no longer describe Pigeon as limited to this computer.
+
 ## 0.6.0-alpha.8 (unreleased)
 
 ### Added

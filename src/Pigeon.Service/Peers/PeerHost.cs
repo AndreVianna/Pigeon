@@ -187,7 +187,7 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
         return new {
             removed,
             text = removed
-                ? $"Forgot {name}: every topic with it ended on both machines, and it was told. Joining it again needs a join code."
+                ? $"Forgot {name}, and it was told. You no longer share any topic with it: a topic opened on either machine stays there, with its seat free for someone else. Joining {name} again needs a join code."
                 : $"No known machine is named {name}. pigeon_topics names the machine of each of your topics."
         };
     }
