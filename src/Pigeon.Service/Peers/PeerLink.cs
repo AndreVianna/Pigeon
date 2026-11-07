@@ -37,6 +37,13 @@ public sealed class PeerServer(Broker broker, ServiceIdentity identity, IPEndPoi
     private readonly PeerRateLimit rates = new();
     public Task Ready => ready.Task;
 
+    // TLS 1.3, or 1.2 where one side lacks it: .NET on macOS accepts no TLS 1.3 connections (found
+    // in CI on 2026-11-07), so a Mac could not listen. Both versions require both certificates, and
+    // the pinned fingerprints are the trust either way; under 1.2 the certificates cross the network
+    // unencrypted, so an observer can tell which machines talk, but not read or change what they say.
+    // Allowed by the user on 2026-11-07.
+    internal const SslProtocols PeerProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
+
     public async Task RunAsync(CancellationToken cancellation) {
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
@@ -46,7 +53,7 @@ public sealed class PeerServer(Broker broker, ServiceIdentity identity, IPEndPoi
             foreach (var endpoint in endpoints)
                 options.Listen(endpoint, listen => listen.UseHttps(https => {
                     https.ServerCertificate = identity.Certificate;
-                    https.SslProtocols = SslProtocols.Tls13;
+                    https.SslProtocols = PeerProtocols;
                     https.ClientCertificateMode = ClientCertificateMode.RequireCertificate;
                     // Self-signed certificates have no chain to check; the fingerprint is the trust.
                     https.ClientCertificateValidation = (certificate, _, _) => broker.IsPeer(ServiceIdentity.FingerprintOf(certificate)) || broker.AnyListed();
@@ -158,7 +165,7 @@ public sealed class PeerDelivery(Broker broker, ServiceIdentity identity, Func<i
     public static HttpClient ClientFor(ServiceIdentity identity, string? expectedFingerprint, Action<string>? presented = null, int port = 0) {
         var client = new HttpClient(new SocketsHttpHandler {
             SslOptions = new SslClientAuthenticationOptions {
-                EnabledSslProtocols = SslProtocols.Tls13,
+                EnabledSslProtocols = PeerServer.PeerProtocols,
                 ClientCertificates = [identity.Certificate],
                 RemoteCertificateValidationCallback = (_, certificate, _, _) => {
                     if (certificate is not X509Certificate2 server)

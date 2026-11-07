@@ -34,7 +34,7 @@ Either user can end the connection at any time by telling their agent to disconn
 
 Each user runs one service bound to `127.0.0.1`, with no authentication; that does not change. Local agents, plugins and hooks keep using the loopback service.
 
-The service has a second, separate listener: the **peer listener**. It is off until turned on, accepts only TLS 1.3 connections with a client certificate, and serves only the peer protocol. It never serves the local API.
+The service has a second, separate listener: the **peer listener**. It is off until turned on, accepts only TLS 1.3 or 1.2 connections with a client certificate, and serves only the peer protocol. It never serves the local API.
 
 ```
 machine A                                          machine B
@@ -150,7 +150,7 @@ A known machine can list this machine's listed topics, request to join one (whic
 
 ## Transport
 
-- TLS 1.3 only, through Kestrel, with a client certificate required. Known machines are recognized by pinned fingerprints. **Change from the first design:** while any topic is listed, the listener also accepts unknown certificates, which reach only the join-request path; the first design accepted them only while an invitation was open.
+- TLS 1.3, or TLS 1.2 where one side lacks 1.3, through Kestrel, with a client certificate required. **Changed on 2026-11-07 (decided by the user):** the first designs allowed TLS 1.3 only, but .NET on macOS accepts no TLS 1.3 connections, so a Mac could not listen (found in CI). Both versions authenticate both sides by certificate, and the pinned fingerprints are the trust in either; see accepted limit 7. Known machines are recognized by pinned fingerprints. **Change from the first design:** while any topic is listed, the listener also accepts unknown certificates, which reach only the join-request path; the first design accepted them only while an invitation was open.
 - Outgoing connections go to an address or host name a user typed (first contact) or a known machine's last address.
 - The peer protocol moves to version 2. A machine running the first design gets "the other machine runs an older Pigeon; update it".
 - Pigeon never changes the firewall. If the operating system asks, the person decides; the docs say which port to allow (49374 by default).
@@ -159,7 +159,7 @@ A known machine can list this machine's listed topics, request to join one (whic
 
 | Threat | Mitigation |
 |---|---|
-| Someone on the network reads or changes traffic | Mutual TLS 1.3; fingerprints pinned after the first join. |
+| Someone on the network reads or changes traffic | Mutual TLS (1.3, or 1.2 with a Mac); fingerprints pinned after the first join. |
 | Two agents pass a code between them to approve a join | The code is shown only by elicitation or a terminal, never in a tool result, so the requesting model never has it. |
 | An agent asks its user to type a code it relays | The prompt says never to enter a code an agent relays. Social engineering is not fully preventable; this is the reminder at the moment it matters. |
 | An agent is talked into contacting a new machine | The requesting person confirms every first contact. |
@@ -181,6 +181,7 @@ Known and accepted for alpha.4, to be listed in [known issues](known-issues.md):
 4. **Hosts may answer elicitations without a person:** headless runs decline them, and a Claude Code hook can answer them. Documented per host.
 5. **Request spam is limited only by the basics:** one request per topic, a rate limit and Deny. No block lists or grouped prompts.
 6. **Another local user on the same machine** can use its unauthenticated loopback API, including remote topics. Remote topics are recommended only on single-user machines, and the README says so prominently.
+7. **Under TLS 1.2 the certificates cross the network unencrypted.** A Mac, and any machine talking to one, uses TLS 1.2, where the certificates are sent before encryption starts (TLS 1.3 encrypts them). Someone on the network can then tell which machines talk to each other, by their self-signed certificates, but cannot read or change the messages. Added on 2026-11-07.
 
 ## Data
 

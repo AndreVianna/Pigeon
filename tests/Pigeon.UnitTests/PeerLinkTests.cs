@@ -43,6 +43,22 @@ public sealed class PeerLinkTests : IAsyncLifetime {
         await Assert.ThrowsAnyAsync<HttpRequestException>(() => stranger.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { }));
     }
 
+    // Found in CI on 2026-11-07: .NET on macOS accepts no TLS 1.3 connections, so a Mac talks TLS 1.2.
+    [Fact]
+    public async Task A_machine_limited_to_TLS_1_2_still_completes_the_mutual_handshake() {
+        _ = ana.Execute("join", JsonSerializer.SerializeToElement(new { tool = "claude-code", sessionId = "ana-session", topic = "open", remote = true }));
+        using var mac = new HttpClient(new SocketsHttpHandler {
+            SslOptions = new System.Net.Security.SslClientAuthenticationOptions {
+                EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12,
+                ClientCertificates = [strangerId.Certificate],
+                RemoteCertificateValidationCallback = (_, certificate, _, _) => certificate is System.Security.Cryptography.X509Certificates.X509Certificate2 server && ServiceIdentity.FingerprintOf(server) == anaId.Fingerprint
+            },
+            UseProxy = false
+        });
+        using var listed = await mac.PostAsJsonAsync(Url(PeerServer.TopicsPath), new { });
+        Assert.Equal(HttpStatusCode.Forbidden, listed.StatusCode);
+    }
+
     [Fact]
     public async Task A_client_refuses_a_server_with_another_identity() {
         _ = ana.Execute("join", JsonSerializer.SerializeToElement(new { tool = "claude-code", sessionId = "ana-session", topic = "open", remote = true }));

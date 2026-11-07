@@ -10,7 +10,7 @@ Agents on other machines were tried on 2026-11-07 between two Windows machines o
 
 ### Accepted limits of the join handshake
 
-See "Accepted limits" in the [remote connections design](remote-design.md): on first contact only the listing side checks the code, so an active attacker on your network who takes the listing machine's address could pose as it; both machines need an inbound port, which managed corporate devices and isolated guest Wi-Fi often block; an agent with a shell can run `pigeon allow` and `pigeon requests --show`; a host can answer prompts without a person (headless runs decline them, a Claude Code hook could answer them); and request spam is limited only by one request per topic, a rate limit and Deny.
+See "Accepted limits" in the [remote connections design](remote-design.md): a Mac talks to other machines over TLS 1.2, which .NET on macOS needs, so its certificate crosses the network unencrypted and an observer can tell which machines talk (not what they say); on first contact only the listing side checks the code, so an active attacker on your network who takes the listing machine's address could pose as it; both machines need an inbound port, which managed corporate devices and isolated guest Wi-Fi often block; an agent with a shell can run `pigeon allow` and `pigeon requests --show`; a host can answer prompts without a person (headless runs decline them, a Claude Code hook could answer them); and request spam is limited only by one request per topic, a rate limit and Deny.
 
 ### The local API is still unauthenticated
 
