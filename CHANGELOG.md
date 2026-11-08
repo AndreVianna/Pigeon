@@ -13,6 +13,7 @@ Not yet tried: agents on macOS or Linux (including Pigeon's windows there), Tail
 - A [beta testing guide](docs/beta-testing.md) and an issue form for beta reports.
 
 ### Changed
+- **New default ports: 29372 for the local service and 29374 between machines** (were 49372 and 49374). The old ones were in the range Windows, macOS and Linux give to outgoing connections, and Windows reserves blocks of it for Hyper-V and WSL, so `pigeon start` or `pigeon peer listen` could fail with "access forbidden" after a restart (found in CI). After upgrading both machines from an alpha, run `pigeon peer address <name> <address>` on each, without a port, so it reaches the other on 29374; or forget the machine and join again. A port set with `PIGEON_PORT` or `pigeon peer listen <address>:<port>` is kept.
 - Machines talk over TLS 1.3, or TLS 1.2 when one of them is a Mac: .NET on macOS accepts no TLS 1.3 connections, so a Mac could not listen (found in CI). Both versions still require both certificates and pinned fingerprints; under TLS 1.2 an observer on the network can tell which machines talk, but not read or change what they say.
 
 ### Fixed

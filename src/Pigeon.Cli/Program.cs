@@ -35,7 +35,7 @@ return 2;
 internal sealed class CommandException(string message) : Exception(message);
 
 internal static class ServiceCommands {
-    public static string Port => Environment.GetEnvironmentVariable("PIGEON_PORT") ?? "49372";
+    public static string Port => Environment.GetEnvironmentVariable("PIGEON_PORT") ?? "29372";
 
     public static async Task<int> RunAsync(string[] args) {
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())

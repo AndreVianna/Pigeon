@@ -69,7 +69,7 @@ A topic holds two sessions. To talk to a third agent, use another topic, such as
 
 New in 0.6.0-alpha.3, with the join codes below since alpha.4. Agents on two machines on the same network, such as a LAN or a Tailscale network, can share a topic, including a colleague's machine. The services talk over TLS and pin each other's certificate; nothing is exposed to the internet, and Pigeon never changes the firewall.
 
-1. **Each machine, once:** a person runs `pigeon peer listen`. It listens on the machine's LAN and Tailscale addresses (port 49374; allow it in the firewall if your system asks) and prints them. The machine's name is its host name; change it with `pigeon peer name`.
+1. **Each machine, once:** a person runs `pigeon peer listen`. It listens on the machine's LAN and Tailscale addresses (port 29374; allow it in the firewall if your system asks) and prints them. The machine's name is its host name; change it with `pigeon peer name`.
 2. **Open a topic:** ask your agent to open a topic to other machines (`pigeon_join` with `remote: true`, or `pigeon join review as <session> using <tool> --remote`).
 3. **Join it from the other machine:** ask the agent there to join `review@<address>` the first time, for example `review@192.168.2.20`, and `review@<machine name>` after that.
 4. **Approve it:** Pigeon asks the people directly, in the agent app, never through the agent.
@@ -140,7 +140,7 @@ Set these environment variables before `pigeon start` (and, for the port, for th
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `PIGEON_PORT` | `49372` | The local port the service uses. The service, the plugins and the commands must all use the same one. |
+| `PIGEON_PORT` | `29372` | The local port the service uses. The service, the plugins and the commands must all use the same one. |
 | `PIGEON_DATABASE` | `%LOCALAPPDATA%\Pigeon\messages.db` on Windows, `~/Library/Application Support/Pigeon/messages.db` on macOS, `~/.local/share/Pigeon/messages.db` on Linux | Where messages are stored (an absolute path). |
 | `PIGEON_MAX_MESSAGES_PER_HOUR` | `60` | Messages one topic accepts per hour. |
 | `PIGEON_ABANDONED_TOPIC_MINUTES` | `60` | How long both members can be away before a topic is deleted. |

@@ -94,8 +94,8 @@ public sealed class PeerLinkTests : IAsyncLifetime {
 
     [Fact]
     public void Addresses_accept_host_names_and_default_the_port() {
-        Assert.Equal("192.168.2.20:49374", PeerHost.ParseTarget("192.168.2.20"));
-        Assert.Equal("dev-laptop.tail1234.ts.net:49374", PeerHost.ParseTarget("Dev-Laptop.tail1234.ts.net"));
+        Assert.Equal("192.168.2.20:29374", PeerHost.ParseTarget("192.168.2.20"));
+        Assert.Equal("dev-laptop.tail1234.ts.net:29374", PeerHost.ParseTarget("Dev-Laptop.tail1234.ts.net"));
         Assert.Equal("dev-laptop:50000", PeerHost.ParseTarget("dev-laptop:50000"));
         Assert.Throws<ArgumentException>(() => PeerHost.ParseTarget("bad host!"));
         Assert.Throws<ArgumentException>(() => PeerHost.ParseListen("dev-laptop"));

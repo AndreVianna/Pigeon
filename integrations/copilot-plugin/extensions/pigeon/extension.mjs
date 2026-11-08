@@ -4,7 +4,7 @@
 import { joinSession } from "@github/copilot-sdk/extension"
 import { callBroker, isPigeonTool, turnState, Waker } from "./waker.mjs"
 
-const port = process.env.PIGEON_PORT ?? "49372"
+const port = process.env.PIGEON_PORT ?? "29372"
 const server = "pigeon"
 
 const session = await joinSession({

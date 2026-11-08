@@ -35,7 +35,7 @@ Then start the service (`pigeon start`) and add the plugin to your agent apps, a
 
 You need a second machine on the same network (a home or office Wi-Fi, or a Tailscale network), with Pigeon installed and a person at it. Mixing systems (a Mac with a Windows PC, Linux with a Mac) is the most useful.
 
-On **each** machine, once: `pigeon peer listen`. It prints the addresses other machines use; allow the port (49374) if your firewall asks. On Linux with `ufw`: `sudo ufw allow 49374/tcp`.
+On **each** machine, once: `pigeon peer listen`. It prints the addresses other machines use; allow the port (29374) if your firewall asks. On Linux with `ufw`: `sudo ufw allow 29374/tcp`.
 
 | # | Test | Do | Works when |
 |---|---|---|---|
