@@ -1,0 +1,17 @@
+<!-- Builds Pigeon-<version>-win-x64.msi from a standalone publish of the CLI:
+       dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r win-x64 -o artifacts/win-x64
+       dotnet build packaging/windows/Pigeon.Installer.wixproj -c Release -p:PigeonVersion=<version> -p:PublishDir=<full path of artifacts/win-x64>
+     It is not part of Pigeon.slnx, so the normal build and tests do not need WiX. -->
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <PropertyGroup>
+    <PigeonVersion Condition="'$(PigeonVersion)' == ''">0.0.0</PigeonVersion>
+    <!-- MSI versions are numeric: 0.6.0-beta.1 becomes 0.6.0.1. Upgrades compare only the first
+         three parts, so every build of 0.6.0 replaces the one installed. -->
+    <ProductVersion>$([System.Text.RegularExpressions.Regex]::Replace($(PigeonVersion), '^(\d+\.\d+\.\d+)(?:-[a-z]+\.(\d+))?$', '$1.$2').TrimEnd('.'))</ProductVersion>
+    <OutputName>Pigeon-$(PigeonVersion)-win-x64</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <DefineConstants>ProductVersion=$(ProductVersion);PublishDir=$(PublishDir)</DefineConstants>
+    <!-- ICE91: per-user folders are expected. ICE61: same-version upgrades are on purpose (beta builds of one version). -->
+    <SuppressIces>ICE91;ICE61</SuppressIces>
+  </PropertyGroup>
+</Project>

@@ -6,7 +6,7 @@ import { callBroker, turnEvents, turnState, Waker } from "./waker.ts"
 export default Plugin.define({
   id: "pigeon",
   async setup(ctx) {
-    const port = process.env.PIGEON_PORT ?? "49372"
+    const port = process.env.PIGEON_PORT ?? "29372"
     await ctx.mcp.transform((editor) => {
       editor.set("pigeon", {
         type: "local",

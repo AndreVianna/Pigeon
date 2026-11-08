@@ -13,7 +13,9 @@ namespace Pigeon.Service.Peers;
 // peer listener, the delivery loop and the requesting side of joins. It also answers the local
 // `peer_*` requests of the command line and the agents' listing of another machine's topics.
 public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDisposable {
-    public const int DefaultPort = 49374;
+    // Below 32768, like the local port (29372): Windows, macOS and Linux hand out higher ports to
+    // outgoing connections, and Windows reserves blocks of them for Hyper-V and WSL, where a bind fails.
+    public const int DefaultPort = 29374;
     private readonly SemaphoreSlim gate = new(1, 1);
     private ServiceIdentity? identity;
     private CancellationTokenSource? listenerStop;
@@ -80,14 +82,14 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
 
     // ---- Addresses ----
 
-    // "address" or "address:port" for the listener; IPv6 in brackets. The port defaults to 49374.
+    // "address" or "address:port" for the listener; IPv6 in brackets. The port defaults to 29374.
     public static IPEndPoint ParseListen(string text) {
         text = text.Trim();
         if (IPAddress.TryParse(text, out var bare) && !text.Contains("]:", StringComparison.Ordinal))
             return new IPEndPoint(bare, DefaultPort);
         return IPEndPoint.TryParse(text, out var endpoint) && endpoint.Port is > 0 and <= 65535
             ? endpoint
-            : throw new ArgumentException("Give an IP address, optionally with a port, for example 192.168.1.20 or 100.64.0.7:49374.");
+            : throw new ArgumentException("Give an IP address, optionally with a port, for example 192.168.1.20 or 100.64.0.7:29374.");
     }
 
     [GeneratedRegex(@"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")]

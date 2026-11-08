@@ -51,7 +51,7 @@ Feature: Command line
       | topics create design                          |
       | topics join design codex x                    |
       | start --invalid                               |
-      | status 49372                                  |
+      | status 29372                                  |
       | mcp --claude-channel                          |
       | join design codex x                           |
       | join design as x                              |

@@ -18,8 +18,8 @@ public sealed class PeerStoreTests : IDisposable {
         Directory.CreateDirectory(directory);
         ana = new Mailbox(Path.Combine(directory, "ana.db"), () => now);
         bruno = new Mailbox(Path.Combine(directory, "bruno.db"), () => now);
-        _ = ana.AddPeer(BrunoPrint, "bruno-desktop", "10.0.0.2:49374");
-        _ = bruno.AddPeer(AnaPrint, "ana-laptop", "10.0.0.1:49374");
+        _ = ana.AddPeer(BrunoPrint, "bruno-desktop", "10.0.0.2:29374");
+        _ = bruno.AddPeer(AnaPrint, "ana-laptop", "10.0.0.1:29374");
     }
 
     private int Relay(Mailbox from, string fromPrint, Mailbox to, string toPrint) {
@@ -139,7 +139,7 @@ public sealed class PeerStoreTests : IDisposable {
         Assert.True(ana.RemovePeer("bruno-desktop"));
         Assert.Empty(ana.Peers());
         var farewell = Assert.Single(ana.Farewells());
-        Assert.Equal((BrunoPrint, "10.0.0.2:49374"), (farewell.Fingerprint, farewell.Address));
+        Assert.Equal((BrunoPrint, "10.0.0.2:29374"), (farewell.Fingerprint, farewell.Address));
         Assert.Equal(1, Relay(ana, AnaPrint, bruno, BrunoPrint));
         ana.FarewellDone(BrunoPrint);
         Assert.Empty(ana.Farewells());
@@ -152,7 +152,7 @@ public sealed class PeerStoreTests : IDisposable {
     public void Joining_again_cancels_a_farewell_that_was_not_delivered_yet() {
         Link();
         _ = ana.RemovePeer("bruno-desktop");
-        _ = ana.AddPeer(BrunoPrint, "bruno-desktop", "10.0.0.2:49374");
+        _ = ana.AddPeer(BrunoPrint, "bruno-desktop", "10.0.0.2:29374");
         Assert.Empty(ana.Farewells());
         Assert.DoesNotContain(ana.DueOutbox(BrunoPrint), i => i.Kind == "forget");
     }
@@ -161,8 +161,8 @@ public sealed class PeerStoreTests : IDisposable {
     public void Machine_names_are_validated_and_a_taken_name_gets_a_number() {
         Assert.Throws<ArgumentException>(() => ana.AddPeer("not-hex", "x", null));
         Assert.Throws<ArgumentException>(() => ana.AddPeer(new string('c', 64), "Bad Name", null));
-        Assert.Equal("bruno-desktop", ana.AddPeer(BrunoPrint, "another-name", "10.0.0.9:49374").Name);
-        Assert.Equal("10.0.0.9:49374", ana.PeerByFingerprint(BrunoPrint)!.Address);
+        Assert.Equal("bruno-desktop", ana.AddPeer(BrunoPrint, "another-name", "10.0.0.9:29374").Name);
+        Assert.Equal("10.0.0.9:29374", ana.PeerByFingerprint(BrunoPrint)!.Address);
         Assert.Equal("bruno-desktop-2", ana.AddPeer(new string('c', 64), "bruno-desktop", null).Name);
         Assert.Equal("desktop-ab12", Mailbox.TidyName("DESKTOP-AB12"));
         Assert.Equal("anas-macbook-pro", Mailbox.TidyName("Ana's MacBook Pro.local"));

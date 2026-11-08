@@ -35,7 +35,7 @@ return 2;
 internal sealed class CommandException(string message) : Exception(message);
 
 internal static class ServiceCommands {
-    public static string Port => Environment.GetEnvironmentVariable("PIGEON_PORT") ?? "49372";
+    public static string Port => Environment.GetEnvironmentVariable("PIGEON_PORT") ?? "29372";
 
     public static async Task<int> RunAsync(string[] args) {
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
@@ -372,8 +372,12 @@ internal static class ServiceCommands {
             RedirectStandardError = !windows,
             WorkingDirectory = Environment.CurrentDirectory
         };
+        // Run with `dotnet pigeon.dll` (development only), the service needs the assembly again; a
+        // single-file build never runs under dotnet, so the empty Location there is never used.
+#pragma warning disable IL3000
         if (string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))
             info.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
+#pragma warning restore IL3000
         info.ArgumentList.Add("start");
         var database = Environment.GetEnvironmentVariable("PIGEON_DATABASE");
         if (database is not null) {

@@ -1,0 +1,65 @@
+name: Beta report
+description: Report the results of testing a Pigeon beta (see docs/beta-testing.md).
+title: "Beta report: <version> on <system>"
+labels: ["beta report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing. Reports are public: leave out real work, names and addresses you do not want shown. Test topic names and session IDs are fine.
+  - type: input
+    id: version
+    attributes:
+      label: Pigeon version
+      description: The output of `pigeon --version`.
+      placeholder: 0.6.0-beta.1
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Operating system, version and processor.
+      placeholder: macOS 15.4 on Apple Silicon
+    validations:
+      required: true
+  - type: dropdown
+    id: installer
+    attributes:
+      label: Installed with
+      options:
+        - Windows .msi
+        - macOS .pkg
+        - .deb
+        - .rpm
+        - .tar.gz
+        - .NET tool
+    validations:
+      required: true
+  - type: input
+    id: agents
+    attributes:
+      label: Agent apps
+      description: The apps and versions you tested with.
+      placeholder: Claude Code 2.3 in Terminal, Codex CLI 0.9
+  - type: textarea
+    id: results
+    attributes:
+      label: Results
+      description: Each test you ran (T1–T3, R1–R6), with works or fails.
+      placeholder: |
+        T1 works
+        R2 fails: no window appeared on the Mac
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What you saw for each failure
+      description: The agent's reply, any Pigeon window, and the output of `pigeon status` and `pigeon peer list`.
+      render: text
+  - type: textarea
+    id: other
+    attributes:
+      label: Anything else
+      description: Installer warnings, confusing wording, anything that surprised you.

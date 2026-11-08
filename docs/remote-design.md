@@ -65,7 +65,7 @@ A machine becomes a **known machine** the first time a join between the two comp
 ## Finding topics on another machine
 
 - `pigeon_topics` with `machine: "dev-laptop"` (CLI: `pigeon topics on dev-laptop`) asks that machine for its listed topics. Only known machines get an answer.
-- For the **first contact**, the user gives the topic name and the machine's address or host name: `project-1@192.168.2.20`, `project-1@dev-laptop.tail1234.ts.net`, or with a port, `project-1@192.168.2.20:49374`. After that join, the machine is known by its name.
+- For the **first contact**, the user gives the topic name and the machine's address or host name: `project-1@192.168.2.20`, `project-1@dev-laptop.tail1234.ts.net`, or with a port, `project-1@192.168.2.20:29374`. After that join, the machine is known by its name.
 - A known machine's address is updated each time it makes an authenticated contact, so an address that changes through DHCP heals itself once either side reaches the other. `pigeon peer address <name> <address>` sets it by hand.
 
 ## Joining
@@ -153,7 +153,7 @@ A known machine can list this machine's listed topics, request to join one (whic
 - TLS 1.3, or TLS 1.2 where one side lacks 1.3, through Kestrel, with a client certificate required. **Changed on 2026-11-07 (decided by the user):** the first designs allowed TLS 1.3 only, but .NET on macOS accepts no TLS 1.3 connections, so a Mac could not listen (found in CI). Both versions authenticate both sides by certificate, and the pinned fingerprints are the trust in either; see accepted limit 7. Known machines are recognized by pinned fingerprints. **Change from the first design:** while any topic is listed, the listener also accepts unknown certificates, which reach only the join-request path; the first design accepted them only while an invitation was open.
 - Outgoing connections go to an address or host name a user typed (first contact) or a known machine's last address.
 - The peer protocol moves to version 2. A machine running the first design gets "the other machine runs an older Pigeon; update it".
-- Pigeon never changes the firewall. If the operating system asks, the person decides; the docs say which port to allow (49374 by default).
+- Pigeon never changes the firewall. If the operating system asks, the person decides; the docs say which port to allow (29374 by default).
 
 ## Threats and mitigations
 

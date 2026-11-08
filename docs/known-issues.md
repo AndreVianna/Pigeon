@@ -2,6 +2,16 @@
 
 This list reflects 0.6.0-beta.1. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
 
+## Installers
+
+### Not signed
+
+The Windows installer and the macOS packages are not signed, so Windows SmartScreen warns about an unknown publisher and macOS Gatekeeper refuses the package until the person allows it (see the [beta testing guide](beta-testing.md)). Signing needs a Windows code-signing certificate and an Apple Developer ID with notarization.
+
+### Upgrading while agent apps run
+
+An agent app's Pigeon MCP server keeps `pigeon` running, so on Windows the installer cannot replace it until those apps are closed; it asks to close them or to restart. The installers stop Pigeon's own service first.
+
 ## Other machines
 
 ### Tried across two Windows machines only
