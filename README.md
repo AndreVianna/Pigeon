@@ -157,7 +157,7 @@ The solution `Pigeon.slnx` targets .NET 11 GA and C# 14 and contains xUnit unit 
 
 ```shell
 dotnet build Pigeon.slnx
-dotnet test Pigeon.slnx
+dotnet test --solution Pigeon.slnx
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
 ```
 

@@ -36,7 +36,7 @@ jobs:
         run: dotnet build Pigeon.slnx --configuration Release
 
       - name: Test
-        run: dotnet test Pigeon.slnx --configuration Release --no-build
+        run: dotnet test --solution Pigeon.slnx --configuration Release --no-build
 
       # The OpenCode plugin's wake logic is TypeScript; Node runs it with type stripping.
       - uses: actions/setup-node@v4
