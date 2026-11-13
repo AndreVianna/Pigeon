@@ -15,16 +15,27 @@ done
 errors=$("${PIGEON_EXE:-pigeon}" hook wait claude-code "$@" 2>&1 >/dev/null)
 code=$?
 [ "$code" -eq 2 ] || exit 0
-errors=$(printf '%s' "$errors" | tr -d '\r')
+# Command substitution removes trailing LF, leaving CR for CRLF output.
+cr=$(printf '\r')
+case "$errors" in
+    *"$cr") errors=${errors%"$cr"} ;;
+esac
 newline='
 '
 case "$errors" in
-    *"$newline"*) exit 0 ;;
+    *"$cr"*|*"$newline"*) exit 0 ;;
 esac
-wake='^Pigeon wake generation [0-9a-f]{32}\. '
-renewal='^Pigeon notification waiter needs renewal\. '
-if printf '%s\n' "$errors" | grep -Eq "$wake|$renewal"; then
-    printf '%s\n' "$errors" >&2
-    exit 2
-fi
-exit 0
+case "$errors" in
+    'Pigeon wake generation '*)
+        remainder=${errors#'Pigeon wake generation '}
+        marker=${remainder%%.*}
+        [ "${#marker}" -eq 32 ] || exit 0
+        case "$marker" in *[!0123456789abcdef]*) exit 0 ;; esac
+        suffix=${remainder#"$marker"}
+        case "$suffix" in '. '*) ;; *) exit 0 ;; esac
+        ;;
+    'Pigeon notification waiter needs renewal. '*) ;;
+    *) exit 0 ;;
+esac
+printf '%s\n' "$errors" >&2
+exit 2

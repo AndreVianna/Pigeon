@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds Pigeon-<version>-<rid>.pkg, which installs /usr/local/bin/pigeon, from a standalone publish:
 #   dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r osx-arm64 -o artifacts/osx-arm64
-#   packaging/macos/build-pkg.sh 0.6.0-beta.1 osx-arm64 artifacts/osx-arm64 artifacts
+#   packaging/macos/build-pkg.sh 0.7.0-beta.1 osx-arm64 artifacts/osx-arm64 artifacts
 # Runs on macOS only (pkgbuild). The package is not signed or notarized, so Gatekeeper asks the
 # person to confirm it (see docs/beta-testing.md). It registers no service.
 set -eu

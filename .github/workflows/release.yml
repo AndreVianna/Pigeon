@@ -148,6 +148,12 @@ jobs:
           path: installers
           merge-multiple: true
 
+      - name: Record installer hashes
+        run: |
+          cd installers
+          sha256sum *.msi *.pkg *.deb *.rpm *.tar.gz > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+
       # A draft: a person reads it and publishes it.
       - name: Create a draft prerelease
         env:
@@ -162,5 +168,5 @@ jobs:
           prerelease=
           case "$version" in *-*) prerelease=--prerelease ;; esac
           gh release create "$tag" --draft $prerelease --title "Pigeon $version" \
-            --notes "Installers for Windows, macOS and Linux. Testers: start with [the beta testing guide](https://github.com/${{ github.repository }}/blob/$tag/docs/beta-testing.md). Changes: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/$tag/CHANGELOG.md)." \
+            --notes "Exploratory beta for Windows, macOS and Linux. Claude and Codex agent integration has been tried on Windows; macOS and Linux agent tests are requested. Installers are unsigned. Testers: start with [the beta testing guide](https://github.com/${{ github.repository }}/blob/$tag/docs/beta-testing.md) and [report results](https://github.com/${{ github.repository }}/issues/new?template=beta-report.yml). Changes: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/$tag/CHANGELOG.md). Asset hashes are in SHA256SUMS.txt." \
             installers/*

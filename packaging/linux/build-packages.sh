@@ -2,7 +2,7 @@
 # Builds a .deb, an .rpm and a .tar.gz of Pigeon from a standalone publish; the packages install
 # /usr/bin/pigeon and register no service:
 #   dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r linux-x64 -o artifacts/linux-x64
-#   packaging/linux/build-packages.sh 0.6.0-beta.1 linux-x64 artifacts/linux-x64 artifacts
+#   packaging/linux/build-packages.sh 0.7.0-beta.1 linux-x64 artifacts/linux-x64 artifacts
 # Needs dpkg-deb and rpmbuild (on Ubuntu: apt-get install rpm).
 set -eu
 version=$1 rid=$2 publish=$3 out=$4
@@ -11,7 +11,7 @@ case "$rid" in
   linux-arm64) deb_arch=arm64 rpm_arch=aarch64 ;;
   *) echo "unknown Linux runtime: $rid" >&2; exit 2 ;;
 esac
-# 0.6.0-beta.1: Debian sorts "~" before the release (0.6.0~beta.1), RPM puts it in the release field.
+# Debian sorts "~" before the release (0.7.0~beta.1); RPM puts it in the release field.
 base=${version%%-*}
 pre=$(printf '%s' "$version" | sed -n 's/^[^-]*-//p')
 deb_version=$base${pre:+~$pre}

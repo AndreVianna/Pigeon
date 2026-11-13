@@ -40,7 +40,7 @@ public sealed class PeerLinkTests : IAsyncLifetime {
     [Fact]
     public async Task An_unknown_machine_is_refused_at_the_handshake_while_no_topic_is_open() {
         using var stranger = PeerDelivery.ClientFor(strangerId, anaId.Fingerprint);
-        await Assert.ThrowsAnyAsync<HttpRequestException>(() => stranger.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { }));
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => stranger.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { }, TestContext.Current.CancellationToken));
     }
 
     // Found in CI on 2026-11-07: .NET on macOS accepts no TLS 1.3 connections, so a Mac talks TLS 1.2.
@@ -55,7 +55,7 @@ public sealed class PeerLinkTests : IAsyncLifetime {
             },
             UseProxy = false
         });
-        using var listed = await mac.PostAsJsonAsync(Url(PeerServer.TopicsPath), new { });
+        using var listed = await mac.PostAsJsonAsync(Url(PeerServer.TopicsPath), new { }, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Forbidden, listed.StatusCode);
     }
 
@@ -63,7 +63,7 @@ public sealed class PeerLinkTests : IAsyncLifetime {
     public async Task A_client_refuses_a_server_with_another_identity() {
         _ = ana.Execute("join", JsonSerializer.SerializeToElement(new { tool = "claude-code", sessionId = "ana-session", topic = "open", remote = true }));
         using var misdirected = PeerDelivery.ClientFor(strangerId, strangerId.Fingerprint);
-        await Assert.ThrowsAnyAsync<HttpRequestException>(() => misdirected.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { }));
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => misdirected.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { }, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -71,11 +71,11 @@ public sealed class PeerLinkTests : IAsyncLifetime {
         _ = ana.Execute("join", JsonSerializer.SerializeToElement(new { tool = "claude-code", sessionId = "ana-session", topic = "open", remote = true }));
         using var stranger = PeerDelivery.ClientFor(strangerId, anaId.Fingerprint, port: 49999);
         var item = new PeerItem("message", "open", Guid.NewGuid().ToString("N"), "codex", "let me in", 60000);
-        using (var delivered = await stranger.PostAsJsonAsync(Url(PeerServer.DeliverPath), new { Items = new[] { item } }))
+        using (var delivered = await stranger.PostAsJsonAsync(Url(PeerServer.DeliverPath), new { Items = new[] { item } }, TestContext.Current.CancellationToken))
             Assert.Equal(HttpStatusCode.Forbidden, delivered.StatusCode);
-        using (var listed = await stranger.PostAsJsonAsync(Url(PeerServer.TopicsPath), new { }))
+        using (var listed = await stranger.PostAsJsonAsync(Url(PeerServer.TopicsPath), new { }, TestContext.Current.CancellationToken))
             Assert.Equal(HttpStatusCode.Forbidden, listed.StatusCode);
-        using var started = await stranger.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { Topic = "open", Name = "stranger", Tool = "codex", Port = 49999, Commitment = JoinCode.Commit(JoinCode.NewNonce()) });
+        using var started = await stranger.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { Topic = "open", Name = "stranger", Tool = "codex", Port = 49999, Commitment = JoinCode.Commit(JoinCode.NewNonce()) }, TestContext.Current.CancellationToken);
         Assert.True(started.IsSuccessStatusCode);
         Assert.Equal(0, ana.Execute("topics", JsonSerializer.SerializeToElement(new { sessionId = "ana-session" })) is { Ok: true } ? 0 : 1);
     }

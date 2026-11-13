@@ -9,7 +9,7 @@ namespace Pigeon.IntegrationTests.Steps;
 [Binding]
 [Scope(Tag = "claude_wrapper")]
 public sealed class ClaudeHookWrapperSteps {
-    private readonly string directory = Path.Combine(Path.GetTempPath(), "pigeon-wrapper-" + Guid.NewGuid().ToString("N"));
+    private readonly string directory = Path.Combine(AppContext.BaseDirectory, "TestResults", "pigeon-wrapper-" + Guid.NewGuid().ToString("N"));
     private string sh = "", wrapper = "", fake = "";
 
     [Given("the production Claude hook wrapper and an isolated fake CLI")]
@@ -23,8 +23,41 @@ public sealed class ClaudeHookWrapperSteps {
         Assert.NotNull(root);
         wrapper = Path.Combine(root.FullName, "integrations", "claude-plugin", "scripts", "hook-wait.sh");
         Directory.CreateDirectory(directory);
-        fake = Path.Combine(directory, "fake.sh");
-        File.WriteAllText(fake, """
+        fake = Path.Combine(directory, OperatingSystem.IsWindows() ? "fake.cmd" : "fake.sh");
+        if (OperatingSystem.IsWindows()) {
+            // A second Git Bash process warns about /tmp on minimal Windows installations.
+            // A batch fake exercises the wrapper without adding that unrelated stderr line.
+            File.WriteAllText(fake, """
+                @echo off
+                if "%PIGEON_TEST_MODE%"=="wake" (
+                  echo Pigeon wake generation 0123456789abcdef0123456789abcdef. Synthetic wake 1>&2
+                  exit /b 2
+                )
+                if "%PIGEON_TEST_MODE%"=="renew" (
+                  echo Pigeon notification waiter needs renewal. Synthetic renewal 1>&2
+                  exit /b 2
+                )
+                if "%PIGEON_TEST_MODE%"=="crlf" (
+                  echo Pigeon notification waiter needs renewal. Synthetic renewal 1>&2
+                  exit /b 2
+                )
+                if "%PIGEON_TEST_MODE%"=="invalid" (
+                  echo Error: invalid arguments 1>&2
+                  exit /b 2
+                )
+                if "%PIGEON_TEST_MODE%"=="multiline" (
+                  echo Pigeon notification waiter needs renewal. Synthetic renewal 1>&2
+                  echo unexpected text 1>&2
+                  exit /b 2
+                )
+                if "%PIGEON_TEST_MODE%"=="failure" (
+                  echo Pigeon notification waiter needs renewal. Synthetic renewal 1>&2
+                  exit /b 1
+                )
+                exit /b 0
+                """.ReplaceLineEndings("\r\n"));
+        } else {
+            File.WriteAllText(fake, """
             #!/bin/sh
             case "$PIGEON_TEST_MODE" in
               wake) printf '%s\n' 'Pigeon wake generation 0123456789abcdef0123456789abcdef. Synthetic wake' >&2; exit 2 ;;
@@ -36,8 +69,8 @@ public sealed class ClaudeHookWrapperSteps {
             esac
             exit 0
             """.ReplaceLineEndings("\n"));
-        if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(fake, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
     }
 
     [Then("valid wakes and renewals pass through and CLI errors remain silent")]
@@ -56,9 +89,12 @@ public sealed class ClaudeHookWrapperSteps {
             var errors = process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
             var valid = mode is "wake" or "renew" or "crlf";
-            Assert.Equal(valid ? 2 : 0, process.ExitCode);
+            var text = (await errors).ReplaceLineEndings("\n");
+            const string missingGitTemp = "bash.exe: warning: could not find /tmp, please create!\n";
+            if (OperatingSystem.IsWindows() && text.StartsWith(missingGitTemp, StringComparison.Ordinal))
+                text = text[missingGitTemp.Length..];
+            Assert.True(process.ExitCode == (valid ? 2 : 0), $"Mode {mode} exited {process.ExitCode}; stdout: {await output}; stderr: {text}");
             Assert.Equal("", await output);
-            var text = await errors;
             if (valid)
                 Assert.StartsWith(mode == "wake" ? "Pigeon wake generation " : "Pigeon notification waiter needs renewal. ", text);
             else

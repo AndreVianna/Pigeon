@@ -1,15 +1,15 @@
 # Pigeon
 
-Pigeon lets two AI agent sessions on the same computer talk to each other, for example a Claude conversation and a Codex chat working on the same project. One agent sends a message; the other is woken up, reads it, and can reply. You do not have to copy text between windows.
+Pigeon lets two AI agent sessions talk to each other, for example a Claude conversation and a Codex chat working on the same project. One agent sends a message; the other can be woken up, read it, and reply while its host supports notification. You do not have to copy text between windows.
 
 Conversations happen in **topics**. A topic is a private conversation between exactly two sessions, such as `parser-review`. Messages wait in order until the other side reads them, even if it is busy, idle, or has not joined yet.
 
-Everything stays on your computer. Pigeon runs a small background service that only accepts connections from this machine.
+Pigeon's service accepts local connections by default. Sharing a topic with another machine is optional and requires turning on a separate peer listener. Local callers are not authenticated; use test data on a single-user machine for this beta. [Mac and Linux testers are especially welcome](docs/beta-testing.md).
 
 ## What you need
 
-- Windows 10 or 11, macOS, or Linux. macOS and Linux are new in 0.6.0-alpha.1: they pass the automated tests but have not yet been tried with Claude or Codex.
-- The [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0), release candidate 3 or later. Installing Pigeon builds it from this repository, and the SDK includes the runtime it needs.
+- Windows 11 (or a supported Windows 10 Enterprise/LTSC edition), macOS, or Linux. macOS and Linux pass automated tests but have not yet been tried with Claude or Codex; [Microsoft lists the OS versions supported by .NET 11](https://github.com/dotnet/core/blob/main/release-notes/11.0/supported-os.md).
+- No .NET installation is needed for the installers below. To build Pigeon from source, use the [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0), version 11.0.100 or a later patch in the same feature band.
 - On Windows, [Git for Windows](https://git-scm.com/download/win) if you use Claude Code: the Claude plugin's hook runs under Git Bash. macOS and Linux use their own `sh`.
 - On Linux, the SQLite library (`libsqlite3`), which nearly every distribution includes. Windows and macOS have it built in.
 - Claude Code (including Claude Desktop), Codex (including the ChatGPT desktop app), the Antigravity App 2.28 or later, OpenCode 2 (CLI or Desktop), and/or GitHub Copilot (the Copilot app, Copilot CLI, or Copilot chats in VS Code). Antigravity, OpenCode and Copilot support are new in 0.6.0-alpha.2.
@@ -32,7 +32,7 @@ If you installed Pigeon earlier as a .NET tool, remove it first (`pigeon stop`, 
 
 ```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.6.0-beta.1 --source ./artifacts
+dotnet tool install --global Pigeon.Cli --version 0.7.0-beta.1 --source ./artifacts
 ```
 
 The agent tools start `pigeon` by name, so it must be on the `PATH` they see. To update, install the new version the same way, then run `pigeon stop` and `pigeon start` so the service runs it.
@@ -67,7 +67,7 @@ A topic holds two sessions. To talk to a third agent, use another topic, such as
 
 ## Connect agents on other machines
 
-New in 0.6.0-alpha.3, with the join codes below since alpha.4. Agents on two machines on the same network, such as a LAN or a Tailscale network, can share a topic, including a colleague's machine. The services talk over TLS and pin each other's certificate; nothing is exposed to the internet, and Pigeon never changes the firewall.
+New in 0.6.0-alpha.3, with the join codes below since alpha.4. Agents on two machines on the same trusted private network, such as a LAN or a private overlay network, can share a topic, including a colleague's machine. The services talk over TLS and pin each other's certificate. Pigeon does not change the firewall or configure a router; keep the peer listener off public networks.
 
 1. **Each machine, once:** a person runs `pigeon peer listen`. It listens on the machine's LAN and Tailscale addresses (port 29374; allow it in the firewall if your system asks) and prints them. The machine's name is its host name; change it with `pigeon peer name`.
 2. **Open a topic:** ask your agent to open a topic to other machines (`pigeon_join` with `remote: true`, or `pigeon join review as <session> using <tool> --remote`).
@@ -153,7 +153,7 @@ Version 0.5 replaced named agents and multi-member topics with two-member topics
 
 ## For developers
 
-The solution `Pigeon.slnx` targets .NET 11 and C# 14 and contains xUnit unit tests and Reqnroll (Gherkin) integration tests. The Claude hook tests need `bash` and `sh`: on Windows those of Git Bash (set `PIGEON_TEST_BASH` to `bash.exe` if it is not in its usual place), elsewhere the system's. CI runs the tests on Windows, Ubuntu and macOS.
+The solution `Pigeon.slnx` targets .NET 11 GA and C# 14 and contains xUnit unit tests and Reqnroll (Gherkin) integration tests. `global.json` selects Microsoft Testing Platform for `dotnet test`. The Claude hook tests need `bash` and `sh`: on Windows those of Git Bash (set `PIGEON_TEST_BASH` to `bash.exe` if it is not in its usual place), elsewhere the system's. CI runs the tests on Windows, Ubuntu and macOS.
 
 ```shell
 dotnet build Pigeon.slnx

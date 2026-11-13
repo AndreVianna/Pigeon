@@ -2,14 +2,26 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
-## 0.6.0-beta.1 (unreleased)
+## 0.7.0-beta.1 (unreleased)
+
+An exploratory beta invitation for macOS and Linux testers. The installer, MCP connection, agent wake and recovery results are collected separately; agent integrations on those hosts are still unverified.
+
+### Changed
+- Development and CI now select the .NET 11 GA SDK (11.0.100) instead of RC3. The test projects use the updated stable Microsoft.NET.Test.Sdk and xUnit v3 packages, with Microsoft Testing Platform selected for `dotnet test`.
+- The README, beta guide and issue form distinguish local-only defaults from opt-in peer connections and CLI messaging from a verified agent wake. Installation instructions no longer say that the self-contained installers require the .NET SDK.
+- The prerelease includes `SHA256SUMS.txt` for the installer assets. It records download integrity but is not a code signature.
+
+### Fixed
+- The Claude hook wrapper validates wake output using shell built-ins, so Git Bash no longer needs separate `tr` and `grep` programs on `PATH`.
+
+## 0.6.0-beta.1 (2026-11-08)
 
 The first beta of 0.6.0, promoted by the user on 2026-11-07 after the two-machine host tests with agents (M1–M7, D1–D7): Claude Desktop on two Windows machines and Antigravity, with join codes in Pigeon's own windows. Together with alpha.1 to alpha.8 it adds macOS and Linux builds, the Antigravity, OpenCode and Copilot hosts, and agents on other machines of the same network.
 
 Not yet tried: agents on macOS or Linux (including Pigeon's windows there), Tailscale, and the hosts' own prompts (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
 
 ### Added
-- **Installers for each system**, with no .NET needed: a per-user `.msi` for Windows, a `.pkg` for each Mac processor, and `.deb`, `.rpm` and `.tar.gz` for Linux (x64 and arm64). Each holds one self-contained, trimmed and compressed `pigeon` (about 18 MB) and registers no service. The **Installers** workflow builds them, installs each on a clean runner and checks the installed program; a `v*` tag makes a draft prerelease with them. They are not signed yet.
+- **Installers for each system**, with no .NET needed: a per-user `.msi` for Windows, a `.pkg` for each Mac processor, and `.deb`, `.rpm` and `.tar.gz` for Linux (x64 and arm64). Each holds one self-contained, trimmed and compressed `pigeon` (about 18 MB) and registers no service. The **Installers** workflow builds them all, then installs and checks the Windows x64, Apple Silicon and Ubuntu x64 packages on their native runners; the other formats receive build or metadata checks. A `v*` tag makes a draft prerelease with them. They are not signed yet.
 - A [beta testing guide](docs/beta-testing.md) and an issue form for beta reports.
 
 ### Changed

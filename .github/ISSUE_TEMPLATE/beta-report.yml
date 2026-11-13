@@ -1,26 +1,26 @@
 name: Beta report
-description: Report the results of testing a Pigeon beta (see docs/beta-testing.md).
+description: Report a Pigeon beta result, including partial or failed macOS and Linux tests.
 title: "Beta report: <version> on <system>"
 labels: ["beta report"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for testing. Reports are public: leave out real work, names and addresses you do not want shown. Test topic names and session IDs are fine.
+        Thank you for testing. Follow [the beta guide](https://github.com/AndreVianna/Pigeon/blob/main/docs/beta-testing.md). Reports are public: use synthetic messages and redact real message bodies, machine names, addresses, join codes, session IDs and credentials. Partial results help too.
   - type: input
     id: version
     attributes:
       label: Pigeon version
       description: The output of `pigeon --version`.
-      placeholder: 0.6.0-beta.1
+      placeholder: 0.7.0-beta.1
     validations:
       required: true
   - type: input
     id: system
     attributes:
       label: System
-      description: Operating system, version and processor.
-      placeholder: macOS 15.4 on Apple Silicon
+      description: Operating system, version and processor (for example Apple Silicon, Intel x64 or Linux ARM64).
+      placeholder: macOS 15 on Apple Silicon
     validations:
       required: true
   - type: dropdown
@@ -40,23 +40,24 @@ body:
     id: agents
     attributes:
       label: Agent apps
-      description: The apps and versions you tested with.
-      placeholder: Claude Code 2.3 in Terminal, Codex CLI 0.9
+      description: The apps and versions you tested with, and whether each ran in a terminal or desktop app.
+      placeholder: Claude Code in Terminal; Codex desktop app
   - type: textarea
     id: results
     attributes:
       label: Results
-      description: Each test you ran (T1–T3, R1–R6), with works or fails.
+      description: Each test you ran (T0–T5, R1–R6), with pass, fail or not run. Separate a stored message, one seen after polling, an automatic wake and an acknowledgment.
       placeholder: |
-        T1 works
-        R2 fails: no window appeared on the Mac
+        T0 pass: CLI message received
+        T2 partial: reply was stored, but the second agent saw it only after polling
+        T3 not run
     validations:
       required: true
   - type: textarea
     id: details
     attributes:
-      label: What you saw for each failure
-      description: The agent's reply, any Pigeon window, and the output of `pigeon status` and `pigeon peer list`.
+      label: Steps and diagnostics for each failure
+      description: Steps, expected and actual result, any Pigeon window, and relevant redacted `pigeon status` or `pigeon peer list` output. State whether a restart or manual prompt was needed. Do not paste database files.
       render: text
   - type: textarea
     id: other
