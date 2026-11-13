@@ -163,7 +163,7 @@ public sealed partial class JoinTests : IAsyncLifetime {
         _ = Answer(bruno, await Prompt(bruno, "bruno-session", "confirm"), "accept");
         // The request looks the same from outside, but nobody here is asked.
         _ = await Prompt(bruno, "bruno-session", "show");
-        await Task.Delay(1500);
+        await Task.Delay(1500, TestContext.Current.CancellationToken);
         Assert.Empty(Call(ana, "prompts_next", new { bridgeId = Bridge, sessions = new[] { "ana-session" } }).EnumerateArray());
         Assert.Empty(Call(ana, "requests", new { }).GetProperty("incoming").EnumerateArray());
 

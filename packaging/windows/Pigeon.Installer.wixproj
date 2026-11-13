@@ -5,7 +5,7 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
   <PropertyGroup>
     <PigeonVersion Condition="'$(PigeonVersion)' == ''">0.0.0</PigeonVersion>
-    <!-- MSI versions are numeric: 0.6.0-beta.1 becomes 0.6.0.1. Upgrades compare only the first
+    <!-- MSI versions are numeric: 0.7.0-beta.1 becomes 0.7.0.1. Upgrades compare only the first
          three parts, so every build of 0.6.0 replaces the one installed. -->
     <ProductVersion>$([System.Text.RegularExpressions.Regex]::Replace($(PigeonVersion), '^(\d+\.\d+\.\d+)(?:-[a-z]+\.(\d+))?$', '$1.$2').TrimEnd('.'))</ProductVersion>
     <OutputName>Pigeon-$(PigeonVersion)-win-x64</OutputName>
