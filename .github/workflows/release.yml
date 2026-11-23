@@ -76,8 +76,10 @@ jobs:
           & $pigeon start
           & $pigeon update --allow-pre-release
           if ($LASTEXITCODE -ne 0) {
-            $log = Join-Path $env:TEMP 'pigeon-update.log'
-            if (Test-Path $log) { Get-Content $log -Tail 60 }
+            foreach ($log in (Join-Path $env:TEMP 'pigeon-update.log'), (Join-Path ([IO.Path]::GetTempPath()) 'pigeon-update.log')) {
+              if (Test-Path $log) { Select-String -Path $log -Pattern 'Return value 3|error|Error \d|MainEngineThread is returning|Product: ' | Select-Object -Last 40 | ForEach-Object Line; break }
+            }
+            Get-ChildItem (Split-Path $pigeon) -ErrorAction SilentlyContinue
             throw 'pigeon update failed'
           }
           $version = & $pigeon --version

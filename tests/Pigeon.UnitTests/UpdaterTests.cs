@@ -112,6 +112,9 @@ public class UpdaterTests {
     }
 
     [Fact]
+    public void Loads_every_assembly_Pigeon_references() => Assert.True(Updater.LoadAllAssemblies() > 5);
+
+    [Fact]
     public void Finds_a_checksum_including_deb_names_that_GitHub_renamed() {
         const string sums = """
             6837443a95edc457c82f04c3f199a1ff464c2822aab344e54da74a2822336a7b  Pigeon-0.7.0-beta.1-win-x64.msi

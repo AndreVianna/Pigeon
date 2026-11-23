@@ -26,7 +26,7 @@ internal static class Updater {
             return await UpdateAsync(port, allowPreRelease, handler);
         }
         catch (IOException e) {
-            throw new CommandException("The update failed: " + e.Message);
+            throw new CommandException($"The update failed: {e.GetType().Name} {e.Message} (0x{e.HResult:X8})".TrimEnd());
         }
     }
 
@@ -63,6 +63,7 @@ internal static class Updater {
             var wasRunning = await ServiceRunningAsync(port);
             if (wasRunning)
                 await StopServiceAsync(port);
+            LoadAllAssemblies();
             try {
                 await install.InstallAsync(file, release.Version);
             }
@@ -81,6 +82,22 @@ internal static class Updater {
         Console.WriteLine($"Pigeon {release.Version} is installed. Restart your agent apps so they use it.");
         Console.WriteLine("Their Pigeon plugins are separate: update them as the README describes.");
         return 0;
+    }
+
+    // A compressed single-file program loads an assembly from its own file the first time it is
+    // needed. Once the installer moves or replaces that file, a load fails with
+    // FileNotFoundException (seen in CI on Windows), so everything is loaded before the swap.
+    internal static int LoadAllAssemblies() {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Queue<Assembly>([typeof(Updater).Assembly]);
+        while (pending.Count > 0)
+            foreach (var name in pending.Dequeue().GetReferencedAssemblies())
+                if (seen.Add(name.FullName)) {
+                    try { pending.Enqueue(Assembly.Load(name)); }
+                    catch (Exception e) when (e is FileNotFoundException or FileLoadException or BadImageFormatException) { }
+                }
+
+        return seen.Count;
     }
 
     internal static string UpToDate(SemVersion current, ReleaseChoice choice, bool allowPreRelease)
@@ -462,9 +479,22 @@ internal sealed class InstallInfo {
         var code = await Updater.RunProgramAsync("msiexec", "/i", file, "/qn", "/norestart", "/l*v", log);
         if (code is 0 or 3010 && File.Exists(Executable))
             return;
-        if (!File.Exists(Executable))
-            File.Move(aside, Executable);
-        throw new CommandException($"The Windows installer failed (exit code {code}); Pigeon was not changed. Its log is {log}.");
+        // The old version's removal may have taken the install folder with it.
+        var restored = File.Exists(Executable);
+        if (!restored) {
+            try {
+                Directory.CreateDirectory(Path.GetDirectoryName(Executable)!);
+                File.Move(aside, Executable);
+                restored = true;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+
+        throw new CommandException(code is 0 or 3010
+            ? $"The Windows installer finished but did not put pigeon.exe in {Path.GetDirectoryName(Executable)}. Its log is {log}."
+            : restored
+                ? $"The Windows installer failed (exit code {code}); Pigeon was not changed. Its log is {log}."
+                : $"The Windows installer failed (exit code {code}), and Pigeon could not be put back: copy {aside} to {Executable}. The installer's log is {log}.");
     }
 
     private string MoveAside() {
