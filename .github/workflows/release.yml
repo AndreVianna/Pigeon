@@ -54,6 +54,40 @@ jobs:
           if ($remove.ExitCode -ne 0) { throw "msiexec /x exited $($remove.ExitCode)" }
           if (Test-Path (Join-Path $folder 'pigeon.exe')) { throw 'pigeon.exe is still there after uninstalling' }
 
+      # An old build (0.0.1) installed by its MSI updates itself to the newest published release,
+      # with its service running on a test port, database and identity folder.
+      - name: Update an old install
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r win-x64 -p:Version=0.0.1 -o artifacts/old
+          if ($LASTEXITCODE -ne 0) { throw 'Publishing 0.0.1 failed' }
+          # Its own obj folder: otherwise WiX takes the earlier build as up to date and copies nothing.
+          dotnet build packaging/windows/Pigeon.Installer.wixproj -c Release -p:PigeonVersion=0.0.1 "-p:PublishDir=$((Resolve-Path artifacts/old).Path)" "-p:IntermediateOutputPath=$env:RUNNER_TEMP\old-obj\" -o artifacts/old-msi
+          if ($LASTEXITCODE -ne 0) { throw 'Building the 0.0.1 MSI failed' }
+          $msi = (Resolve-Path artifacts/old-msi/*.msi).Path
+          $install = Start-Process msiexec -ArgumentList '/i', "`"$msi`"", '/qn' -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "msiexec /i exited $($install.ExitCode)" }
+          $pigeon = Join-Path $env:LOCALAPPDATA 'Programs\Pigeon\pigeon.exe'
+          $env:PIGEON_PORT = '29683'
+          $env:PIGEON_DATABASE = Join-Path $env:RUNNER_TEMP 'update.db'
+          $env:PIGEON_IDENTITY_DIR = Join-Path $env:RUNNER_TEMP 'update-identity'
+          & $pigeon start
+          & $pigeon update --allow-pre-release
+          if ($LASTEXITCODE -ne 0) {
+            foreach ($log in (Join-Path $env:TEMP 'pigeon-update.log'), (Join-Path ([IO.Path]::GetTempPath()) 'pigeon-update.log')) {
+              if (Test-Path $log) { Select-String -Path $log -Pattern 'Return value 3|error|Error \d|MainEngineThread is returning|Product: ' | Select-Object -Last 40 | ForEach-Object Line; break }
+            }
+            Get-ChildItem (Split-Path $pigeon) -ErrorAction SilentlyContinue
+            throw 'pigeon update failed'
+          }
+          $version = & $pigeon --version
+          if ($version -eq '0.0.1') { throw 'pigeon update left version 0.0.1' }
+          Write-Output "Updated to $version"
+          & $pigeon stop
+          if ($LASTEXITCODE -ne 0) { throw 'The service did not run again after the update' }
+
       - uses: actions/upload-artifact@v4
         with:
           name: installers-windows
@@ -88,6 +122,23 @@ jobs:
             echo "The Intel package installed on an Apple Silicon Mac." >&2
             exit 1
           fi
+
+      # An old build (0.0.1) installed by its package updates itself to the newest published
+      # release, with its service running on a test port, database and identity folder.
+      - name: Update an old install
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r osx-arm64 -p:Version=0.0.1 -o artifacts/old
+          sh packaging/macos/build-pkg.sh 0.0.1 osx-arm64 artifacts/old artifacts/old-pkg
+          sudo installer -pkg artifacts/old-pkg/Pigeon-0.0.1-osx-arm64.pkg -target /
+          export PIGEON_PORT=29683 PIGEON_DATABASE="$RUNNER_TEMP/update.db" PIGEON_IDENTITY_DIR="$RUNNER_TEMP/update-identity"
+          /usr/local/bin/pigeon start
+          /usr/local/bin/pigeon update --allow-pre-release
+          version=$(/usr/local/bin/pigeon --version)
+          [ "$version" != 0.0.1 ] || { echo "pigeon update left version 0.0.1" >&2; exit 1; }
+          echo "Updated to $version"
+          /usr/local/bin/pigeon stop
 
       - uses: actions/upload-artifact@v4
         with:
@@ -124,6 +175,30 @@ jobs:
           rpm -qip artifacts/out/pigeon-*.x86_64.rpm
           rpm -qlp artifacts/out/pigeon-*.x86_64.rpm | grep -qx /usr/bin/pigeon
           tar -tzf artifacts/out/pigeon-*-linux-x64.tar.gz | grep -q '/pigeon$'
+
+      # Old builds (0.0.1), one installed by its deb and one unpacked from its tarball, update
+      # themselves to the newest published release.
+      - name: Update old installs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r linux-x64 -p:Version=0.0.1 -o artifacts/old
+          sh packaging/linux/build-packages.sh 0.0.1 linux-x64 artifacts/old artifacts/old-pkg
+          sudo apt-get remove -y pigeon
+          sudo apt-get install -y ./artifacts/old-pkg/pigeon_0.0.1_amd64.deb
+          export PIGEON_PORT=29683 PIGEON_DATABASE="$RUNNER_TEMP/update.db" PIGEON_IDENTITY_DIR="$RUNNER_TEMP/update-identity"
+          pigeon start
+          pigeon update --allow-pre-release
+          version=$(pigeon --version)
+          [ "$version" != 0.0.1 ] || { echo "pigeon update left the deb at 0.0.1" >&2; exit 1; }
+          echo "The deb updated to $version"
+          pigeon stop
+          mkdir -p "$RUNNER_TEMP/tarball"
+          tar -xzf artifacts/old-pkg/pigeon-0.0.1-linux-x64.tar.gz -C "$RUNNER_TEMP/tarball"
+          "$RUNNER_TEMP/tarball/pigeon-0.0.1/pigeon" update --allow-pre-release
+          version=$("$RUNNER_TEMP/tarball/pigeon-0.0.1/pigeon" --version)
+          [ "$version" != 0.0.1 ] || { echo "pigeon update left the tarball program at 0.0.1" >&2; exit 1; }
+          echo "The tarball program updated to $version"
 
       - uses: actions/upload-artifact@v4
         with:
