@@ -83,8 +83,12 @@ public sealed class ClaudeHookWrapperSteps {
             start.Environment["PIGEON_EXE"] = fake;
             start.Environment["PIGEON_TEST_MODE"] = mode;
             using var process = Process.Start(start)!;
-            await process.StandardInput.WriteAsync("{}");
-            process.StandardInput.Close();
+            // The wrapper may finish before it reads the hook event; the closed pipe is not a failure.
+            try {
+                await process.StandardInput.WriteAsync("{}");
+                process.StandardInput.Close();
+            }
+            catch (IOException) { }
             var output = process.StandardOutput.ReadToEndAsync();
             var errors = process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
