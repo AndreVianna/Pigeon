@@ -43,6 +43,8 @@ internal static class ServiceCommands {
         var port = Port;
         if (!int.TryParse(port, out var number) || number is < 1024 or > 65535)
             throw new ArgumentException("PIGEON_PORT must be a port number from 1024 to 65535.");
+        if (args[0] == "update")
+            return await Updater.RunAsync(port, args.Contains("--allow-pre-release", StringComparer.Ordinal));
         if (args[0] == "hook" && args[1] == "wait") {
             var renew = args.Contains("--renew", StringComparer.Ordinal);
             var timeout = args.Length >= 5 ? int.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture) : renew ? ClaudeHookWait.DefaultRenewalSeconds : ClaudeHookWait.DefaultTimeoutSeconds;

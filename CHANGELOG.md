@@ -2,7 +2,12 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
-## 0.7.0-beta.1 (unreleased)
+## 0.7.0-beta.2 (unreleased)
+
+### Added
+- `pigeon update [--allow-pre-release]` installs the newest release from GitHub. It reads the repository's releases, takes only stable versions unless `--allow-pre-release` is given, and never installs an older version (today's newest stable release, 0.5.0, is older than the betas). It downloads the installer that matches how this Pigeon was installed: the `.msi` on Windows, the `.pkg` for the Mac's processor, the `.deb` or `.rpm` its package manager installed, or the Linux `.tar.gz`, whose program it replaces in place. The download must match its line in the release's `SHA256SUMS.txt`. A running service is stopped and started again. The `.pkg`, `.deb` and `.rpm` are installed through `sudo`, which asks for the password. On Windows the running `pigeon.exe` is moved to the temp folder, since agent apps may still run it; a later update deletes it once nothing does. If an install fails, the old version stays and the service is started again. A .NET tool or a build folder is told how to update instead. `GITHUB_TOKEN`, when set, is sent to the GitHub API only, to avoid its hourly limit for unauthenticated calls.
+
+## 0.7.0-beta.1 (2026-11-13)
 
 An exploratory beta invitation for macOS and Linux testers. The installer, MCP connection, agent wake and recovery results are collected separately; agent integrations on those hosts are still unverified.
 

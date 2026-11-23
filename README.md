@@ -32,10 +32,10 @@ If you installed Pigeon earlier as a .NET tool, remove it first (`pigeon stop`, 
 
 ```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.7.0-beta.1 --source ./artifacts
+dotnet tool install --global Pigeon.Cli --version 0.7.0-beta.2 --source ./artifacts
 ```
 
-The agent tools start `pigeon` by name, so it must be on the `PATH` they see. To update, install the new version the same way, then run `pigeon stop` and `pigeon start` so the service runs it.
+The agent tools start `pigeon` by name, so it must be on the `PATH` they see. To update an installed Pigeon, run `pigeon update` (add `--allow-pre-release` to include betas): it downloads the newest release's installer for your system, checks it against `SHA256SUMS.txt`, installs it the way you installed Pigeon and restarts a running service. The `.pkg`, `.deb` and `.rpm` ask for your password through `sudo`. A .NET tool updates with `dotnet tool update --global Pigeon.Cli`; then run `pigeon stop` and `pigeon start` so the service runs it.
 
 **2. Start the service.**
 
@@ -98,6 +98,7 @@ Words such as `as`, `using`, `from`, `to` and `for` are part of the commands. A 
 | `pigeon receive for <session-id> from <topic>` | Shows the messages waiting for that session and removes them from the queue. |
 | `pigeon peer <name\|listen\|invite\|accept\|confirm\|list\|remove\|address> ...` | Pairs with Pigeon services on other machines (see above). |
 | `pigeon topic share <topic> with <peer>`, `pigeon topic unshare <topic>` | Shares one topic with a paired peer, or stops sharing it. |
+| `pigeon update [--allow-pre-release]` | Installs the newest release from GitHub for this system, stable versions only unless `--allow-pre-release` is given. It never installs an older version. |
 | `pigeon --help`, `pigeon <command> --help` | Shows help. `pigeon --version` shows the version. |
 
 `pigeon mcp` and `pigeon hook` are used by the plugins; you do not run them yourself.
@@ -149,7 +150,7 @@ Set these environment variables before `pigeon start` (and, for the port, for th
 
 ## Upgrading from an earlier version
 
-Version 0.5 replaced named agents and multi-member topics with two-member topics. When the new service first opens an older database, it keeps each session's topics with up to two members (the two most recently active) and their waiting messages. Older name-based records are no longer used but are left in the database file. Restart the agent tools after updating so their plugins use the new commands. The changes are listed in [CHANGELOG.md](CHANGELOG.md).
+Version 0.5 replaced named agents and multi-member topics with two-member topics. When the new service first opens an older database, it keeps each session's topics with up to two members (the two most recently active) and their waiting messages. Older name-based records are no longer used but are left in the database file. Restart the agent tools after updating so their plugins use the new commands. From 0.7.0-beta.2 on, `pigeon update` installs newer releases; earlier versions need the new installer once. The changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## For developers
 
