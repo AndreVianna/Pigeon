@@ -62,7 +62,10 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           dotnet publish src/Pigeon.Cli/Pigeon.Cli.csproj -c Release -r win-x64 -p:Version=0.0.1 -o artifacts/old
-          dotnet build packaging/windows/Pigeon.Installer.wixproj -c Release -p:PigeonVersion=0.0.1 "-p:PublishDir=$((Resolve-Path artifacts/old).Path)" -o artifacts/old-msi
+          if ($LASTEXITCODE -ne 0) { throw 'Publishing 0.0.1 failed' }
+          # Its own obj folder: otherwise WiX takes the earlier build as up to date and copies nothing.
+          dotnet build packaging/windows/Pigeon.Installer.wixproj -c Release -p:PigeonVersion=0.0.1 "-p:PublishDir=$((Resolve-Path artifacts/old).Path)" "-p:IntermediateOutputPath=$env:RUNNER_TEMP\old-obj\" -o artifacts/old-msi
+          if ($LASTEXITCODE -ne 0) { throw 'Building the 0.0.1 MSI failed' }
           $msi = (Resolve-Path artifacts/old-msi/*.msi).Path
           $install = Start-Process msiexec -ArgumentList '/i', "`"$msi`"", '/qn' -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "msiexec /i exited $($install.ExitCode)" }
