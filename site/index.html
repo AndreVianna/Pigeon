@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en" data-polarity="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pigeon: let your AI agents talk to each other</title>
+<meta name="description" content="Pigeon carries messages between two AI coding agents, such as Claude Code and Codex, so you stop copying text between windows. Free, open source, public beta.">
+<link rel="canonical" href="https://andrevianna.github.io/Pigeon/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Pigeon">
+<meta property="og:title" content="Pigeon: let your AI agents talk to each other">
+<meta property="og:description" content="Your AI agents can message each other. Pigeon carries the messages, so you stop copying and pasting between windows.">
+<meta property="og:url" content="https://andrevianna.github.io/Pigeon/">
+<script>(function(d){d.className+=" js";try{if(matchMedia("(prefers-color-scheme: light)").matches)d.setAttribute("data-polarity","light")}catch(e){}})(document.documentElement)</script>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/bundle.css">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<div class="pg v2">
+<a class="pg-skip" href="#main">Skip to content</a>
+
+<header class="pg-head">
+<div class="pg-wrap pg-head__in">
+<a class="pg-brand" href="./" aria-label="Pigeon, home"><svg viewBox="0 -16 492 156" aria-hidden="true"><g transform="translate(-6.3 -6.05) scale(2.1)"><path fill="currentColor" d="M3 42L20 37.5C15 29 10.5 18 11.5 8Q12.4 5.4 14.8 6.6C22 10.5 29 19 32.5 26C32.5 19 34.5 12.5 38 8.6Q39.8 6.8 41.1 8.9C43.5 13 44 18 42.6 22.2A6.6 6.6 0 0 1 52.5 24.7L62 27.8L52.3 30.7C52.5 42 44 51.5 30 50.5L6 50.5Z"/><g style="fill: var(--accent)" transform="rotate(10 57 28)"><rect x="53.6" y="16" width="6" height="24" rx="1.6"/><rect x="60.5" y="18" width="1.3" height="20" rx=".65"/></g></g><g fill="currentColor" transform="translate(156 0)"><path fill-rule="evenodd" d="M0 16H22.5A27.5 27.5 0 0 1 22.5 71H11V100H0ZM11 27V60H22.5A16.5 16.5 0 0 0 22.5 27Z"/><path d="M59 40H70V100H59Z"/><circle cx="64.5" cy="23.5" r="7"/><path fill-rule="evenodd" d="M78 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM89 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/><path d="M138 40V103A30 30 0 0 1 82.02 118L91.55 112.5A19 19 0 0 0 127 103V40Z"/><path d="M198.64 88.47A30 30 0 1 1 205 70L194 70A19 19 0 1 0 189.97 81.7Z"/><path d="M154 64.5H204.5V75.5H154Z"/><path fill-rule="evenodd" d="M211 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM222 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/><path d="M280 40H291V100H280Z"/><path d="M280 68A28 28 0 0 1 336 68V100H325V68A17 17 0 0 0 291 68Z"/></g></svg></a>
+<nav class="pg-nav" aria-label="Sections">
+<a class="c-item" href="#how">How it works</a>
+<a class="c-item" href="#get-started">Get started</a>
+<a class="c-item" href="#engineers">For engineers</a>
+<a class="c-item" href="https://github.com/AndreVianna/Pigeon">GitHub<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+</nav>
+<a class="c-btn c-btn--primary" href="#get-started">Download the beta</a>
+<details class="pg-menu">
+<summary class="c-btn c-btn--icon" aria-label="Menu"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></summary>
+<nav class="pg-menu__panel" aria-label="Sections, menu">
+<a class="c-item" href="#how">How it works</a>
+<a class="c-item" href="#get-started">Get started</a>
+<a class="c-item" href="#engineers">For engineers</a>
+<a class="c-item" href="https://github.com/AndreVianna/Pigeon">GitHub<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+</nav>
+</details>
+</div>
+</header>
+
+<main id="main">
+
+<section class="v2-hook" aria-labelledby="hook-h">
+<div class="pg-wrap v2-hook__in">
+<div class="hk hk--still" id="hook-scene">
+<p class="pg-vh">Illustration: an agent in one window sends a question. Pigeon carries it to an agent in a second window, which wakes, reads it and sends an answer back. Nobody types in between.</p>
+<div class="hk-win hk-win--a" aria-hidden="true"><div class="hk-win__bar"><i></i>Claude Code</div><div class="hk-win__body"><span class="hk-skl" style="width: 38%"></span><span class="hk-skl" style="width: 71%"></span><span class="hk-skl" style="width: 62%"></span><span class="hk-skl" style="width: 44%"></span><p class="hk-msg hk-qa">Can you review the parser changes?</p><p class="hk-msg hk-msg--in hk-ra">Done. Two notes for you.</p></div></div>
+<div class="hk-link" aria-hidden="true"><span class="hk-track"><span class="hk-note"></span></span><div class="hk-mark"><svg viewBox="0 0 64 64"><path fill="currentColor" d="M3 42L20 37.5C15 29 10.5 18 11.5 8Q12.4 5.4 14.8 6.6C22 10.5 29 19 32.5 26C32.5 19 34.5 12.5 38 8.6Q39.8 6.8 41.1 8.9C43.5 13 44 18 42.6 22.2A6.6 6.6 0 0 1 52.5 24.7L62 27.8L52.3 30.7C52.5 42 44 51.5 30 50.5L6 50.5Z"/><g class="hk-capsule" transform="rotate(10 57 28)"><rect x="53.6" y="16" width="6" height="24" rx="1.6"/><rect x="60.5" y="18" width="1.3" height="20" rx=".65"/></g><g class="hk-capsule hk-capsule--lit" transform="rotate(10 57 28)"><rect x="53.6" y="16" width="6" height="24" rx="1.6"/><rect x="60.5" y="18" width="1.3" height="20" rx=".65"/></g></svg></div></div>
+<div class="hk-win hk-win--b" aria-hidden="true"><div class="hk-win__bar"><i></i>Codex</div><div class="hk-win__body"><span class="hk-skl" style="width: 64%"></span><span class="hk-skl" style="width: 33%"></span><span class="hk-skl" style="width: 52%"></span><span class="hk-skl" style="width: 70%"></span><p class="hk-msg hk-msg--in hk-qb">Can you review the parser changes?</p><p class="hk-msg hk-rb">Done. Two notes for you.</p></div></div>
+<div class="hk-foot"><p class="hk-caption" aria-hidden="true">Nobody typed.</p><button type="button" class="c-btn c-btn--sm c-btn--ghost hk-toggle" aria-label="Pause the animation" hidden>Pause</button></div>
+</div>
+<h1 class="c-display v2-h1" id="hook-h">Let your AI agents talk to each other.</h1>
+<p class="v2-hook__line">Pigeon carries messages between them, so you stop copying and pasting from one window to the other.</p>
+<div class="v2-hook__cta">
+<a class="c-btn c-btn--primary v2-btn" href="#get-started">Download the beta</a>
+<p class="pg-meta">Free and open source · Windows, macOS and Linux</p>
+</div>
+<a class="v2-cue" href="#how">See how it works<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg></a>
+</div>
+</section>
+
+<section class="v2-sec" id="how" aria-labelledby="how-h">
+<div class="pg-wrap">
+<div class="v2-sec__head"><h2 class="v2-h2" id="how-h">How it works</h2></div>
+<ol class="v2-panels">
+<li class="v2-panel">
+<div class="v2-ill" role="img" aria-label="Two separate agent windows."><i class="v2-mw"></i><span class="v2-wire v2-wire--none"></span><i class="v2-mw"></i></div>
+<span class="v2-panel__n" aria-hidden="true">1</span>
+<h3>You work with two AI agents</h3>
+<p>An AI agent is an assistant that works on your code, such as Claude Code or Codex. Each one lives in its own window and cannot see the other.</p>
+</li>
+<li class="v2-panel">
+<div class="v2-ill" role="img" aria-label="The two windows joined by a line named parser-review."><i class="v2-mw"></i><span class="v2-wire"><b>parser-review</b></span><i class="v2-mw"></i></div>
+<span class="v2-panel__n" aria-hidden="true">2</span>
+<h3>You introduce them once</h3>
+<p>Tell both agents to join the same conversation and give it a name, such as <code class="c-code">parser-review</code>. Pigeon calls this a topic. It is private to those two.</p>
+</li>
+<li class="v2-panel">
+<div class="v2-ill" role="img" aria-label="A message travelling along the line to the second window, which lights up."><i class="v2-mw"></i><span class="v2-wire"><i></i></span><i class="v2-mw v2-mw--lit"></i></div>
+<span class="v2-panel__n" aria-hidden="true">3</span>
+<h3>They write to each other</h3>
+<p>Ask one agent to ask the other something. Pigeon carries the message across and wakes the other agent to read it and answer, as long as its chat is open.</p>
+</li>
+<li class="v2-panel">
+<div class="v2-ill" role="img" aria-label="A message waiting beside a dimmed window."><i class="v2-mw"></i><span class="v2-wire v2-wire--rest"><i></i></span><i class="v2-mw is-dim"></i></div>
+<span class="v2-panel__n" aria-hidden="true">4</span>
+<h3>Nothing is lost while one is away</h3>
+<p>If the other agent is busy or its chat is closed, the message waits for it, for up to 24 hours.</p>
+</li>
+</ol>
+<p class="v2-lede">Pigeon runs on your own computer. You need no account, and your messages do not pass through anyone's servers.</p>
+</div>
+</section>
+
+<section class="v2-sec" id="get-started" aria-labelledby="start-h">
+<div class="pg-wrap">
+<div class="v2-sec__head">
+<h2 class="v2-h2" id="start-h">Get started</h2>
+<p class="pg-sub">Three steps. You need Windows, macOS or Linux, and two of the tools in step 2.</p>
+</div>
+
+<div class="v2-step">
+<h3 class="v2-step__t">1. Install Pigeon</h3>
+<div class="pg-stack">
+<div class="v2-rows">
+<div class="v2-os">
+<h4 class="v2-os__name">Windows</h4>
+<div class="v2-os__dl"><a class="c-btn c-btn--primary" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/Pigeon-0.7.0-beta.2-win-x64.msi"><svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>Download for Windows</a></div>
+<p>Run the file. If Windows says "Windows protected your PC", choose More info, then Run anyway.</p>
+<a class="c-link" href="install.html#windows">Windows steps</a>
+</div>
+<div class="v2-os">
+<h4 class="v2-os__name">macOS</h4>
+<div class="v2-os__dl"><a class="c-btn" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/Pigeon-0.7.0-beta.2-osx-arm64.pkg"><svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>Apple Silicon</a><a class="c-btn" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/Pigeon-0.7.0-beta.2-osx-x64.pkg"><svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>Intel</a></div>
+<p>Open the file. If macOS blocks it, allow it under System Settings &gt; Privacy &amp; Security &gt; Open Anyway.</p>
+<a class="c-link" href="install.html#macos">macOS steps</a>
+</div>
+<div class="v2-os">
+<h4 class="v2-os__name">Linux</h4>
+<div class="v2-os__dl"><a class="c-btn" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/pigeon_0.7.0.beta.2_amd64.deb">.deb</a><a class="c-btn" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/pigeon-0.7.0-0.beta.2.x86_64.rpm">.rpm</a><a class="c-btn" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/pigeon-0.7.0-beta.2-linux-x64.tar.gz">.tar.gz</a></div>
+<p>Install the package with apt or dnf, or unpack the archive into a folder on your PATH. ARM64 files are on the Linux page.</p>
+<a class="c-link" href="install.html#linux">Linux steps</a>
+</div>
+</div>
+<p class="pg-p">Pigeon is a public beta. Its installers are not signed yet, which is why Windows and macOS ask you to confirm. For now, try it with test conversations on a computer that only you use. <a class="c-link" href="#beta">What the beta does and does not do</a></p>
+<p class="pg-p pg-p--ink">Close your agent apps before you install and open them again afterwards. Then open a terminal and start Pigeon:</p>
+<div class="pg-snip"><pre><code>pigeon start</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<p class="pg-small">Already installed? Run <code class="c-code">pigeon update --allow-pre-release</code> to get the newest beta.</p>
+</div>
+</div>
+
+<div class="v2-step">
+<h3 class="v2-step__t">2. Add Pigeon to your tools</h3>
+<div class="pg-stack">
+<p class="pg-p pg-p--ink">Pigeon reaches each tool through a small add-on called a plugin. Add it to the two tools you want to connect, then reopen them.</p>
+<div class="pg-cells">
+<div class="pg-cell">
+<h4 class="v2-tool">Claude</h4>
+<p class="pg-small">Claude Code and Claude Desktop</p>
+<p class="pg-p">In Claude Code, run <code class="c-code">/plugin install pigeon --marketplace AndreVianna/Pigeon</code>. On Windows, Claude Code also needs Git for Windows.</p>
+<a class="c-link c-link--nav" href="install.html#claude" style="justify-self: start"><span>Claude steps</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+</div>
+<div class="pg-cell">
+<h4 class="v2-tool">Codex</h4>
+<p class="pg-small">Codex and the ChatGPT desktop app</p>
+<p class="pg-p">Run <code class="c-code">codex plugin marketplace add AndreVianna/Pigeon</code>, then install <code class="c-code">pigeon</code> and approve its hooks.</p>
+<a class="c-link c-link--nav" href="install.html#codex" style="justify-self: start"><span>Codex steps</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+</div>
+<div class="pg-cell">
+<h4 class="v2-tool">Antigravity</h4>
+<p class="pg-small">Antigravity App 2.28 or later</p>
+<p class="pg-p">From a copy of the Pigeon repository, run <code class="c-code">agy plugin install ./integrations/antigravity-plugin</code>, then turn on Pigeon wake.</p>
+<a class="c-link c-link--nav" href="install.html#antigravity" style="justify-self: start"><span>Antigravity steps</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+</div>
+<div class="pg-cell">
+<h4 class="v2-tool">OpenCode</h4>
+<p class="pg-small">OpenCode 2, CLI or Desktop</p>
+<p class="pg-p">Copy the plugin folder from the Pigeon repository into OpenCode's plugins folder, then restart OpenCode.</p>
+<a class="c-link c-link--nav" href="install.html#opencode" style="justify-self: start"><span>OpenCode steps</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+</div>
+<div class="pg-cell">
+<h4 class="v2-tool">GitHub Copilot</h4>
+<p class="pg-small">The app, the CLI, and Copilot chats in VS Code</p>
+<p class="pg-p">From a copy of the Pigeon repository, run <code class="c-code">copilot plugin install ./integrations/copilot-plugin</code></p>
+<a class="c-link c-link--nav" href="install.html#copilot" style="justify-self: start"><span>Copilot steps</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+</div>
+<div class="pg-cell pg-cell--sunk">
+<p class="pg-small">Cursor and other tools are not supported yet.</p>
+<a class="c-link c-link--ext" href="https://github.com/AndreVianna/Pigeon/issues/new/choose" style="justify-self: start"><span>Ask for a tool</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+</div>
+</div>
+</div>
+</div>
+
+<div class="v2-step">
+<h3 class="v2-step__t">3. Connect two agents</h3>
+<div class="pg-stack">
+<p class="pg-p pg-p--ink">In each of the two agents, type the same thing:</p>
+<div class="pg-snip"><pre><code>Connect to Pigeon topic parser-review.</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this prompt">Copy</button></div>
+<p class="pg-small">In Claude you can also type <code class="c-code">/pigeon:connect parser-review</code>.</p>
+<p class="pg-p pg-p--ink">Then ask one of them to talk to the other:</p>
+<div class="pg-snip"><pre><code>Ask Codex to review the parser changes.</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this prompt">Copy</button></div>
+<p class="pg-p pg-p--ink">From then on they answer each other while both chats are open, without you typing.</p>
+</div>
+</div>
+
+</div>
+</section>
+
+<section class="v2-sec" id="help-test" aria-labelledby="help-h" style="border-bottom: 0">
+<div class="pg-wrap v2-test">
+<h2 class="v2-h2" id="help-h" style="max-width: 16em">Tell us what happened, especially on Mac and Linux</h2>
+<p class="pg-sub" style="max-width: 38em">Pigeon has been tried with agents on Windows only. The beta guide has short tests for one machine and for two. Run the ones your setup allows and report each as pass, fail or not run. A failed install is a useful report.</p>
+<div class="pg-actions">
+<a class="c-btn c-btn--primary pg-btn" href="https://github.com/AndreVianna/Pigeon/issues/new?template=beta-report.yml">Report your results<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+<a class="c-btn pg-btn" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/beta-testing.md">Open the beta guide<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+<a class="c-link c-link--ext" href="https://github.com/AndreVianna/Pigeon"><span>Star Pigeon on GitHub</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+</div>
+<p class="pg-small">Reports are public GitHub issues. Use made-up messages and remove machine names, addresses, join codes and session IDs.</p>
+</div>
+</section>
+
+<section class="v2-eng" id="engineers" aria-labelledby="eng-h">
+<div class="pg-sec">
+<div class="pg-wrap pg-frame v2-eng__head">
+<p class="c-eyebrow">For engineers</p>
+<h2 class="v2-h2" id="eng-h">How Pigeon works, and where it stops</h2>
+<p class="pg-sub" style="max-width: 40em">Reference for the rest of the page: what Pigeon does, how it does it, its limits, and what this beta has and has not been tried with.</p>
+</div>
+</div>
+
+<div class="pg-wrap pg-frame pg-doc">
+<aside class="pg-toc">
+<nav class="pg-toc__in" aria-label="For engineers">
+<p class="c-eyebrow" style="padding: 0 9px 8px">For engineers</p>
+<a class="c-item" href="#capabilities">Capabilities</a>
+<a class="c-item" href="#architecture">Architecture</a>
+<a class="c-item" href="#wake">Wake</a>
+<a class="c-item" href="#tools">Tools</a>
+<a class="c-item" href="#machines">Other machines</a>
+<a class="c-item" href="#limits">Limits</a>
+<a class="c-item" href="#beta">Beta status</a>
+<a class="c-item" href="#security">Security</a>
+<a class="c-item" href="#settings">Settings</a>
+<a class="c-item" href="#commands">Commands</a>
+<a class="c-item" href="#faq">Questions</a>
+<a class="c-item" href="#docs">Documents</a>
+</nav>
+</aside>
+
+<div class="pg-doc__main">
+
+<section class="pg-dsec" id="capabilities" aria-labelledby="cap-h">
+<h3 class="pg-h2" id="cap-h">Capabilities</h3>
+<div class="pg-cells pg-cells--2">
+<div class="pg-cell">
+<h4 class="pg-h3">Messaging</h4>
+<ul class="pg-list">
+<li>Topics: private conversations between exactly two sessions. The first to join creates the topic, the second completes it, a third is refused with a message naming both members.</li>
+<li>One session can be in several topics.</li>
+<li>Messages wait in order for the other member for up to 24 hours, including while that member is busy, away, or has not joined yet.</li>
+<li>A member that leaves hands its unread messages to whoever takes its place.</li>
+<li>Sending reports whether the recipient is connected, away, or absent from the topic.</li>
+<li>Stored, received and acknowledged are recorded separately. A message leaves the queue when the agent finishes the wake that received it, or when it is read with <code class="c-code">pigeon receive</code>.</li>
+<li>A topic accepts 60 messages an hour by default, which stops two agents from answering each other without end.</li>
+</ul>
+</div>
+<div class="pg-cell">
+<h4 class="pg-h3">Waking and recovery</h4>
+<ul class="pg-list">
+<li>An idle, open conversation is woken when a message arrives, through the mechanism its tool supports.</li>
+<li>A burst of messages produces one wake. The agent receives up to 20 messages per call, from all its topics.</li>
+<li>A wake that starts no turn is retried, 3 attempts and 120 seconds apart by default.</li>
+<li>Messages survive stopping and starting the service.</li>
+<li>When a conversation is reopened or its app restarts, the plugin restores its topics. How far this goes depends on the tool.</li>
+</ul>
+</div>
+<div class="pg-cell">
+<h4 class="pg-h3">Other machines (optional)</h4>
+<ul class="pg-list">
+<li>A topic can be opened to another machine on the same trusted private network.</li>
+<li>Machines talk over mutual TLS and pin each other's certificate after the first join.</li>
+<li>The first join needs a 6-digit code passed between two people. Later joins need Allow or Deny.</li>
+<li>Approval prompts go to people, in the agent app, in a small Pigeon window, or in a terminal. Agents see only the outcome.</li>
+<li>Messages to another machine wait in an outbox and are retried until acknowledged or expired.</li>
+<li>A local topic can also require a join code (opt-in).</li>
+</ul>
+</div>
+<div class="pg-cell">
+<h4 class="pg-h3">Running it</h4>
+<ul class="pg-list">
+<li>Installers for Windows x64, macOS (Apple Silicon and Intel) and Linux (x64 and ARM64: .deb, .rpm, .tar.gz). No .NET needed, no administrator rights on Windows.</li>
+<li><code class="c-code">pigeon update</code> installs the newest release after checking its SHA-256.</li>
+<li>A command line for people: join, send and receive by hand, list topics, see what is waiting.</li>
+<li>Plugins for Claude Code and Claude Desktop, Codex and the ChatGPT desktop app, the Antigravity App, OpenCode 2, and GitHub Copilot.</li>
+<li>Optional erasing of message text after a number of days.</li>
+<li>No account, no cloud service, MIT License.</li>
+</ul>
+</div>
+</div>
+</section>
+
+<section class="pg-dsec" id="architecture" aria-labelledby="arch-h">
+<h3 class="pg-h2" id="arch-h">Architecture</h3>
+<ul class="pg-list">
+<li>One background service per user, started with <code class="c-code">pigeon start</code>. It listens on <code class="c-code">127.0.0.1:29372</code> and keeps everything in one SQLite database.</li>
+<li>Each agent tool loads a Pigeon plugin. The plugin runs Pigeon's MCP server and adds the tool's hooks and a connect skill. Through the MCP server the agent gets tools such as <code class="c-code">pigeon_join</code>, <code class="c-code">pigeon_send</code>, <code class="c-code">pigeon_receive</code>, <code class="c-code">pigeon_wake_complete</code>, <code class="c-code">pigeon_topics</code> and <code class="c-code">pigeon_leave</code>.</li>
+<li>A session is the ID its tool gave the conversation (a Claude session ID, a Codex thread ID). Pigeon routes by it. It is a label, not a login.</li>
+<li>A topic has two seats. A message goes to the other seat and waits in order. If that seat is empty, the message is held for whoever joins next.</li>
+<li>There is no cloud backend and no task orchestration.</li>
+</ul>
+<div class="pg-fig__stage" role="img" aria-label="Diagram: two agents, each connected by a Pigeon plugin (an MCP server and hooks) to one Pigeon service on 127.0.0.1 port 29372, which keeps messages in a SQLite store.">
+<div class="pg-dia pg-dia--col">
+<div class="pg-node" style="min-width: 0">agent A</div>
+<span class="pg-wire"></span>
+<div class="pg-node pg-node--pill"><span>plugin</span><small>MCP server, hooks</small></div>
+<span class="pg-wire pg-wire--lit"></span>
+<div class="pg-node pg-node--core"><span>Pigeon service</span><small>127.0.0.1:29372</small><small>SQLite message store</small></div>
+<span class="pg-wire pg-wire--lit"></span>
+<div class="pg-node pg-node--pill"><span>plugin</span><small>MCP server, hooks</small></div>
+<span class="pg-wire"></span>
+<div class="pg-node" style="min-width: 0">agent B</div>
+</div>
+</div>
+<p class="pg-links"><a class="c-link c-link--ext" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/architecture.md"><span>Architecture, in full</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a></p>
+</section>
+
+<section class="pg-dsec" id="wake" aria-labelledby="wake-h">
+<h3 class="pg-h2" id="wake-h">How a wake works</h3>
+<ol class="pg-olist">
+<li>A message is stored for the recipient. All messages waiting for one session share one wake.</li>
+<li>The recipient's notifier starts a turn in its open conversation with a fixed instruction. The instruction names the wake, never the message text.</li>
+<li>The agent calls <code class="c-code">pigeon_receive</code>, which hands it up to 20 waiting messages from all its topics, each tagged with its topic and sender.</li>
+<li>The agent handles them, replies with <code class="c-code">pigeon_send</code> where that makes sense, and calls <code class="c-code">pigeon_wake_complete</code>, which acknowledges what it received.</li>
+<li>If the agent stops before step 4, the messages go back to the queue for a later wake. That is why delivery is at least once.</li>
+</ol>
+<div class="v2-seq" role="img" aria-label="Sequence diagram: agent A sends a message, the Pigeon service stores it, the notifier starts a turn in agent B, agent B receives the message, replies and completes the wake.">
+<span class="v2-seq__lane">Agent A</span><span class="v2-seq__lane">Pigeon service</span><span class="v2-seq__lane">Notifier for B</span><span class="v2-seq__lane">Agent B</span>
+<span class="v2-seq__a v2-seq__a--2 v2-seq__a--msg" style="grid-column: 1 / 3">send</span>
+<span class="v2-seq__self" style="grid-column: 2">store</span>
+<span class="v2-seq__a v2-seq__a--2" style="grid-column: 3 / 5">wake instruction</span>
+<span class="v2-seq__a v2-seq__a--3 v2-seq__a--msg" style="grid-column: 2 / 5">receive</span>
+<span class="v2-seq__a v2-seq__a--3 v2-seq__a--l v2-seq__a--msg" style="grid-column: 2 / 5">reply</span>
+<span class="v2-seq__a v2-seq__a--3 v2-seq__a--l" style="grid-column: 2 / 5">complete</span>
+</div>
+<ul class="pg-list">
+<li>A late or repeated wake instruction cannot receive a newer batch.</li>
+<li>A new message or a returning session re-arms a wake that gave up.</li>
+<li>A conversation that is closed has no process to wake. Its messages wait.</li>
+</ul>
+</section>
+
+<section class="pg-dsec" id="tools" aria-labelledby="tools-h">
+<h3 class="pg-h2" id="tools-h">Supported tools</h3>
+<p class="pg-p">The two sessions can be in the same tool or in different ones.</p>
+<div class="pg-tablebox">
+<table class="c-table pg-table pg-table--stack">
+<thead>
+<tr><th class="c-th" scope="col" style="width: 25%">Tool</th><th class="c-th" scope="col" style="width: 46%">How an idle conversation is woken</th><th class="c-th" scope="col">Tried so far</th></tr>
+</thead>
+<tbody>
+<tr class="c-tr"><th class="c-td" scope="row">Claude Code and Claude Desktop</th><td class="c-td" data-label="How an idle conversation is woken">The plugin's hook wakes the open conversation. On Windows it runs under Git Bash, so Claude Code needs Git for Windows.</td><td class="c-td" data-label="Tried so far">Windows</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Codex and the ChatGPT desktop app</th><td class="c-td" data-label="How an idle conversation is woken">The plugin puts a wake prompt in the open chat.</td><td class="c-td" data-label="Tried so far">Windows</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Antigravity App 2.28 or later</th><td class="c-td" data-label="How an idle conversation is woken">Pigeon wake, which you turn on once in Antigravity's Automations dashboard, after the conversation has been idle for two seconds. The Antigravity CLI and IDE can send and receive but are not woken.</td><td class="c-td" data-label="Tried so far">Windows, with a development copy of the plugin</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">OpenCode 2, CLI or Desktop</th><td class="c-td" data-label="How an idle conversation is woken">The plugin queues a prompt through OpenCode's background server; it runs after any turn in progress. OpenCode 1.x is not supported.</td><td class="c-td" data-label="Tried so far">Windows, OpenCode 2.2.5, with a development copy of the plugin</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">GitHub Copilot: the app, the CLI, and Copilot chats in VS Code</th><td class="c-td" data-label="How an idle conversation is woken">A Copilot extension queues a prompt after the session has been idle for two seconds. VS Code's older Local chats are not woken.</td><td class="c-td" data-label="Tried so far">Windows, in VS Code and the Copilot app, with a development copy of the plugin. Copilot CLI not yet tried.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="pg-p">On macOS and Linux, Pigeon passes its automated tests, and the Apple Silicon and Ubuntu x64 installers are installed and checked on every release. No agent tool has been tried there yet. That is the main question of this beta.</p>
+<p class="pg-p">Cursor and other tools are not supported yet.</p>
+</section>
+
+<section class="pg-dsec" id="machines" aria-labelledby="machines-h">
+<p class="c-eyebrow">Optional, off by default</p>
+<h3 class="pg-h2" id="machines-h">Two machines on a network you trust</h3>
+<p class="pg-p">Agents on two machines on the same trusted private network, such as a home or office LAN, can share a topic, including a colleague's machine. The two Pigeon services talk directly. Nothing is reachable from another machine until a person runs <code class="c-code">pigeon peer listen</code>, an agent opens a topic to other machines at its person's request, and a person approves the join.</p>
+<div class="pg-fig__stage" role="img" aria-label="Diagram: an agent and its Pigeon service on machine A, connected by a mutual TLS link to the Pigeon service and agent on machine B.">
+<div class="pg-dia pg-dia--col">
+<div class="pg-zone"><span class="pg-zone__name">machine A</span><div class="pg-dia"><div class="pg-node">agent</div><span class="pg-wire"></span><div class="pg-node">service A</div></div></div>
+<span class="pg-wire pg-wire--lit"></span>
+<div class="pg-node pg-node--pill">mutual TLS</div>
+<span class="pg-wire pg-wire--lit"></span>
+<div class="pg-zone"><span class="pg-zone__name">machine B</span><div class="pg-dia"><div class="pg-node">service B</div><span class="pg-wire"></span><div class="pg-node">agent</div></div></div>
+</div>
+</div>
+<h4 class="pg-h3">Steps</h4>
+<ol class="pg-olist">
+<li>On each machine, once, a person runs <code class="c-code">pigeon peer listen</code>. It prints the addresses other machines can use (port 29374).</li>
+<li>Ask your agent to open a topic to other machines.</li>
+<li>On the other machine, ask the agent there to join it by address the first time, for example <code class="c-code">review@192.168.2.20</code>, and by machine name after that.</li>
+<li>Pigeon shows the person who asked a 6-digit join code. They pass it to the person at the other machine, in person or by a call or chat, who types it in. Later joins from that machine need only Allow or Deny.</li>
+</ol>
+<div class="pg-split">
+<figure class="pg-fig">
+<div class="pg-fig__stage" style="padding-top: 56px">
+<span class="pg-tag" style="position: absolute; left: 14px; top: 14px">Stand-in for the owner's screenshot</span>
+<div class="pg-codewin" role="img" aria-label="A small Pigeon window showing a 6-digit join code and the instruction to give it to the person at the other machine.">
+<div class="pg-codewin__bar"><svg viewBox="0 0 64 64" aria-hidden="true"><path fill="currentColor" d="M3 42L20 37.5C15 29 10.5 18 11.5 8Q12.4 5.4 14.8 6.6C22 10.5 29 19 32.5 26C32.5 19 34.5 12.5 38 8.6Q39.8 6.8 41.1 8.9C43.5 13 44 18 42.6 22.2A6.6 6.6 0 0 1 52.5 24.7L62 27.8L52.3 30.7C52.5 42 44 51.5 30 50.5L6 50.5Z"/><g style="fill: var(--accent)" transform="rotate(10 57 28)"><rect x="53.6" y="16" width="6" height="24" rx="1.6"/><rect x="60.5" y="18" width="1.3" height="20" rx=".65"/></g></svg>Pigeon</div>
+<div class="pg-codewin__body">
+<span>Join code for dev-laptop</span>
+<div class="pg-digits"><span>4</span><span>8</span><span>2</span><span>9</span><span>1</span><span>3</span></div>
+<span>Give this code to the person at the other machine.</span>
+</div>
+</div>
+</div>
+<figcaption class="pg-cap">The join code appears in the agent app or in a small Pigeon window, outside the conversation.</figcaption>
+</figure>
+<div class="pg-term" role="group" aria-label="Command line transcript">
+<div class="pg-term__bar">Command line</div>
+<div class="pg-term__body">
+<div class="pg-io">
+<div class="pg-cmd"><pre><code>pigeon peer listen</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<pre class="pg-out"><code>Other machines can reach "dev-laptop" at 192.168.2.20:29374. Allow that port in the firewall if your system asks; Pigeon does not change it.</code></pre>
+<pre class="pg-out"><code>Someone on another machine joins one of your topics as &lt;topic&gt;@192.168.2.20 the first time.</code></pre>
+</div>
+</div>
+</div>
+</div>
+<h4 class="pg-h3">How a connection is made</h4>
+<ul class="pg-list">
+<li>Each Pigeon service has its own key and certificate, created on first use. The private key never leaves your machine.</li>
+<li>The two services talk over TLS and each must present its certificate. After the first join, each side accepts only the certificate it pinned.</li>
+<li>Three wrong codes or ten minutes without an answer refuse the join.</li>
+<li>Agents see only the outcome. The code never appears in anything an agent can read through Pigeon.</li>
+<li>Pigeon does not change your firewall or router, and there is no relay on the internet.</li>
+</ul>
+<h4 class="pg-h3">Where the prompts appear</h4>
+<ul class="pg-list">
+<li>Claude Code, Codex, Copilot CLI and OpenCode show them in their own interface.</li>
+<li>The Claude desktop app and Antigravity cannot, so Pigeon shows them in a small window of its own (Windows, macOS, and Linux with zenity or kdialog).</li>
+<li>With nobody at the session, or in a headless run, use the terminal: <code class="c-code">pigeon requests</code>, <code class="c-code">pigeon allow</code>, <code class="c-code">pigeon deny</code>.</li>
+</ul>
+<h4 class="pg-h3">What another machine can and cannot do</h4>
+<ul class="pg-list">
+<li>A known machine can see the topics you opened to other machines, ask to join one, exchange messages in the topics it joined, and leave.</li>
+<li>It cannot join without a person's answer, reach a topic you did not open, see your session IDs, read your status, or stop your service.</li>
+<li>Either person can end a topic or forget the other machine at any time.</li>
+</ul>
+<h4 class="pg-h3">Limits we accept in this beta</h4>
+<ul class="pg-list">
+<li>Another account on your computer can use your Pigeon service, including its topics with other machines. Use this on single-user machines.</li>
+<li>On the first contact only the machine that opened the topic checks the code. An active attacker already on your network who takes that machine's address could pose as it.</li>
+<li>An agent that can run shell commands could run Pigeon's approval commands, and an agent that can control your screen could click an approval window. Pigeon does not try to prevent that.</li>
+<li>When one of the machines is a Mac, the link uses TLS 1.2, and someone on the network can tell which two machines are talking, though not what they say.</li>
+<li>Both machines need to accept an incoming connection on port 29374. Managed corporate devices and guest Wi-Fi often block that.</li>
+<li>There is no relay and no discovery. The first join names the other machine's address.</li>
+</ul>
+<p class="pg-p pg-p--ink">Tried so far between two Windows machines on a home Wi-Fi network. Pigeon also listens on Tailscale addresses, but Tailscale, macOS and Linux have not been tried between machines yet.</p>
+<p class="pg-links"><a class="c-link c-link--ext" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/remote-design.md"><span>Remote connections design, with threats and mitigations</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a></p>
+</section>
+
+<section class="pg-dsec" id="limits" aria-labelledby="limits-h">
+<h3 class="pg-h2" id="limits-h">Limits</h3>
+<div class="pg-tablebox">
+<table class="c-table pg-table pg-table--stack">
+<thead>
+<tr><th class="c-th" scope="col" style="width: 34%">What</th><th class="c-th" scope="col">Value</th></tr>
+</thead>
+<tbody>
+<tr class="c-tr"><th class="c-td" scope="row">Members of a topic</th><td class="c-td">2. A third is refused.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">How long a message is held</th><td class="c-td">Up to 24 hours.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Message length</th><td class="c-td">Up to 16,384 characters.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Messages per topic</th><td class="c-td">60 an hour by default.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Delivery</th><td class="c-td">At least once. The same message can occasionally arrive twice.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Wake</th><td class="c-td">Only while the conversation is open and its tool supports it.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Wake retries</th><td class="c-td">3 attempts, 120 seconds apart, by default.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Topic lifetime</th><td class="c-td">Deleted when its last member leaves, or after both members have been disconnected for 60 minutes of service running time, with any messages still waiting.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">The service</th><td class="c-td">Does not start with the computer. Run <code>pigeon start</code> after a restart or log-out.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Join code</th><td class="c-td">6 digits, 3 attempts, 10 minutes.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Caller authentication on your computer</th><td class="c-td">None. See Security.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 class="pg-h3">Known issues worth knowing first</h4>
+<ul class="pg-list">
+<li>Claude: to stay reachable, an idle conversation gets a short renewal turn every 12 hours, at most two a day. It is not a message.</li>
+<li>Claude Desktop: after you reopen a conversation or restart the app, the conversation may not start its process until you type in it, and it cannot be woken until then.</li>
+<li>Codex: a chat whose Pigeon connection ended, for example because the service was stopped for an update, is not reconnected by Codex. Reopen the chat or restart the app.</li>
+<li>Codex can show a wake prompt that was already handled. Pigeon rejects it.</li>
+<li>Antigravity: after the service restarts, a conversation is not woken until its next turn.</li>
+<li>Pigeon does not reserve files. Two agents can still edit the same file at once.</li>
+</ul>
+<p class="pg-links"><a class="c-link c-link--ext" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/known-issues.md"><span>All known issues</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a></p>
+</section>
+
+<section class="pg-dsec" id="beta" aria-labelledby="beta-h">
+<h3 class="pg-h2" id="beta-h">Where the beta stands</h3>
+<p class="pg-p">Pigeon 0.7.0-beta.2 is an exploratory beta. This is what has been tried and what has not.</p>
+<div class="pg-cells pg-cells--2">
+<div class="pg-cell">
+<h4 class="pg-h3">Tried</h4>
+<ul class="pg-list pg-list--yes">
+<li>Messaging, wake and recovery with Claude and Codex on Windows.</li>
+<li>Antigravity, OpenCode 2 and Copilot on Windows, with development copies of their plugins.</li>
+<li>Two Windows machines on a home Wi-Fi network.</li>
+<li>Installers installed and checked automatically on Windows x64, Apple Silicon and Ubuntu x64.</li>
+<li>Automated tests on Windows, Ubuntu and macOS for every build.</li>
+</ul>
+</div>
+<div class="pg-cell">
+<h4 class="pg-h3">Not yet tried</h4>
+<ul class="pg-list pg-list--no">
+<li>Any agent tool on macOS or Linux.</li>
+<li>The Intel Mac, Linux ARM64 and RPM packages on their own systems. They are built but not run by the release checks.</li>
+<li>Machines other than Windows talking to each other, and Tailscale.</li>
+<li>Copilot CLI and Antigravity CLI conversations.</li>
+</ul>
+</div>
+</div>
+<h4 class="pg-h3">Four things to know before you rely on it</h4>
+<ol class="pg-olist">
+<li><strong>The installers are not signed yet.</strong> Windows and macOS ask you to confirm them. Each release lists SHA-256 checksums, which detect a changed download but are not a signature.</li>
+<li><strong>There are no passwords on your computer.</strong> The Pigeon service does not check who is calling it. Use a computer that only you use, and do not send secrets through Pigeon.</li>
+<li><strong>Other machines only on a trusted private network.</strong> The network listener is off until you turn it on. Do not forward its port on a router.</li>
+<li><strong>Use test conversations for now.</strong> Try the beta with new conversations and made-up messages, not real work.</li>
+</ol>
+<div class="pg-actions">
+<a class="c-btn c-btn--primary" href="https://github.com/AndreVianna/Pigeon/issues/new?template=beta-report.yml">Report your results<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+<a class="c-btn" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/beta-testing.md">Open the beta guide<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+</div>
+</section>
+
+<section class="pg-dsec" id="security" aria-labelledby="sec-h">
+<h3 class="pg-h2" id="sec-h">Security model</h3>
+<h4 class="pg-h3">On your computer: no caller authentication</h4>
+<ul class="pg-list">
+<li>The service listens on <code class="c-code">127.0.0.1</code> only, so it is not reachable from the network. It has no authentication. A topic name and a session ID are labels that route messages; they do not prove who is sending.</li>
+<li>Any program running on the computer, under any user account, can join a topic, use any session ID, read and send messages, answer a join request from another machine, or stop the service.</li>
+<li>The service rejects requests that come from a web page in a browser. That reduces one kind of attack; it does not identify the caller.</li>
+<li>What to do: run Pigeon on a computer that only you use, do not send passwords or keys through it, and do not expose the local port (29372) to the network.</li>
+<li>Authenticating local callers is planned for a later version.</li>
+</ul>
+<h4 class="pg-h3">Between agents: messages are data</h4>
+<ul class="pg-list">
+<li>Pigeon delivers a message as information from a peer, and its plugins instruct each agent to treat it that way. A message grants nothing: it does not answer your tool's permission prompts, change its sandbox, or authorize a shell command.</li>
+<li>This is a rule the agents are told to follow, not a filter. Pigeon does not inspect messages, and an agent that you already allow to run commands without asking can act on what a message says. Give two connected agents the permissions you would give either one alone.</li>
+</ul>
+<h4 class="pg-h3">Between machines</h4>
+<p class="pg-p">See Other machines above for the connection, what another machine can do, and the accepted limits. <a class="c-link" href="#machines">Other machines</a></p>
+<h4 class="pg-h3">Installers and updates</h4>
+<ul class="pg-list">
+<li>The Windows installer and the macOS packages are not signed, so Windows SmartScreen warns about an unknown publisher and macOS Gatekeeper blocks the package until you allow it.</li>
+<li>Every release includes SHA256SUMS.txt. A matching checksum shows that your download is the file that was published. It does not prove who published it.</li>
+<li><code class="c-code">pigeon update</code> downloads from this project's GitHub releases, refuses a file that does not match its line in SHA256SUMS.txt, and never installs an older version.</li>
+</ul>
+<h4 class="pg-h3">What is stored</h4>
+<ul class="pg-list">
+<li>Messages are kept in a SQLite database in your user profile. The database is not encrypted.</li>
+<li>A topic shared with another machine keeps its messages on both machines.</li>
+<li><code class="c-code">PIGEON_BODY_RETENTION_DAYS</code> erases the text of read or expired messages after that many days. This is not secure erasure: database files and backups can still contain the text.</li>
+<li>Pigeon sends nothing to its author or to any service. It uses the network only for <code class="c-code">pigeon update</code> (GitHub) and for the machines you approved.</li>
+</ul>
+<h4 class="pg-h3">Report a security problem</h4>
+<p class="pg-p">GitHub issues are public. For a problem that should not be public yet, open an issue that says only that you have a security report, without the details, and the maintainer will arrange a private channel. <a class="c-link" href="https://github.com/AndreVianna/Pigeon/issues/new/choose">Open an issue</a></p>
+<p class="pg-links"><a class="c-link c-link--ext" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/security-design.md"><span>Local trust boundaries, in full</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a></p>
+</section>
+
+<section class="pg-dsec" id="settings" aria-labelledby="set-h">
+<h3 class="pg-h2" id="set-h">Settings</h3>
+<p class="pg-p">Environment variables, set before <code class="c-code">pigeon start</code>. The port must also be set for the agent tools.</p>
+<div class="pg-tablebox">
+<table class="c-table pg-table pg-table--stack">
+<thead>
+<tr><th class="c-th" scope="col" style="width: 34%">Variable</th><th class="c-th" scope="col" style="width: 26%">Default</th><th class="c-th" scope="col">Meaning</th></tr>
+</thead>
+<tbody>
+<tr class="c-tr"><th class="c-td" scope="row"><code>PIGEON_PORT</code></th><td class="c-td" data-label="Default"><code>29372</code></td><td class="c-td" data-label="Meaning">The local port. The service, the plugins and the commands must all use the same one.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>PIGEON_DATABASE</code></th><td class="c-td" data-label="Default"><code>%LOCALAPPDATA%\Pigeon\messages.db</code> on Windows, <code>~/Library/Application Support/Pigeon/messages.db</code> on macOS, <code>~/.local/share/Pigeon/messages.db</code> on Linux</td><td class="c-td" data-label="Meaning">Where messages are stored (an absolute path).</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>PIGEON_MAX_MESSAGES_PER_HOUR</code></th><td class="c-td" data-label="Default"><code>60</code></td><td class="c-td" data-label="Meaning">Messages one topic accepts per hour.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>PIGEON_ABANDONED_TOPIC_MINUTES</code></th><td class="c-td" data-label="Default"><code>60</code></td><td class="c-td" data-label="Meaning">How long both members can be away before a topic is deleted.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>PIGEON_BODY_RETENTION_DAYS</code></th><td class="c-td" data-label="Default">not set</td><td class="c-td" data-label="Meaning">When set, the text of read or expired messages is erased after this many days.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>PIGEON_MAX_ATTEMPTS</code>, <code>PIGEON_MAX_WAKE_ATTEMPTS</code>, <code>PIGEON_WAKE_RETRY_SECONDS</code></th><td class="c-td" data-label="Default"><code>3</code>, <code>3</code>, <code>120</code></td><td class="c-td" data-label="Meaning">How often an unread message and a wake are retried.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>PIGEON_PROMPTS</code></th><td class="c-td" data-label="Default">not set</td><td class="c-td" data-label="Meaning">Set to <code>terminal</code> to answer join requests in a terminal and turn off Pigeon's own windows.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="pg-p">The port between machines is 29374. Change it with <code class="c-code">pigeon peer listen &lt;address&gt;:&lt;port&gt;</code>.</p>
+</section>
+
+<section class="pg-dsec" id="commands" aria-labelledby="cmd-h">
+<h3 class="pg-h2" id="cmd-h">Commands</h3>
+<p class="pg-p">Words such as as, using, from, to and for are part of the commands. A session ID is the ID your agent tool gives its conversation; the plugins find it for you, so you need it only when you type the commands yourself.</p>
+<div class="pg-tablebox">
+<table class="c-table pg-table pg-table--stack">
+<thead>
+<tr><th class="c-th" scope="col" style="width: 46%">Command</th><th class="c-th" scope="col">What it does</th></tr>
+</thead>
+<tbody>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon start [--foreground]</code></th><td class="c-td">Starts the service in the background. <code>--foreground</code> keeps it in the current terminal.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon stop</code></th><td class="c-td">Stops the service. Waiting messages are kept.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon status</code></th><td class="c-td">Shows whether the service runs, which sessions are connected, and what is waiting.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon topics [on &lt;machine&gt;]</code></th><td class="c-td">Lists topics, their members and waiting messages, or the topics a known machine has open.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon join &lt;topic&gt; as &lt;session-id&gt; using &lt;tool&gt; [--remote] [--approval]</code></th><td class="c-td">Joins a topic, creating it if it is new. <code>--remote</code> opens it to other machines. <code>--approval</code> makes a local joiner give a join code.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon leave &lt;topic&gt; as &lt;session-id&gt;</code></th><td class="c-td">Leaves a topic. The last one to leave deletes it.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon send from &lt;session-id&gt; to &lt;topic&gt; "&lt;message&gt;"</code></th><td class="c-td">Sends a message to the other member. Use <code>-</code> as the message to read it from standard input.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon receive for &lt;session-id&gt; from &lt;topic&gt;</code></th><td class="c-td">Shows the messages waiting for that session and removes them from the queue.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon peer name [&lt;name&gt;]</code></th><td class="c-td">Names this machine for others. The default is its host name.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon peer listen [&lt;address&gt;[:&lt;port&gt;]]</code></th><td class="c-td">Lets other machines reach this one, on its LAN and Tailscale addresses or on one address.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon peer listen off</code></th><td class="c-td">Stops accepting other machines.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon peer list</code></th><td class="c-td">Shows known machines and the topics with them.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon peer remove &lt;name&gt;</code></th><td class="c-td">Forgets a machine. Its topics end at once.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon peer address &lt;name&gt; &lt;address&gt;[:&lt;port&gt;]</code></th><td class="c-td">Updates where a machine is reached.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon requests [--show &lt;request&gt;]</code></th><td class="c-td">Shows join requests waiting for an answer. <code>--show</code> prints the join code of your own request.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon allow &lt;request&gt; [&lt;code&gt;]</code></th><td class="c-td">Allows a join request, or confirms contacting a new machine.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon deny &lt;request&gt;</code></th><td class="c-td">Refuses a join request.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon update [--allow-pre-release]</code></th><td class="c-td">Installs the newest release from GitHub. Stable versions only unless the flag is given; never an older version.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row"><code>pigeon --help</code>, <code>pigeon &lt;command&gt; --help</code>, <code>pigeon --version</code></th><td class="c-td">Help and the version.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="pg-p">Exit codes: 0 on success, including when a message is held for later; 1 when Pigeon refuses or cannot do something; 2 when the command is written wrongly.</p>
+<p class="pg-p"><code class="c-code">pigeon mcp</code>, <code class="c-code">pigeon hook</code> and <code class="c-code">pigeon sidecar</code> are used by the plugins. You do not run them yourself.</p>
+<h4 class="pg-h3">The same thing your agents do, typed by hand</h4>
+<div class="pg-term" role="group" aria-label="Command line transcript">
+<div class="pg-term__bar">Command line</div>
+<div class="pg-term__body">
+<div class="pg-io">
+<div class="pg-cmd"><pre><code>pigeon join parser-review as 01a19407-57ce using codex</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<pre class="pg-out"><code>Joined parser-review. Waiting for a partner.</code></pre>
+</div>
+<div class="pg-io">
+<div class="pg-cmd"><pre><code>pigeon send from 01a19407-57ce to parser-review "Ready for review"</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<pre class="pg-out"><code>The recipient is unavailable: nobody else is in parser-review. Your message is held until someone joins (up to 24 hours).</code></pre>
+</div>
+<div class="pg-io">
+<div class="pg-cmd"><pre><code>pigeon join parser-review as b1f82365-c3a4 using claude-code</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<pre class="pg-out"><code>Joined parser-review with codex 01a19407-57ce.</code></pre>
+</div>
+<div class="pg-io">
+<div class="pg-cmd"><pre><code>pigeon receive for b1f82365-c3a4 from parser-review</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<pre class="pg-out"><code>[2026-10-31 18:25:14Z] codex 01a19407-57ce: Ready for review</code></pre>
+</div>
+</div>
+</div>
+</section>
+
+<section class="pg-dsec" id="faq" aria-labelledby="faq-h">
+<h3 class="pg-h2" id="faq-h">Questions</h3>
+<div class="c-acc">
+<details class="c-acc__item" name="faq" open>
+<summary class="c-acc__head"><h4>Does Pigeon need an account or a cloud service?</h4><span class="c-chev"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+<div class="c-acc__body"><p class="c-body">No. Pigeon runs on your computer and keeps its messages in a local database. It uses the network in two cases only: when you run <code class="c-code">pigeon update</code>, which downloads from GitHub, and when you turn on the listener for other machines.</p></div>
+</details>
+<details class="c-acc__item" name="faq">
+<summary class="c-acc__head"><h4>Does it start new agents?</h4><span class="c-chev"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+<div class="c-acc__body"><p class="c-body">No. Pigeon connects two conversations that are already open and, where the tool supports it, wakes them when a message arrives. It does not launch or replace an agent.</p></div>
+</details>
+<details class="c-acc__item" name="faq">
+<summary class="c-acc__head"><h4>Can the other agent make mine run commands?</h4><span class="c-chev"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+<div class="c-acc__body"><p class="c-body">A message is delivered as information from a peer, and Pigeon's plugins tell each agent to treat it that way. It grants no permission: your tool's own rules still apply to whatever your agent does next. That also means an agent you have allowed to run commands without asking can act on what a message says, so give two connected agents the permissions you would give either one alone.</p></div>
+</details>
+<details class="c-acc__item" name="faq">
+<summary class="c-acc__head"><h4>What happens when a conversation is closed?</h4><span class="c-chev"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+<div class="c-acc__body"><p class="c-body">It cannot be woken. Its messages wait for up to 24 hours, and when you reopen the conversation the plugin restores its topics. If both sessions stay disconnected for an hour, the topic and its waiting messages are deleted.</p></div>
+</details>
+<details class="c-acc__item" name="faq">
+<summary class="c-acc__head"><h4>Can three agents share a topic?</h4><span class="c-chev"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+<div class="c-acc__body"><p class="c-body">No. A topic holds two sessions. To bring in a third agent, use a second topic.</p></div>
+</details>
+<details class="c-acc__item" name="faq">
+<summary class="c-acc__head"><h4>Is Cursor supported?</h4><span class="c-chev"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+<div class="c-acc__body"><p class="c-body">Not yet. Today Pigeon has plugins for Claude, Codex, Antigravity, OpenCode 2 and GitHub Copilot.</p></div>
+</details>
+<details class="c-acc__item" name="faq">
+<summary class="c-acc__head"><h4>Does Pigeon use my model's tokens?</h4><span class="c-chev"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+<div class="c-acc__body"><p class="c-body">Each wake is a turn in your agent, like a message you typed. In addition, an idle Claude conversation with a joined topic gets a short renewal turn every 12 hours so that it stays reachable; that turn is not a message and does nothing else.</p></div>
+</details>
+<details class="c-acc__item" name="faq">
+<summary class="c-acc__head"><h4>Do I need .NET?</h4><span class="c-chev"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+<div class="c-acc__body"><p class="c-body">Not for the installers. They include what Pigeon needs. Building from source needs the .NET 11 SDK.</p></div>
+</details>
+<details class="c-acc__item" name="faq">
+<summary class="c-acc__head"><h4>What does it cost?</h4><span class="c-chev"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+<div class="c-acc__body"><p class="c-body">Nothing. Pigeon is open source under the MIT License.</p></div>
+</details>
+</div>
+</section>
+
+<section class="pg-dsec" id="docs" aria-labelledby="docs-h">
+<h3 class="pg-h2" id="docs-h">Documents</h3>
+<ul class="v2-doclinks">
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/README.md">README</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/beta-testing.md">Beta testing guide</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/known-issues.md">Known issues</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/architecture.md">Architecture</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/remote-design.md">Remote connections design</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/security-design.md">Local trust boundaries</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/CHANGELOG.md">Changelog</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/tag/v0.7.0-beta.2">All files for 0.7.0-beta.2</a></li>
+</ul>
+</section>
+
+</div>
+</div>
+</section>
+
+</main>
+
+<footer class="pg-foot">
+<div class="pg-wrap pg-frame pg-foot__in">
+<div class="pg-foot__text">
+<span class="pg-brand"><svg viewBox="0 -16 492 156" role="img" aria-label="Pigeon"><g transform="translate(-6.3 -6.05) scale(2.1)"><path fill="currentColor" d="M3 42L20 37.5C15 29 10.5 18 11.5 8Q12.4 5.4 14.8 6.6C22 10.5 29 19 32.5 26C32.5 19 34.5 12.5 38 8.6Q39.8 6.8 41.1 8.9C43.5 13 44 18 42.6 22.2A6.6 6.6 0 0 1 52.5 24.7L62 27.8L52.3 30.7C52.5 42 44 51.5 30 50.5L6 50.5Z"/><g style="fill: var(--accent)" transform="rotate(10 57 28)"><rect x="53.6" y="16" width="6" height="24" rx="1.6"/><rect x="60.5" y="18" width="1.3" height="20" rx=".65"/></g></g><g fill="currentColor" transform="translate(156 0)"><path fill-rule="evenodd" d="M0 16H22.5A27.5 27.5 0 0 1 22.5 71H11V100H0ZM11 27V60H22.5A16.5 16.5 0 0 0 22.5 27Z"/><path d="M59 40H70V100H59Z"/><circle cx="64.5" cy="23.5" r="7"/><path fill-rule="evenodd" d="M78 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM89 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/><path d="M138 40V103A30 30 0 0 1 82.02 118L91.55 112.5A19 19 0 0 0 127 103V40Z"/><path d="M198.64 88.47A30 30 0 1 1 205 70L194 70A19 19 0 1 0 189.97 81.7Z"/><path d="M154 64.5H204.5V75.5H154Z"/><path fill-rule="evenodd" d="M211 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM222 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/><path d="M280 40H291V100H280Z"/><path d="M280 68A28 28 0 0 1 336 68V100H325V68A17 17 0 0 0 291 68Z"/></g></svg></span>
+<p class="pg-small">Pigeon is open source under the <a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/main/LICENSE">MIT License</a>. Made by Andre Vianna.</p>
+<p class="pg-small">This site sets no cookies and runs no analytics.</p>
+<p class="pg-small">Pigeon is an independent project. Claude, Codex, ChatGPT, Antigravity, OpenCode and GitHub Copilot are products of their respective owners.</p>
+</div>
+<ul class="pg-foot__links">
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon">GitHub</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/tag/v0.7.0-beta.2">Releases</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/beta-testing.md">Beta guide</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/known-issues.md">Known issues</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/issues/new?template=beta-report.yml">Report a beta result</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/issues/new/choose">Suggest a feature</a></li>
+</ul>
+</div>
+</footer>
+
+</div>
+</body>
+</html>

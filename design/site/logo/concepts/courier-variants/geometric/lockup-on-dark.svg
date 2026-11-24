@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -16 492 156" role="img" aria-label="Pigeon">
+<g transform="translate(-4.2 -8.15) scale(2.1)">
+<g fill="#edeef2">
+<path d="M14 30A18 18 0 0 0 50 30Z"/>
+<circle cx="48" cy="23" r="7.5"/>
+<path d="M55.2 21.1L62 25L53.7 27.8Z"/>
+<path d="M18 30L2 31L5 42L21 40Z"/>
+<path d="M43 32A30 30 0 0 0 13 5A30 30 0 0 0 43 32Z"/>
+<path d="M26 45H29.5V52H26Z"/>
+</g>
+<rect fill="#7361e4" x="15" y="51" width="18" height="7" rx="3.5"/>
+</g>
+<g fill="#edeef2" transform="translate(156 0)">
+<path fill-rule="evenodd" d="M0 16H22.5A27.5 27.5 0 0 1 22.5 71H11V100H0ZM11 27V60H22.5A16.5 16.5 0 0 0 22.5 27Z"/>
+<path d="M59 40H70V100H59Z"/>
+<circle cx="64.5" cy="23.5" r="7"/>
+<path fill-rule="evenodd" d="M78 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM89 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/>
+<path d="M138 40V103A30 30 0 0 1 82.02 118L91.55 112.5A19 19 0 0 0 127 103V40Z"/>
+<path d="M198.64 88.47A30 30 0 1 1 205 70L194 70A19 19 0 1 0 189.97 81.7Z"/>
+<path d="M154 64.5H204.5V75.5H154Z"/>
+<path fill-rule="evenodd" d="M211 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM222 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/>
+<path d="M280 40H291V100H280Z"/>
+<path d="M280 68A28 28 0 0 1 336 68V100H325V68A17 17 0 0 0 291 68Z"/>
+</g>
+</svg>
