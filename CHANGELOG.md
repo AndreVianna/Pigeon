@@ -2,6 +2,11 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
+## Unreleased
+
+### Changed
+- On Windows, Pigeon's own windows (the join code to give, the join code to enter, and Allow or Deny) use the website's colors: Charcoal, or Daylight when Windows apps use the light theme, with a violet Allow, Close and code. The code field has room around it, the text is sharp on scaled displays, and the title bar takes the window's colors. The window still reads its text from the environment only and answers the same way. macOS and Linux keep their system dialogs.
+
 ## 0.7.0-beta.2 (2026-11-23)
 
 ### Added

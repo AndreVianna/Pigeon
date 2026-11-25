@@ -100,13 +100,30 @@ public static partial class NativeDialog {
         return new(Start(WindowsPowerShell, ["-NoProfile", "-NonInteractive", "-Sta", "-EncodedCommand", script], request), ReadLine);
     }
 
-    // A fixed script: everything it shows comes from the environment.
+    // A fixed script: everything it shows comes from the environment. It uses the website's colors
+    // (Charcoal, or Daylight when Windows apps use the light theme); scaling and the title bar colors
+    // are optional and the window works without them.
     internal const string WindowsScript = """
         $ErrorActionPreference = 'Stop'
-        Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-        [System.Windows.Forms.Application]::EnableVisualStyles()
         $kind = $env:PIGEON_DIALOG_KIND
         $code = $env:PIGEON_DIALOG_CODE
+        # Crisp text on scaled displays and a title bar that matches the theme. Optional: the window works without them.
+        $native = $false
+        try {
+            Add-Type -Namespace Pigeon -Name Win -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(System.IntPtr h, int a, ref int v, int s);'
+            [void][Pigeon.Win]::SetProcessDPIAware()
+            $native = $true
+        } catch { }
+        Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+        [System.Windows.Forms.Application]::EnableVisualStyles()
+        # The website's colors: Charcoal, or Daylight when Windows apps use the light theme.
+        $light = $false
+        try { $light = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize').AppsUseLightTheme -eq 1 } catch { }
+        function Color([string] $hex) { [System.Drawing.ColorTranslator]::FromHtml($hex) }
+        if ($light) { $bg = Color '#ffffff'; $ink = Color '#14161c'; $field = Color '#f6f7f9'; $line = Color '#c3c4c5'; $accent = Color '#634cd4'; $hover = Color '#4a29b2'; $soft = Color '#eceef2' }
+        else { $bg = Color '#14151a'; $ink = Color '#edeef2'; $field = Color '#0d0e12'; $line = Color '#2c2d31'; $accent = Color '#7361e4'; $hover = Color '#8475f9'; $soft = Color '#1c1e23' }
+        $scale = [System.Drawing.Graphics]::FromHwnd([IntPtr]::Zero).DpiX / 96
+        function Px([int] $n) { [int][Math]::Round($n * $scale) }
         $form = New-Object System.Windows.Forms.Form
         $form.Text = 'Pigeon'
         $form.TopMost = $true
@@ -116,52 +133,91 @@ public static partial class NativeDialog {
         $form.MinimizeBox = $false
         $form.AutoSize = $true
         $form.AutoSizeMode = 'GrowAndShrink'
-        $form.Padding = New-Object System.Windows.Forms.Padding 12
+        $form.BackColor = $bg
+        $form.ForeColor = $ink
+        $form.Font = New-Object System.Drawing.Font 'Segoe UI', 10
+        if ($native) {
+            # Dark mode, then the title bar's own colors (Windows 11), which also win over an accent-colored title bar.
+            $form.Add_HandleCreated({
+                $dark = [int](-not $light); [void][Pigeon.Win]::DwmSetWindowAttribute($form.Handle, 20, [ref]$dark, 4)
+                foreach ($pair in @(@(35, $bg), @(36, $ink), @(34, $line))) { $c = $pair[1]; $ref = [int]$c.R -bor ([int]$c.G -shl 8) -bor ([int]$c.B -shl 16); [void][Pigeon.Win]::DwmSetWindowAttribute($form.Handle, $pair[0], [ref]$ref, 4) } })
+        }
         $panel = New-Object System.Windows.Forms.FlowLayoutPanel
         $panel.FlowDirection = 'TopDown'
         $panel.WrapContents = $false
         $panel.AutoSize = $true
+        $panel.Padding = New-Object System.Windows.Forms.Padding (Px 20), (Px 18), (Px 12), (Px 20)
         $label = New-Object System.Windows.Forms.Label
         $label.UseMnemonic = $false
         $label.AutoSize = $true
-        $label.MaximumSize = New-Object System.Drawing.Size 440, 0
+        $label.MaximumSize = New-Object System.Drawing.Size (Px 420), 0
+        $label.Margin = New-Object System.Windows.Forms.Padding 0
         $label.Text = $env:PIGEON_DIALOG_TEXT
         $panel.Controls.Add($label)
         $box = $null
         if ($kind -ne 'ask') {
+            $mono = New-Object System.Drawing.Font 'Consolas', 22
+            $frame = New-Object System.Windows.Forms.Panel
+            $frame.BackColor = $field
+            $frame.Padding = New-Object System.Windows.Forms.Padding (Px 14), (Px 8), (Px 14), (Px 8)
+            $frame.Margin = New-Object System.Windows.Forms.Padding 0, (Px 16), 0, 0
             $box = New-Object System.Windows.Forms.TextBox
-            $box.Font = New-Object System.Drawing.Font 'Consolas', 18
-            $box.Width = 140
-            $box.Margin = New-Object System.Windows.Forms.Padding 0, 10, 0, 10
-            if ($kind -eq 'show') { $box.Text = $code; $box.ReadOnly = $true } else { $box.MaxLength = 6 }
-            $panel.Controls.Add($box)
+            $box.BorderStyle = 'None'
+            $box.BackColor = $field
+            $box.ForeColor = $ink
+            $box.Font = $mono
+            $box.Width = [System.Windows.Forms.TextRenderer]::MeasureText('0000000', $mono).Width
+            $box.Location = New-Object System.Drawing.Point $frame.Padding.Left, $frame.Padding.Top
+            $frame.Size = New-Object System.Drawing.Size ($box.Width + $frame.Padding.Horizontal), ($box.Height + $frame.Padding.Vertical)
+            if ($kind -eq 'show') { $box.Text = $code; $box.ReadOnly = $true; $box.ForeColor = $accent } else { $box.MaxLength = 6 }
+            $frame.Add_Paint({ param($s, $e)
+                $pen = New-Object System.Drawing.Pen $(if ($box.Focused -and -not $box.ReadOnly) { $accent } else { $line })
+                $e.Graphics.DrawRectangle($pen, 0, 0, $s.Width - 1, $s.Height - 1); $pen.Dispose() })
+            $box.Add_GotFocus({ $frame.Invalidate() })
+            $box.Add_LostFocus({ $frame.Invalidate() })
+            $frame.Controls.Add($box)
+            $panel.Controls.Add($frame)
         }
         $buttons = New-Object System.Windows.Forms.FlowLayoutPanel
         $buttons.AutoSize = $true
         $buttons.WrapContents = $false
-        function Add-Button([string] $text, $result) {
+        $buttons.Margin = New-Object System.Windows.Forms.Padding 0, (Px 20), 0, 0
+        function Add-Button([string] $text, $result, [bool] $primary) {
             $button = New-Object System.Windows.Forms.Button
             $button.Text = $text
-            $button.AutoSize = $true
+            $button.UseMnemonic = $false
             $button.DialogResult = $result
+            $button.FlatStyle = 'Flat'
+            $button.Font = New-Object System.Drawing.Font 'Segoe UI Semibold', 10
+            $button.MinimumSize = New-Object System.Drawing.Size (Px 96), (Px 34)
+            $button.AutoSize = $true
+            $button.Cursor = [System.Windows.Forms.Cursors]::Hand
+            $button.Margin = New-Object System.Windows.Forms.Padding 0, 0, (Px 8), 0
+            if ($primary) {
+                $button.BackColor = $accent; $button.ForeColor = [System.Drawing.Color]::White
+                $button.FlatAppearance.BorderColor = $accent; $button.FlatAppearance.MouseOverBackColor = $hover; $button.FlatAppearance.MouseDownBackColor = $hover
+            } else {
+                $button.BackColor = $soft; $button.ForeColor = $ink
+                $button.FlatAppearance.BorderColor = $line; $button.FlatAppearance.MouseOverBackColor = $field; $button.FlatAppearance.MouseDownBackColor = $field
+            }
             $buttons.Controls.Add($button)
             return $button
         }
         if ($kind -eq 'show') {
-            $copy = Add-Button 'Copy' ([System.Windows.Forms.DialogResult]::None)
-            $copy.Add_Click({ [System.Windows.Forms.Clipboard]::SetText($code) })
-            $close = Add-Button 'Close' ([System.Windows.Forms.DialogResult]::OK)
+            $copy = Add-Button 'Copy' ([System.Windows.Forms.DialogResult]::None) $false
+            $copy.Add_Click({ [System.Windows.Forms.Clipboard]::SetText($code); $copy.Text = 'Copied' })
+            $close = Add-Button 'Close' ([System.Windows.Forms.DialogResult]::OK) $true
             $form.AcceptButton = $close
             $form.CancelButton = $close
         } else {
-            $allow = Add-Button 'Allow' ([System.Windows.Forms.DialogResult]::OK)
-            $deny = Add-Button 'Deny' ([System.Windows.Forms.DialogResult]::Cancel)
+            $allow = Add-Button 'Allow' ([System.Windows.Forms.DialogResult]::OK) $true
+            $deny = Add-Button 'Deny' ([System.Windows.Forms.DialogResult]::Cancel) $false
             $form.AcceptButton = $allow
             $form.CancelButton = $deny
         }
         $panel.Controls.Add($buttons)
         $form.Controls.Add($panel)
-        $form.Add_Shown({ $form.Activate(); if ($kind -eq 'code') { [void] $box.Focus() } })
+        $form.Add_Shown({ $form.Activate(); if ($kind -eq 'code') { [void] $box.Focus() } else { [void] $form.AcceptButton.Focus() } })
         $result = $form.ShowDialog()
         if ($kind -eq 'show') { 'accept' }
         elseif ($result -eq [System.Windows.Forms.DialogResult]::OK) { if ($kind -eq 'code') { 'accept ' + $box.Text } else { 'accept' } }
