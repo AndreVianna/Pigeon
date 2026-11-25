@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en" data-polarity="dark" class="js">
+<head>
+<meta charset="utf-8">
+<title>Pigeon demo video (composition)</title>
+<!-- Composition for pigeon-demo.mp4. Laid out at 1200 x 675 CSS px and captured at device scale 1.6 (1920 x 1080).
+     It links the site's own stylesheets, so the hook scene is the site's scene. The .hk block below is copied
+     unchanged from site/index.html; only hk--still is replaced by hk--play (what site.js does on load; the "js" class on <html> is the site's too).
+     The Pause button stays hidden, as in the markup the site serves.
+     Open this file in a browser to watch it in real time; render.mjs opens it with ?render and drives the time. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="../../../site/assets/bundle.css">
+<link rel="stylesheet" href="../../../site/assets/site.css">
+<link rel="stylesheet" href="composition.css">
+<script src="composition.js" defer></script>
+</head>
+<body>
+<div class="pg v2 vd-stage">
+<div class="v2-hook vd-ground"></div>
+
+<!-- Scene 1: the hero scene, as on the site -->
+<section class="vd-scene" id="s1">
+<div class="hk hk--play" id="hook-scene">
+<p class="pg-vh">Illustration: an agent in one window sends a question. Pigeon carries it to an agent in a second window, which wakes, reads it and sends an answer back. Nobody types in between.</p>
+<div class="hk-win hk-win--a" aria-hidden="true"><div class="hk-win__bar"><i></i>Claude Code</div><div class="hk-win__body"><span class="hk-skl" style="width: 38%"></span><span class="hk-skl" style="width: 71%"></span><span class="hk-skl" style="width: 62%"></span><span class="hk-skl" style="width: 44%"></span><p class="hk-msg hk-qa">Can you review the parser changes?</p><p class="hk-msg hk-msg--in hk-ra">Done. Two notes for you.</p></div></div>
+<div class="hk-link" aria-hidden="true"><span class="hk-track"><span class="hk-note"></span></span><div class="hk-mark"><svg viewBox="0 0 64 64"><path fill="currentColor" d="M3 42L20 37.5C15 29 10.5 18 11.5 8Q12.4 5.4 14.8 6.6C22 10.5 29 19 32.5 26C32.5 19 34.5 12.5 38 8.6Q39.8 6.8 41.1 8.9C43.5 13 44 18 42.6 22.2A6.6 6.6 0 0 1 52.5 24.7L62 27.8L52.3 30.7C52.5 42 44 51.5 30 50.5L6 50.5Z"/><g class="hk-capsule" transform="rotate(10 57 28)"><rect x="53.6" y="16" width="6" height="24" rx="1.6"/><rect x="60.5" y="18" width="1.3" height="20" rx=".65"/></g><g class="hk-capsule hk-capsule--lit" transform="rotate(10 57 28)"><rect x="53.6" y="16" width="6" height="24" rx="1.6"/><rect x="60.5" y="18" width="1.3" height="20" rx=".65"/></g></svg></div></div>
+<div class="hk-win hk-win--b" aria-hidden="true"><div class="hk-win__bar"><i></i>Codex</div><div class="hk-win__body"><span class="hk-skl" style="width: 64%"></span><span class="hk-skl" style="width: 33%"></span><span class="hk-skl" style="width: 52%"></span><span class="hk-skl" style="width: 70%"></span><p class="hk-msg hk-msg--in hk-qb">Can you review the parser changes?</p><p class="hk-msg hk-rb">Done. Two notes for you.</p></div></div>
+<div class="hk-foot"><p class="hk-caption" aria-hidden="true">Nobody typed.</p><button type="button" class="c-btn c-btn--sm c-btn--ghost hk-toggle" aria-label="Pause the animation" hidden>Pause</button></div>
+</div>
+</section>
+
+<!-- Scene 2: headline, subline, three facts -->
+<section class="vd-scene" id="s2">
+<h1 class="c-display v2-h1" id="s2-h">Let your AI agents talk to each other.</h1>
+<p class="v2-hook__line" id="s2-line">Pigeon carries messages between them, so you stop copying and pasting from one window to the other.</p>
+<ul class="vd-facts">
+<li>Free and open source</li>
+<li>Claude Code · Codex · Antigravity · OpenCode · Copilot</li>
+<li>Runs on your computer. No account.</li>
+</ul>
+</section>
+
+<!-- Scene 3: end card -->
+<section class="vd-scene" id="s3">
+<img class="vd-lockup" id="s3-logo" src="../logo/pigeon-lockup-on-dark.svg" alt="Pigeon">
+<p class="vd-url" id="s3-url">andrevianna.github.io/Pigeon</p>
+</section>
+</div>
+</body>
+</html>

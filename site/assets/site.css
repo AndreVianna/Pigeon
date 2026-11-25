@@ -191,12 +191,11 @@ body{background:var(--bg)}
 .pg-ph{padding:8px 10px;border:1px dashed var(--line2);border-radius:var(--rs);font:400 12px/1.5 var(--mono);color:var(--muted)}
 
 /* stand-in for the join-code window */
-.pg-codewin{width:min(320px,100%);margin-inline:auto;border-radius:var(--r);background:var(--raised);box-shadow:var(--sh2);overflow:hidden}
-.pg-codewin__bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:500;color:var(--muted)}
-.pg-codewin__bar svg{width:16px;height:16px;color:var(--ink)}
-.pg-codewin__body{display:grid;gap:12px;padding:16px 16px 18px;font-size:13px;color:var(--muted)}
-.pg-digits{display:flex;gap:6px}
-.pg-digits span{display:grid;place-items:center;width:36px;height:44px;border:1px solid var(--line2);border-radius:var(--rs);background:var(--sunken);font:500 20px var(--mono);color:var(--ink)}
+.pg-fig__stage.pg-fig__stage--shot{display:grid;place-items:center;padding:16px}
+.pg-shot{display:block;max-width:100%;height:auto;border-radius:8px;box-shadow:var(--sh2)}
+.pg-shot--light,[data-polarity=light] .pg-shot--dark{display:none}
+[data-polarity=light] .pg-shot--light{display:block}
+@media (prefers-color-scheme:light){html:not(.js) .pg-shot--dark{display:none}html:not(.js) .pg-shot--light{display:block}}
 
 /* tables */
 .pg-tablebox{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow-x:auto}
