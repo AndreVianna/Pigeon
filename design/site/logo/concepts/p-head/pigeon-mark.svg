@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pigeon">
+  <path fill="currentColor" fill-rule="evenodd" d="M10 58V24A18 18 0 0 1 45.86 21.5L54 26.5L44.3 31.6A18 18 0 0 1 28 42V58ZM27 21.5a4 4 0 1 0 8 0a4 4 0 1 0-8 0Z"/>
+  <path style="fill:var(--accent,#7361e4)" d="M10 46H28V52H10Z"/>
+</svg>

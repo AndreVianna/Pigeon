@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pigeon">
+<g transform="translate(-4 0)">
+<path fill="#14161c" d="M4 44L22 39C16 30 10 18 12 6C22 10 30 20 34 27C34.5 20 36.5 13 41 8C44.5 13 45.5 18 44.3 22.1A7 7 0 0 1 54.6 25.6L60 29L54.2 31.2C54 42 45 52 32 51L7 52.5Z"/>
+<rect fill="#634cd4" x="58" y="20.5" width="7" height="17" rx="3.5" transform="rotate(14 61.5 29)"/>
+</g>
+</svg>

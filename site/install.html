@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en" data-polarity="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install Pigeon 0.7.0-beta.2 on Windows, macOS or Linux</title>
+<meta name="description" content="Download the Pigeon beta for Windows, macOS or Linux, start the service, add the plugin to your agent tools, and connect two agents.">
+<link rel="canonical" href="https://andrevianna.github.io/Pigeon/install.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Pigeon">
+<meta property="og:title" content="Install Pigeon 0.7.0-beta.2 on Windows, macOS or Linux">
+<meta property="og:description" content="Download the Pigeon beta for Windows, macOS or Linux, start the service, add the plugin to your agent tools, and connect two agents.">
+<meta property="og:url" content="https://andrevianna.github.io/Pigeon/install.html">
+<script>(function(d){d.className+=" js";try{if(matchMedia("(prefers-color-scheme: light)").matches)d.setAttribute("data-polarity","light")}catch(e){}})(document.documentElement)</script>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/bundle.css">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<div class="pg v2">
+<a class="pg-skip" href="#main">Skip to content</a>
+
+<header class="pg-head">
+<div class="pg-wrap pg-frame pg-head__in">
+<a class="pg-brand" href="./" aria-label="Pigeon, home"><svg viewBox="0 -16 492 156" aria-hidden="true"><g transform="translate(-6.3 -6.05) scale(2.1)"><path fill="currentColor" d="M3 42L20 37.5C15 29 10.5 18 11.5 8Q12.4 5.4 14.8 6.6C22 10.5 29 19 32.5 26C32.5 19 34.5 12.5 38 8.6Q39.8 6.8 41.1 8.9C43.5 13 44 18 42.6 22.2A6.6 6.6 0 0 1 52.5 24.7L62 27.8L52.3 30.7C52.5 42 44 51.5 30 50.5L6 50.5Z"/><g style="fill: var(--accent)" transform="rotate(10 57 28)"><rect x="53.6" y="16" width="6" height="24" rx="1.6"/><rect x="60.5" y="18" width="1.3" height="20" rx=".65"/></g></g><g fill="currentColor" transform="translate(156 0)"><path fill-rule="evenodd" d="M0 16H22.5A27.5 27.5 0 0 1 22.5 71H11V100H0ZM11 27V60H22.5A16.5 16.5 0 0 0 22.5 27Z"/><path d="M59 40H70V100H59Z"/><circle cx="64.5" cy="23.5" r="7"/><path fill-rule="evenodd" d="M78 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM89 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/><path d="M138 40V103A30 30 0 0 1 82.02 118L91.55 112.5A19 19 0 0 0 127 103V40Z"/><path d="M198.64 88.47A30 30 0 1 1 205 70L194 70A19 19 0 1 0 189.97 81.7Z"/><path d="M154 64.5H204.5V75.5H154Z"/><path fill-rule="evenodd" d="M211 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM222 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/><path d="M280 40H291V100H280Z"/><path d="M280 68A28 28 0 0 1 336 68V100H325V68A17 17 0 0 0 291 68Z"/></g></svg></a>
+<nav class="pg-nav" aria-label="Sections">
+<a class="c-item" href="./#how">How it works</a>
+<a class="c-item" href="./#get-started">Get started</a>
+<a class="c-item" href="./#engineers">For engineers</a>
+<a class="c-item" href="https://github.com/AndreVianna/Pigeon">GitHub<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+</nav>
+<a class="c-btn c-btn--primary" href="./#get-started">Download the beta</a>
+<details class="pg-menu">
+<summary class="c-btn c-btn--icon" aria-label="Menu"><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></summary>
+<nav class="pg-menu__panel" aria-label="Sections, menu">
+<a class="c-item" href="./#how">How it works</a>
+<a class="c-item" href="./#get-started">Get started</a>
+<a class="c-item" href="./#engineers">For engineers</a>
+<a class="c-item" href="https://github.com/AndreVianna/Pigeon">GitHub<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+</nav>
+</details>
+</div>
+</header>
+
+<main id="main">
+
+<section aria-labelledby="page-h">
+<div class="pg-wrap pg-frame pg-pagehead">
+<div class="pg-split">
+<div class="pg-headg">
+<p class="c-eyebrow">Public beta</p>
+<h1 class="c-display pg-h1 pg-h1--page" id="page-h">Install Pigeon 0.7.0-beta.2</h1>
+<p class="pg-sub">Four steps: install the command, start the service, add the plugin, connect two agents.</p>
+<p class="pg-p">You need Windows 11 (or a supported Windows 10 Enterprise or LTSC edition), macOS, or Linux, and at least one of the agent tools in step 3.</p>
+</div>
+<div class="pg-box">
+<div class="pg-box__head"><h2 class="pg-h3">Before you start</h2></div>
+<div class="pg-box__body">
+<ul class="pg-list">
+<li>Close your agent apps (Claude, Codex, Antigravity, OpenCode, Copilot). Reopen them after installing so they find the <code class="c-code">pigeon</code> command.</li>
+<li>Use a computer that only you use. Pigeon's local service does not check who is calling it.</li>
+<li>Use new test conversations and made-up messages for this beta, not real work or secrets.</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section class="pg-sec" id="step-1" aria-labelledby="s1-h">
+<div class="pg-wrap pg-frame pg-sec__in">
+<div class="pg-rail" aria-hidden="true"><b>Step 1</b><span>of 4</span></div>
+<div class="pg-body">
+<div class="pg-headg">
+<h2 class="pg-h2" id="s1-h">1. Install the pigeon command</h2>
+<p class="pg-p">Each file is about 12 MB and includes everything Pigeon needs.</p>
+</div>
+<div class="c-tabs pg-tabs">
+<div class="c-tabs__list" role="tablist" aria-label="Operating system">
+<button type="button" class="c-tab" role="tab" id="os-t-win" aria-controls="windows" aria-selected="true" tabindex="0"><span class="c-tab__label">Windows</span></button>
+<button type="button" class="c-tab" role="tab" id="os-t-mac" aria-controls="macos" aria-selected="false" tabindex="-1"><span class="c-tab__label">macOS</span></button>
+<button type="button" class="c-tab" role="tab" id="os-t-linux" aria-controls="linux" aria-selected="false" tabindex="-1"><span class="c-tab__label">Linux</span></button>
+</div>
+
+<div class="c-tabs__panel" role="tabpanel" id="windows" aria-labelledby="os-t-win">
+<h3 class="pg-h3 pg-nojs">Windows</h3>
+<div class="pg-actions"><a class="c-btn c-btn--primary pg-btn" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/Pigeon-0.7.0-beta.2-win-x64.msi"><svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>Download for Windows (x64, .msi)</a></div>
+<ol class="pg-olist">
+<li>Run the .msi. It installs for you only and needs no administrator rights.</li>
+<li>The installer is not signed yet. If Windows shows "Windows protected your PC", choose <strong>More info</strong>, then <strong>Run anyway</strong>.</li>
+<li>Pigeon is installed to <code class="c-code">%LOCALAPPDATA%\Programs\Pigeon\pigeon.exe</code> and added to your PATH.</li>
+</ol>
+<div class="pg-note"><svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v.5"/></svg><p class="pg-p">If you use Claude Code, also install <a class="c-link" href="https://git-scm.com/download/win">Git for Windows</a>. The Claude plugin's hook runs under Git Bash.</p></div>
+</div>
+
+<div class="c-tabs__panel" role="tabpanel" id="macos" aria-labelledby="os-t-mac">
+<h3 class="pg-h3 pg-nojs">macOS</h3>
+<div class="pg-actions">
+<a class="c-btn c-btn--primary pg-btn" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/Pigeon-0.7.0-beta.2-osx-arm64.pkg"><svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>Download for Apple Silicon (.pkg)</a>
+<a class="c-btn pg-btn" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/Pigeon-0.7.0-beta.2-osx-x64.pkg"><svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>Download for Intel (.pkg)</a>
+</div>
+<ol class="pg-olist">
+<li>Pick the package for your processor. The wrong one refuses to install.</li>
+<li>The package is not signed or notarized, so macOS may block it. If you decide to proceed, open <strong>System Settings &gt; Privacy &amp; Security</strong> and choose <strong>Open Anyway</strong>. Control-click does not bypass this on current macOS.</li>
+<li>Installing needs an administrator password. Pigeon is installed to <code class="c-code">/usr/local/bin/pigeon</code>.</li>
+</ol>
+<div class="pg-note"><svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v.5"/></svg><p class="pg-p">The Intel package is built but has not been run on an Intel Mac by the release checks. If you try it, please report the result.</p></div>
+</div>
+
+<div class="c-tabs__panel" role="tabpanel" id="linux" aria-labelledby="os-t-linux">
+<h3 class="pg-h3 pg-nojs">Linux</h3>
+<div class="pg-tablebox">
+<table class="c-table pg-table pg-table--stack">
+<thead>
+<tr><th class="c-th" scope="col" style="width: 26%">System</th><th class="c-th" scope="col" style="width: 34%">File</th><th class="c-th" scope="col">Install with</th></tr>
+</thead>
+<tbody>
+<tr class="c-tr"><th class="c-td" scope="row">Debian, Ubuntu (x64)</th><td class="c-td" data-label="File"><a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/pigeon_0.7.0.beta.2_amd64.deb">pigeon_0.7.0.beta.2_amd64.deb</a></td><td class="c-td" data-label="Install with"><code class="c-code">sudo apt install ./pigeon_0.7.0.beta.2_amd64.deb</code></td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Debian, Ubuntu (ARM64)</th><td class="c-td" data-label="File"><a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/pigeon_0.7.0.beta.2_arm64.deb">pigeon_0.7.0.beta.2_arm64.deb</a></td><td class="c-td" data-label="Install with"><code class="c-code">sudo apt install ./pigeon_0.7.0.beta.2_arm64.deb</code></td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Fedora, RHEL, openSUSE (x64)</th><td class="c-td" data-label="File"><a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/pigeon-0.7.0-0.beta.2.x86_64.rpm">pigeon-0.7.0-0.beta.2.x86_64.rpm</a></td><td class="c-td" data-label="Install with"><code class="c-code">sudo dnf install ./pigeon-0.7.0-0.beta.2.x86_64.rpm</code></td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Fedora, RHEL, openSUSE (ARM64)</th><td class="c-td" data-label="File"><a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/pigeon-0.7.0-0.beta.2.aarch64.rpm">pigeon-0.7.0-0.beta.2.aarch64.rpm</a></td><td class="c-td" data-label="Install with"><code class="c-code">sudo dnf install ./pigeon-0.7.0-0.beta.2.aarch64.rpm</code></td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Other Linux (x64)</th><td class="c-td" data-label="File"><a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/pigeon-0.7.0-beta.2-linux-x64.tar.gz">pigeon-0.7.0-beta.2-linux-x64.tar.gz</a></td><td class="c-td" data-label="Install with">Unpack it and put <code class="c-code">pigeon</code> in a folder on your PATH.</td></tr>
+<tr class="c-tr"><th class="c-td" scope="row">Other Linux (ARM64)</th><td class="c-td" data-label="File"><a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/pigeon-0.7.0-beta.2-linux-arm64.tar.gz">pigeon-0.7.0-beta.2-linux-arm64.tar.gz</a></td><td class="c-td" data-label="Install with">Unpack it and put <code class="c-code">pigeon</code> in a folder on your PATH.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="pg-small">On openSUSE, <code class="c-code">zypper install</code> replaces <code class="c-code">dnf install</code>.</p>
+<ul class="pg-list">
+<li>The .deb and .rpm install to <code class="c-code">/usr/bin/pigeon</code>.</li>
+<li>Pigeon needs the SQLite library (<code class="c-code">libsqlite3</code>), which nearly every distribution includes.</li>
+<li>Install <code class="c-code">zenity</code> (GNOME and most desktops) or <code class="c-code">kdialog</code> (KDE) so Pigeon can show its approval windows. Without them, approvals are answered in a terminal with <code class="c-code">pigeon requests</code>.</li>
+<li>The ARM64 and RPM packages are built but have not been run on their systems by the release checks. If you try one, please report the result.</li>
+</ul>
+</div>
+</div>
+<div class="pg-stack">
+<h3 class="pg-h3">Check your download (optional)</h3>
+<p class="pg-p">The release includes <a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/download/v0.7.0-beta.2/SHA256SUMS.txt">SHA256SUMS.txt</a>. Compare your file's SHA-256 with its line there. A checksum detects a changed download; it is not a code signature.</p>
+<div class="pg-snips">
+<div class="pg-snip"><span class="pg-snip__label">Windows</span><pre><code>Get-FileHash .\Pigeon-0.7.0-beta.2-win-x64.msi</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy the Windows command">Copy</button></div>
+<div class="pg-snip"><span class="pg-snip__label">macOS</span><pre><code>shasum -a 256 Pigeon-0.7.0-beta.2-osx-arm64.pkg</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy the macOS command">Copy</button></div>
+<div class="pg-snip"><span class="pg-snip__label">Linux</span><pre><code>sha256sum pigeon_0.7.0.beta.2_amd64.deb</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy the Linux command">Copy</button></div>
+</div>
+<p class="pg-small">Had Pigeon as a .NET tool before? Remove it first: <code class="c-code">pigeon stop</code>, then <code class="c-code">dotnet tool uninstall --global Pigeon.Cli</code>.</p>
+</div>
+</div>
+</div>
+</section>
+
+<section class="pg-sec" id="step-2" aria-labelledby="s2-h">
+<div class="pg-wrap pg-frame pg-sec__in">
+<div class="pg-rail" aria-hidden="true"><b>Step 2</b><span>of 4</span></div>
+<div class="pg-body">
+<div class="pg-headg">
+<h2 class="pg-h2" id="s2-h">2. Start the service</h2>
+<p class="pg-p">Open a new terminal and run:</p>
+</div>
+<div class="pg-term" role="group" aria-label="Command line transcript">
+<div class="pg-term__bar">Command line</div>
+<div class="pg-term__body">
+<div class="pg-io">
+<div class="pg-cmd"><pre><code>pigeon --version</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<pre class="pg-out"><code>0.7.0-beta.2</code></pre>
+</div>
+<div class="pg-io">
+<div class="pg-cmd"><pre><code>pigeon start</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<pre class="pg-out"><code>Pigeon service started.</code></pre>
+</div>
+<div class="pg-io">
+<div class="pg-cmd"><pre><code>pigeon status</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<pre class="pg-out"><code>Pigeon service: running, version 0.7.0-beta.2
+Connected sessions: 0 (and 0 agent connections not in a topic)
+Sessions with waiting messages: 0</code></pre>
+</div>
+</div>
+</div>
+<p class="pg-p">The service runs in the background until you stop it or restart the computer. It does not start by itself after a restart; run <code class="c-code">pigeon start</code> again.</p>
+</div>
+</div>
+</section>
+
+<section class="pg-sec" id="step-3" aria-labelledby="s3-h">
+<div class="pg-wrap pg-frame pg-sec__in">
+<div class="pg-rail" aria-hidden="true"><b>Step 3</b><span>of 4</span></div>
+<div class="pg-body">
+<div class="pg-headg">
+<h2 class="pg-h2" id="s3-h">3. Add the plugin to your agent tools</h2>
+<p class="pg-p">Install the plugin in each tool you want to connect, then reopen the tool. Install the plugin, not only an MCP server: the plugin also brings the hooks that wake the agent and the connect skill.</p>
+</div>
+<div class="pg-stack">
+<p class="pg-p">Claude and Codex install the plugin straight from GitHub. The Antigravity, OpenCode and Copilot plugins are installed from a copy of the repository, so get one first:</p>
+<div class="pg-snip"><pre><code>git clone https://github.com/AndreVianna/Pigeon.git
+cd Pigeon</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy these commands">Copy</button></div>
+</div>
+<div class="c-tabs pg-tabs">
+<div class="c-tabs__list" role="tablist" aria-label="Agent tool">
+<button type="button" class="c-tab" role="tab" id="tool-t-claude" aria-controls="claude" aria-selected="true" tabindex="0"><span class="c-tab__label">Claude</span></button>
+<button type="button" class="c-tab" role="tab" id="tool-t-codex" aria-controls="codex" aria-selected="false" tabindex="-1"><span class="c-tab__label">Codex</span></button>
+<button type="button" class="c-tab" role="tab" id="tool-t-agy" aria-controls="antigravity" aria-selected="false" tabindex="-1"><span class="c-tab__label">Antigravity</span></button>
+<button type="button" class="c-tab" role="tab" id="tool-t-oc" aria-controls="opencode" aria-selected="false" tabindex="-1"><span class="c-tab__label">OpenCode</span></button>
+<button type="button" class="c-tab" role="tab" id="tool-t-copilot" aria-controls="copilot" aria-selected="false" tabindex="-1"><span class="c-tab__label">Copilot</span></button>
+</div>
+
+<div class="c-tabs__panel" role="tabpanel" id="claude" aria-labelledby="tool-t-claude">
+<h3 class="pg-h3">Claude Code / Claude Desktop</h3>
+<p class="pg-p">In Claude Code, run:</p>
+<div class="pg-snip"><pre><code>/plugin install pigeon --marketplace AndreVianna/Pigeon</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<p class="pg-p">In Claude Desktop, add <code class="c-code">AndreVianna/Pigeon</code> as a marketplace in the plugin settings and install <code class="c-code">pigeon</code>.</p>
+</div>
+
+<div class="c-tabs__panel" role="tabpanel" id="codex" aria-labelledby="tool-t-codex">
+<h3 class="pg-h3">Codex / ChatGPT desktop app</h3>
+<div class="pg-snip"><pre><code>codex plugin marketplace add AndreVianna/Pigeon</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<p class="pg-p">Or add the repository in the app's Marketplace tab. Then install <code class="c-code">pigeon</code> and approve its hooks when asked. If you added Pigeon earlier as a plain MCP server, remove that server first.</p>
+</div>
+
+<div class="c-tabs__panel" role="tabpanel" id="antigravity" aria-labelledby="tool-t-agy">
+<h3 class="pg-h3">Antigravity App</h3>
+<p class="pg-p">Needs the Antigravity App 2.28 or later. From your copy of the Pigeon repository, run:</p>
+<div class="pg-snip"><pre><code>agy plugin install ./integrations/antigravity-plugin</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<p class="pg-p">Install it globally; Antigravity runs a plugin's background helper only from the global plugin folder. Then turn on Pigeon wake in the Automations dashboard, which is what wakes an idle conversation, and allow the Pigeon tools. Antigravity asks once for each tool, so the first wake stops until you have allowed <code class="c-code">pigeon_receive</code>, <code class="c-code">pigeon_send</code> and <code class="c-code">pigeon_wake_complete</code>.</p>
+</div>
+
+<div class="c-tabs__panel" role="tabpanel" id="opencode" aria-labelledby="tool-t-oc">
+<h3 class="pg-h3">OpenCode 2</h3>
+<p class="pg-p">From your copy of the Pigeon repository, copy the folder <code class="c-code">integrations/opencode-plugin/pigeon</code> to <code class="c-code">~/.config/opencode/plugins/pigeon</code> for all projects, or to <code class="c-code">.opencode/plugins/pigeon</code> in one project. Then restart OpenCode.</p>
+<p class="pg-p">The plugin needs OpenCode's server running, which the CLI and Desktop start. OpenCode 1.x is not supported.</p>
+</div>
+
+<div class="c-tabs__panel" role="tabpanel" id="copilot" aria-labelledby="tool-t-copilot">
+<h3 class="pg-h3">GitHub Copilot</h3>
+<p class="pg-p">For the Copilot app, Copilot CLI, and VS Code chats with Copilot as the Session Target. From your copy of the Pigeon repository, run:</p>
+<div class="pg-snip"><pre><code>copilot plugin install ./integrations/copilot-plugin</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<p class="pg-p">The plugin allows Pigeon's own tools without asking; every other tool still asks. VS Code's older Local chats are not woken.</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section class="pg-sec" id="step-4" aria-labelledby="s4-h">
+<div class="pg-wrap pg-frame pg-sec__in">
+<div class="pg-rail" aria-hidden="true"><b>Step 4</b><span>of 4</span></div>
+<div class="pg-body">
+<h2 class="pg-h2" id="s4-h">4. Connect two agents</h2>
+<ol class="pg-olist">
+<li>In the first agent, connect to a topic. In Claude, type <code class="c-code">/pigeon:connect parser-review</code>. In the other tools, ask: "Connect to Pigeon topic parser-review." The agent reports that it is waiting for a partner.</li>
+<li>Do the same in the second agent with the same topic name.</li>
+<li>Ask either agent to send something to the other, for example: "Ask Codex to review the parser changes."</li>
+</ol>
+<p class="pg-p">From then on, each message wakes the other agent while its conversation is open. Run <code class="c-code">pigeon status</code> to see which sessions are connected and what is waiting.</p>
+</div>
+</div>
+</section>
+
+<section class="pg-sec" id="check" aria-labelledby="check-h">
+<div class="pg-wrap pg-frame pg-sec__in">
+<div class="pg-rail" aria-hidden="true"><b>Check</b></div>
+<div class="pg-body">
+<div class="pg-headg">
+<h2 class="pg-h2" id="check-h">Check Pigeon without an agent</h2>
+<p class="pg-p">These six commands use two stand-in sessions. If the receive command prints your message, the service and its message store work. This does not test your agent tools.</p>
+</div>
+<div class="pg-snip"><pre><code>pigeon join beta-cli-check as beta-cli-a using codex
+pigeon join beta-cli-check as beta-cli-b using claude-code
+pigeon send from beta-cli-a to beta-cli-check "PIGEON_BETA_CLI_01"
+pigeon receive for beta-cli-b from beta-cli-check
+pigeon leave beta-cli-check as beta-cli-a
+pigeon leave beta-cli-check as beta-cli-b</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy these six commands">Copy</button></div>
+<p class="pg-p">The receive command should print a line containing <code class="c-code">PIGEON_BETA_CLI_01</code>.</p>
+</div>
+</div>
+</section>
+
+<section class="pg-sec" id="update" aria-labelledby="update-h">
+<div class="pg-wrap pg-frame pg-sec__in">
+<div class="pg-rail" aria-hidden="true"><b>Later</b></div>
+<div class="pg-body">
+<div class="pg-split">
+<div class="pg-stack">
+<h2 class="pg-h2" id="update-h">Update</h2>
+<p class="pg-p">Close your agent apps, then run:</p>
+<div class="pg-snip"><pre><code>pigeon update --allow-pre-release</code></pre><button type="button" class="c-btn c-btn--sm c-btn--ghost pg-copy" aria-label="Copy this command">Copy</button></div>
+<p class="pg-p">It downloads the newest release's installer for your system, checks it against SHA256SUMS.txt, installs it the way you installed Pigeon, and restarts a running service. On macOS and Linux it asks for your password through sudo. The flag matters during the beta: without it, <code class="c-code">pigeon update</code> looks only at stable versions and finds nothing newer.</p>
+<p class="pg-small">Version 0.7.0-beta.1 has no update command. Install 0.7.0-beta.2 with its installer once. After updating, update the plugins in your agent tools as well; they are separate from the command.</p>
+</div>
+<div class="pg-stack" id="uninstall">
+<h2 class="pg-h2">Uninstall</h2>
+<ul class="pg-list">
+<li>Windows: Settings &gt; Apps &gt; Installed apps &gt; Pigeon &gt; Uninstall.</li>
+<li>macOS: run <code class="c-code">pigeon stop</code>, then <code class="c-code">sudo rm /usr/local/bin/pigeon</code> and <code class="c-code">sudo pkgutil --forget io.github.andrevianna.pigeon</code>.</li>
+<li>Linux: run <code class="c-code">pigeon stop</code>, then <code class="c-code">sudo apt remove pigeon</code> or <code class="c-code">sudo dnf remove pigeon</code>.</li>
+</ul>
+<p class="pg-p">Messages and the machine's identity stay in Pigeon's data folder until you delete it: <code class="c-code">%LOCALAPPDATA%\Pigeon</code> on Windows, <code class="c-code">~/Library/Application Support/Pigeon</code> on macOS, <code class="c-code">~/.local/share/Pigeon</code> on Linux.</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section class="pg-sec" id="trouble" aria-labelledby="trouble-h">
+<div class="pg-wrap pg-frame pg-sec__in">
+<div class="pg-rail" aria-hidden="true"><b>Help</b></div>
+<div class="pg-body">
+<h2 class="pg-h2" id="trouble-h">If something goes wrong</h2>
+<div class="pg-cells pg-cells--2">
+<div class="pg-cell">
+<h3 class="pg-h3">An agent app cannot find pigeon</h3>
+<p class="pg-p">Close the app completely and open it again so it reads the new PATH. Desktop apps started from the macOS Dock or a Linux launcher may see a different PATH from your shell. If it still fails, report which installer and which app.</p>
+</div>
+<div class="pg-cell">
+<h3 class="pg-h3">The installer says Pigeon is in use</h3>
+<p class="pg-p">An agent app's Pigeon plugin keeps the program running. Close your agent apps and try again.</p>
+</div>
+<div class="pg-cell">
+<h3 class="pg-h3">Nothing wakes after a restart</h3>
+<p class="pg-p">The service does not start with the computer. Run <code class="c-code">pigeon start</code>, then check <code class="c-code">pigeon status</code>.</p>
+</div>
+<div class="pg-cell">
+<h3 class="pg-h3">The agent got the message only when asked</h3>
+<p class="pg-p">That is polling, not a wake. Check <code class="c-code">pigeon status</code> for that session's notification line, and please report it: this is what the beta is trying to find.</p>
+</div>
+</div>
+<p class="pg-links"><a class="c-link c-link--ext" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/known-issues.md"><span>Known issues</span><svg class="c-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a></p>
+</div>
+</div>
+</section>
+
+<section class="pg-sec" id="report" aria-labelledby="report-h">
+<div class="pg-wrap pg-frame pg-sec__in">
+<div class="pg-rail" aria-hidden="true"><b>Report</b></div>
+<div class="pg-body">
+<div class="pg-headg">
+<h2 class="pg-h2" id="report-h">Now tell us what happened</h2>
+<p class="pg-p">Run the tests in the beta guide that your setup allows, and report each as pass, fail or not run. Partial results and failed installs help.</p>
+</div>
+<div class="pg-actions">
+<a class="c-btn c-btn--primary pg-btn" href="https://github.com/AndreVianna/Pigeon/issues/new?template=beta-report.yml">Report your results<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+<a class="c-btn pg-btn" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/beta-testing.md">Open the beta guide<svg class="pg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h9v9M18 6 6 18"/></svg></a>
+</div>
+</div>
+</div>
+</section>
+
+</main>
+
+<footer class="pg-foot">
+<div class="pg-wrap pg-frame pg-foot__in">
+<div class="pg-foot__text">
+<span class="pg-brand"><svg viewBox="0 -16 492 156" role="img" aria-label="Pigeon"><g transform="translate(-6.3 -6.05) scale(2.1)"><path fill="currentColor" d="M3 42L20 37.5C15 29 10.5 18 11.5 8Q12.4 5.4 14.8 6.6C22 10.5 29 19 32.5 26C32.5 19 34.5 12.5 38 8.6Q39.8 6.8 41.1 8.9C43.5 13 44 18 42.6 22.2A6.6 6.6 0 0 1 52.5 24.7L62 27.8L52.3 30.7C52.5 42 44 51.5 30 50.5L6 50.5Z"/><g style="fill: var(--accent)" transform="rotate(10 57 28)"><rect x="53.6" y="16" width="6" height="24" rx="1.6"/><rect x="60.5" y="18" width="1.3" height="20" rx=".65"/></g></g><g fill="currentColor" transform="translate(156 0)"><path fill-rule="evenodd" d="M0 16H22.5A27.5 27.5 0 0 1 22.5 71H11V100H0ZM11 27V60H22.5A16.5 16.5 0 0 0 22.5 27Z"/><path d="M59 40H70V100H59Z"/><circle cx="64.5" cy="23.5" r="7"/><path fill-rule="evenodd" d="M78 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM89 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/><path d="M138 40V103A30 30 0 0 1 82.02 118L91.55 112.5A19 19 0 0 0 127 103V40Z"/><path d="M198.64 88.47A30 30 0 1 1 205 70L194 70A19 19 0 1 0 189.97 81.7Z"/><path d="M154 64.5H204.5V75.5H154Z"/><path fill-rule="evenodd" d="M211 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM222 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/><path d="M280 40H291V100H280Z"/><path d="M280 68A28 28 0 0 1 336 68V100H325V68A17 17 0 0 0 291 68Z"/></g></svg></span>
+<p class="pg-small">Pigeon is open source under the <a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/main/LICENSE">MIT License</a>. Made by Andre Vianna.</p>
+<p class="pg-small">This site sets no cookies and runs no analytics.</p>
+<p class="pg-small">Pigeon is an independent project. Claude, Codex, ChatGPT, Antigravity, OpenCode and GitHub Copilot are products of their respective owners.</p>
+</div>
+<ul class="pg-foot__links">
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon">GitHub</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/releases/tag/v0.7.0-beta.2">Releases</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/beta-testing.md">Beta guide</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/blob/v0.7.0-beta.2/docs/known-issues.md">Known issues</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/issues/new?template=beta-report.yml">Report a beta result</a></li>
+<li><a class="c-link" href="https://github.com/AndreVianna/Pigeon/issues/new/choose">Suggest a feature</a></li>
+</ul>
+</div>
+</footer>
+
+</div>
+</body>
+</html>

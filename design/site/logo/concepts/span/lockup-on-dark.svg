@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -16 492 156" role="img" aria-label="Pigeon">
+<g transform="translate(-5.25 -13.92) scale(2.1)">
+<path fill="#edeef2" d="M32 11A6 6 0 0 1 36.6 20.9C37.4 21.6 38 22.4 38.4 23.2C46 17 57 20 61.5 38C56 29 47 29 39.6 35.5C39 39.5 36.5 43 32 46C27.5 43 25 39.5 24.4 35.5C17 29 8 29 2.5 38C7 20 18 17 25.6 23.2C26 22.4 26.6 21.6 27.4 20.9A6 6 0 0 1 32 11Z"/>
+<circle fill="#edeef2" cx="7" cy="52" r="5.5"/>
+<circle fill="#7361e4" cx="57" cy="52" r="5.5"/>
+</g>
+<g fill="#edeef2" transform="translate(156 0)">
+<path fill-rule="evenodd" d="M0 16H22.5A27.5 27.5 0 0 1 22.5 71H11V100H0ZM11 27V60H22.5A16.5 16.5 0 0 0 22.5 27Z"/>
+<path fill-rule="evenodd" d="M59 40H70V100H59Z"/>
+<circle cx="64.5" cy="23.5" r="7"/>
+<path fill-rule="evenodd" d="M78 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM89 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/>
+<path fill-rule="evenodd" d="M138 40V103A30 30 0 0 1 82.02 118L91.55 112.5A19 19 0 0 0 127 103V40Z"/>
+<path fill-rule="evenodd" d="M198.64 88.47A30 30 0 1 1 205 70L194 70A19 19 0 1 0 189.97 81.7Z"/>
+<path fill-rule="evenodd" d="M154 64.5H204.5V75.5H154Z"/>
+<path fill-rule="evenodd" d="M211 70a30 30 0 1 0 60 0a30 30 0 1 0 -60 0ZM222 70a19 19 0 1 1 38 0a19 19 0 1 1 -38 0Z"/>
+<path fill-rule="evenodd" d="M280 40H291V100H280Z"/>
+<path fill-rule="evenodd" d="M280 68A28 28 0 0 1 336 68V100H325V68A17 17 0 0 0 291 68Z"/>
+</g>
+</svg>
