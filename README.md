@@ -91,13 +91,14 @@ Words such as `as`, `using`, `from`, `to` and `for` are part of the commands. A 
 | `pigeon start` | Starts the background service. `--foreground` keeps it in the current window instead. |
 | `pigeon stop` | Stops the service. Waiting messages are kept. |
 | `pigeon status` | Shows whether the service runs, which sessions are connected, and what is waiting. |
-| `pigeon topics` | Lists topics, their two members and how many messages are waiting. |
-| `pigeon join <topic> as <session-id> using <tool>` | Joins a topic, creating it if it is new. `<tool>` is the program the session belongs to, such as `claude-code` or `codex`. |
+| `pigeon topics [on <machine>]` | Lists topics, their two members and how many messages are waiting. `on <machine>` lists the topics a known machine has opened to other machines. |
+| `pigeon join <topic> as <session-id> using <tool> [--remote] [--approval]` | Joins a topic, creating it if it is new. `<tool>` is the program the session belongs to, such as `claude-code` or `codex`. `--remote` opens a new topic to other machines; `--approval` makes a local joiner give a join code. A topic on another machine is joined as `<topic>@<machine>`. |
 | `pigeon leave <topic> as <session-id>` | Leaves a topic. The last one to leave deletes it. |
 | `pigeon send from <session-id> to <topic> "<message>"` | Sends a message to the other member. Use `-` as the message to read it from standard input. |
 | `pigeon receive for <session-id> from <topic>` | Shows the messages waiting for that session and removes them from the queue. |
-| `pigeon peer <name\|listen\|invite\|accept\|confirm\|list\|remove\|address> ...` | Pairs with Pigeon services on other machines (see above). |
-| `pigeon topic share <topic> with <peer>`, `pigeon topic unshare <topic>` | Shares one topic with a paired peer, or stops sharing it. |
+| `pigeon peer <name\|listen\|list\|remove\|address> ...` | Names this machine, lets other machines reach it, lists or forgets known machines, or updates where one is reached (see above). |
+| `pigeon requests [--show <request>]` | Lists join requests waiting for an answer. `--show` prints the join code of your own request. |
+| `pigeon allow <request> [<code>]`, `pigeon deny <request>` | Answers a join request. A new machine, or a local topic that requires approval, needs the join code the other person gave you. |
 | `pigeon update [--allow-pre-release]` | Installs the newest release from GitHub for this system, stable versions only unless `--allow-pre-release` is given. It never installs an older version. |
 | `pigeon --help`, `pigeon <command> --help` | Shows help. `pigeon --version` shows the version. |
 
