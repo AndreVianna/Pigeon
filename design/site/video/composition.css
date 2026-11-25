@@ -1,0 +1,21 @@
+/* Demo video composition. Everything visual comes from the site's stylesheets (tokens, .v2-hook, .hk, .c-display ...).
+   This file only frames it for 16:9 and styles the two things the site does not have: the fact rows and the end card. */
+html,body{width:1200px;height:675px;margin:0;overflow:hidden;background:var(--sunken)}
+.vd-stage{position:relative;width:1200px;height:675px;overflow:hidden}
+
+/* the site's hero stage (grid and violet light), filling the frame and centred on it */
+.vd-ground{position:absolute;inset:0;border:0}
+.vd-ground::before{-webkit-mask-image:radial-gradient(ellipse 62% 58% at 50% 47%,#000 15%,transparent 76%);mask-image:radial-gradient(ellipse 62% 58% at 50% 47%,#000 15%,transparent 76%)}
+.vd-ground::after{top:47%;transform:translate(-50%,-50%)}
+
+.vd-scene{position:absolute;inset:0;z-index:1;display:grid;justify-items:center;align-content:center;text-align:center}
+#s1{padding-top:22px} /* the caption row hangs below the windows; this centres the windows' weight */
+
+/* scene 2 */
+#s2 .v2-h1{margin:0}
+.vd-facts{list-style:none;width:600px;margin:40px 0 0;padding:0}
+.vd-facts li{padding:12px 0;border-top:1px solid var(--line2);font:500 18px/1.45 var(--font);color:var(--ink)}
+
+/* scene 3 */
+.vd-lockup{display:block;width:430px;height:auto}
+.vd-url{margin:34px 0 0;font:500 20px/1.4 var(--mono);color:var(--muted)}
