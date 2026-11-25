@@ -221,6 +221,8 @@ body{background:var(--bg)}
 .pg-foot{border-top:1px solid var(--line)}
 .pg-foot__in{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:40px;padding:44px 40px 56px}
 .pg-foot__text{display:grid;gap:12px;justify-items:start}
+.pg-foot__badge{display:inline-block;margin-top:4px;border-radius:10px}
+.pg-foot__badge img{display:block;max-width:100%;height:auto}
 .pg-foot__links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 24px;margin:0;padding:0;list-style:none;font-size:13.5px}
 
 /* documentation page (Security and limits): a full-height contents rail ruled off from the text */
