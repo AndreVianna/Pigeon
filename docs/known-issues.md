@@ -16,7 +16,7 @@ An agent app's Pigeon MCP server keeps `pigeon` running, so on Windows the insta
 
 ### Tried across two Windows machines only
 
-Agents on other machines were tried on 2026-11-07 between two Windows machines on a home Wi-Fi network, with Claude Desktop on both and Antigravity on one (host tests M1–M7 and D1–D7 in [the host-test record](history/host-tests.md)); every build is also tested with two services on one machine over real TLS on loopback. Not yet tried: macOS, Linux, Tailscale, and the hosts that show Pigeon's prompts themselves (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
+Agents on other machines were tried on 2026-11-07 between two Windows machines on a home Wi-Fi network, with Claude Desktop on both and Antigravity on one (host tests M1–M7 and D1–D7 in [the host-test record](history/host-tests.md)); every release is also tested, before it is published, with two services on one machine over real TLS on loopback. Not yet tried: macOS, Linux, Tailscale, and the hosts that show Pigeon's prompts themselves (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
 
 ### Accepted limits of the join handshake
 
