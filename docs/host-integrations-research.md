@@ -91,7 +91,7 @@ Cursor:
 
 A short host probe answers the five Antigravity questions before any Pigeon code is written. It uses a throwaway probe plugin, not Pigeon, so nothing in Pigeon changes and no real conversation receives a Pigeon message.
 
-**Probe kit** ([`experiments/antigravity-probe`](../experiments/antigravity-probe/README.md), built and checked locally; plugin sidecars load only from the global plugin folder, so the sidecar is installed on its own and the plugin only in a test workspace):
+**Probe kit** ([antigravity-probe write-up](history/antigravity-probe.md), built and checked locally; plugin sidecars load only from the global plugin folder, so the sidecar is installed on its own and the plugin only in a test workspace):
 - An MCP server (a small Python script) that logs each `initialize` and `tools/call` request's `_meta` keys and the names (not values) of `ANTIGRAVITY_*` environment variables, and offers one harmless tool, `probe_echo`.
 - Command hooks for `SessionStart`, `PreInvocation` and `Stop` that log the event name, `conversationId` and the payload's field names.
 - A sidecar that logs the same environment variable names and, when a trigger file names a conversation ID, runs `agentapi send-message <id> "Pigeon probe: reply with PONG."` and logs the exit code and output.
@@ -116,7 +116,7 @@ Before building the Antigravity wake adapter, the terms-of-service question in t
 
 ## Antigravity probe results (2026-11-01)
 
-The probe answered the open questions on Antigravity 2.28.2 (details in [the probe runbook](../experiments/antigravity-probe/README.md#results-2026-11-01-antigravity-2282)):
+The probe answered the open questions on Antigravity 2.28.2 (details in [the probe runbook](history/antigravity-probe.md#results-2026-11-01-antigravity-2282)):
 
 - **Identity:** the conversation ID arrives in every MCP `tools/call` (`_meta`), in every hook, and is the ID `agentapi send-message` accepts. `pigeon mcp` can bind its session from the first tool call; `SessionStart` fires for each new conversation and can restore it.
 - **Wake works when idle:** a sidecar's `language_server.exe agentapi send-message <id> <text>` starts a turn in an idle conversation, also while a background command runs.
@@ -129,7 +129,7 @@ This confirms Antigravity can reach parity with Claude and Codex, with one addit
 
 ## Cursor probe results so far (2026-11-01)
 
-A [Cursor probe](../experiments/cursor-probe/README.md) is built; its run stopped at the account's agent usage limit, so the MCP, `sessionStart` context and stop-hook questions are still open. It did show:
+A [Cursor probe](history/cursor-probe.md) is built; its run stopped at the account's agent usage limit, so the MCP, `sessionStart` context and stop-hook questions are still open. It did show:
 
 - **Cursor runs the Claude Pigeon plugin's hooks.** Cursor imports installed Claude plugins' hooks and runs them through PowerShell on Windows; the plugin's direct `hook-wait.sh` command opened the script in a text editor instead of running it. The Claude plugin should call `bash "${CLAUDE_PLUGIN_ROOT}/scripts/hook-wait.sh"` explicitly so it runs under any shell. In Cursor the waiter would then find no Claude session and exit at once.
 - **Cursor's hooks carry the conversation ID** in both `conversation_id` and `session_id`, so the existing `pigeon hook session-start` command could read Cursor's ID from `session_id` without changes to its input parsing.

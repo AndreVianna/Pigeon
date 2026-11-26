@@ -41,10 +41,8 @@ public sealed partial class PeerSteps {
         }
     }
 
-    private async Task<string> Ok(string who, params string[] arguments) => await OkWith(who, null, arguments);
-
-    private async Task<string> OkWith(string who, string? input, params string[] arguments) {
-        var (code, output, error) = await Run(who, input, arguments);
+    private async Task<string> Ok(string who, params string[] arguments) {
+        var (code, output, error) = await Run(who, null, arguments);
         Assert.True(code == 0, $"{who}: pigeon {string.Join(' ', arguments)} exited {code}: {error}{output}");
         return output;
     }
@@ -164,7 +162,7 @@ public sealed partial class PeerSteps {
         Assert.Contains("Known machines: 0", await Ok("ana", "peer", "list"));
     }
 
-    [Then("a wrong code is refused, a denied request joins nothing, and Antigravity may ask too")]
+    [Then("a wrong code is refused and a denied request joins nothing")]
     public async Task Refusals() {
         await AskByAddress("review");
         var id = await RequestId("ana", "wants to join review");
@@ -175,15 +173,12 @@ public sealed partial class PeerSteps {
         await Eventually(async () => !(await Ok("bruno", "requests")).Contains(brunoRequest!));
         Assert.DoesNotContain("review@", await Ok("bruno", "topics"));
         Assert.DoesNotContain("bruno", await Ok("ana", "peer", "list"));
-
-        // Until 0.6.0-alpha.6 Antigravity was limited to local topics.
-        Assert.Contains("a machine you have not joined before", await Ok("bruno", "join", $"review@127.0.0.1:{services["ana"].PeerPort}", "as", "agy-1", "using", "antigravity"));
     }
 
     [Then("invalid peer, request and join commands exit with a usage error")]
     public async Task Usage() {
-        foreach (var arguments in new[] { new[] { "peer" }, ["peer", "dance"], ["peer", "invite"], ["peer", "remove"], ["requests", "--show"], ["allow"], ["deny"], ["deny", "a", "b"],
-            ["join", "x", "as", "s", "using", "t", "--bogus"], ["join", "x", "as", "s", "using", "t", "--remote", "--remote"], ["topics", "on"], ["topic", "share", "x", "with", "y"] })
+        foreach (var arguments in new[] { new[] { "peer" }, ["peer", "dance"], ["peer", "remove"], ["requests", "--show"], ["allow"], ["deny"], ["deny", "a", "b"],
+            ["join", "x", "as", "s", "using", "t", "--bogus"], ["join", "x", "as", "s", "using", "t", "--remote", "--remote"], ["topics", "on"] })
             Assert.Equal(2, (await Run("nobody", null, arguments)).ExitCode);
     }
 

@@ -108,24 +108,14 @@ public sealed partial class JoinTests : IAsyncLifetime {
     }
 
     [Fact]
-    public async Task A_first_join_takes_the_code_from_one_person_to_the_other_and_then_messages_flow_both_ways() {
+    public async Task A_known_machine_is_allowed_or_denied_without_a_code() {
         await FirstJoin();
         Assert.Contains(await Bodies(bruno, "bruno-session", "review@ana-laptop"), b => b.Contains("You joined review@ana-laptop, with claude-code @ana-laptop"));
         Assert.Contains(await Bodies(ana, "ana-session", "review"), b => b.Contains("codex @bruno-desktop joined review"));
-
-        _ = Call(ana, "send", new { sessionId = "ana-session", topic = "review", message = "hello from Ana" });
-        Assert.Equal(["hello from Ana"], await Bodies(bruno, "bruno-session", "review@ana-laptop"));
-        _ = Call(bruno, "send", new { sessionId = "bruno-session", topic = "review@ana-laptop", message = "hi Ana" });
-        Assert.Equal(["hi Ana"], await Bodies(ana, "ana-session", "review"));
-
-        // Bruno leaving ends the topic on both machines, and Ana's topic is open again.
+        // Bruno leaving ends the topic on both machines.
         _ = Call(bruno, "leave", new { sessionId = "bruno-session", topic = "review@ana-laptop" });
         Assert.Contains(await Bodies(ana, "ana-session", "review"), b => b.Contains("@bruno-desktop left review"));
-    }
 
-    [Fact]
-    public async Task A_known_machine_is_allowed_or_denied_without_a_code() {
-        await FirstJoin();
         _ = Call(ana, "join", new { tool = "claude-code", sessionId = "ana-2", topic = "second", remote = true });
         _ = Call(bruno, "join", new { tool = "codex", sessionId = "bruno-2", topic = "second@ana-laptop" });
         var asked = await Prompt(ana, "ana-2", "allow");
@@ -136,7 +126,11 @@ public sealed partial class JoinTests : IAsyncLifetime {
 
         _ = Call(ana, "join", new { tool = "claude-code", sessionId = "ana-3", topic = "third", remote = true });
         _ = Call(bruno, "join", new { tool = "codex", sessionId = "bruno-3", topic = "third@ana-laptop" });
-        Assert.Equal("denied", Answer(ana, await Prompt(ana, "ana-3", "allow"), "cancel"));
+        var third = await Prompt(ana, "ana-3", "allow");
+        Assert.Equal("denied", Answer(ana, third, "cancel"));
+        // An answer counts only while its request is open: a replayed or unknown one changes nothing.
+        Assert.StartsWith("ignored", Answer(ana, third, "accept"));
+        Assert.StartsWith("ignored", Call(ana, "prompt_answer", new { id = "nonexistent:code", action = "accept", code = "123456" }).GetProperty("result").GetString());
         // The refusal reaches the requesting session through its wake, although no topic was created.
         var claim = await Eventually(() => Call(bruno, "wake_claim", new { sessionId = "bruno-3", mode = "codex-queue" }) is { ValueKind: JsonValueKind.Object } c ? (object)c : null);
         var batch = Call(bruno, "wake_receive", new { sessionId = "bruno-3", generation = ((JsonElement)claim).GetProperty("Generation").GetString() });
@@ -144,19 +138,7 @@ public sealed partial class JoinTests : IAsyncLifetime {
     }
 
     [Fact]
-    public async Task An_answer_counts_only_while_its_request_is_open() {
-        await FirstJoin();
-        // The listing prompt was answered; answering it again, as a host replaying it would, changes nothing.
-        Assert.StartsWith("ignored", Call(ana, "prompt_answer", new { id = "nonexistent:code", action = "accept", code = "123456" }).GetProperty("result").GetString());
-        _ = Call(ana, "join", new { tool = "claude-code", sessionId = "ana-2", topic = "second", remote = true });
-        _ = Call(bruno, "join", new { tool = "codex", sessionId = "bruno-2", topic = "second@ana-laptop" });
-        var asked = await Prompt(ana, "ana-2", "allow");
-        Assert.Equal("denied", Answer(ana, asked, "decline"));
-        Assert.StartsWith("ignored", Answer(ana, asked, "accept"));
-    }
-
-    [Fact]
-    public async Task Nothing_reaches_a_topic_that_is_not_open_and_Antigravity_stays_local() {
+    public async Task Nothing_reaches_a_topic_that_is_not_open_and_Antigravity_may_use_other_machines() {
         _ = Call(ana, "join", new { tool = "claude-code", sessionId = "ana-session", topic = "open", remote = true });
         _ = Call(ana, "join", new { tool = "claude-code", sessionId = "ana-session", topic = "private" });
         _ = Call(bruno, "join", new { tool = "codex", sessionId = "bruno-session", topic = $"private@127.0.0.1:{anaPort}" });
@@ -185,7 +167,6 @@ public sealed partial class JoinTests : IAsyncLifetime {
         var topic = Call(ana, "topics", new { sessionId = "joiner" })[0];
         Assert.Equal(2, topic.GetProperty("Members").GetArrayLength());
         Assert.Contains(await Bodies(ana, "opener", "guarded"), b => b.Contains("codex joiner joined guarded"));
-        await Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync() {

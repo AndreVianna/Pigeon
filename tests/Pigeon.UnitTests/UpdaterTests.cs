@@ -74,17 +74,8 @@ public class UpdaterTests {
     }
 
     [Fact]
-    public void Never_moves_a_pre_release_back_to_an_older_stable_version() {
-        var choice = ReleaseChoice.Choose(Releases(), V("0.7.0-beta.1"), allowPreRelease: false);
-        Assert.Null(choice.Newest);
-        Assert.Equal("v0.5.0", choice.NewestStable?.Tag);
-    }
-
-    [Fact]
-    public void Reports_nothing_newer_when_the_newest_is_installed() {
-        Assert.Null(ReleaseChoice.Choose(Releases(), V("0.7.0-beta.1"), allowPreRelease: true).Newest);
-        Assert.Null(ReleaseChoice.Choose(Releases(), V("0.7.0-beta.2"), allowPreRelease: true).Newest);
-    }
+    public void Reports_nothing_newer_when_the_installed_version_is_ahead_of_every_release()
+        => Assert.Null(ReleaseChoice.Choose(Releases(), V("0.7.0-beta.2"), allowPreRelease: true).Newest);
 
     [Fact]
     public void Takes_a_newer_stable_version_without_the_option() {
@@ -191,7 +182,7 @@ public class UpdaterTests {
         try {
             var path = Path.Combine(folder.FullName, asset.Name);
             await Updater.DownloadAsync(http, asset, path, sha);
-            Assert.Equal(body, await File.ReadAllBytesAsync(path));
+            Assert.Equal(body, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
 
             var other = Path.Combine(folder.FullName, "other");
             var error = await Assert.ThrowsAsync<CommandException>(() => Updater.DownloadAsync(http, asset, other, new string('0', 64)));

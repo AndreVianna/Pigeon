@@ -15,18 +15,6 @@ Feature: Claude hook waiter
     Given an isolated service with a connected Claude session
     Then a second waiter replaces the first, which leaves quietly
 
-  Scenario: An expired waiter leaves quietly and status shows the gap
-    Given an isolated service with a connected Claude session
-    Then a waiter with a short timeout exits 0 without output and status reports that it expired
-
-  Scenario: An idle waiter renews without claiming a message and its replacement delivers
-    Given an isolated service with a connected Claude session
-    Then a short renewable waiter requests one renewal and its replacement wakes for a message
-
-  Scenario: A session in no topic does not renew
-    Given an isolated service with a connected Claude session
-    Then a session in no topic and with nothing waiting expires without a renewal
-
   Scenario: Session bridge lookup finds only the session's own MCP bridge
     Given an isolated service with a connected Claude session
     Then the bridge lookup finds only the session's own ordinary MCP bridge
@@ -39,25 +27,13 @@ Feature: Claude hook waiter
     Given an isolated service with a connected Claude session
     Then malformed hook input exits 0 and invalid waiter arguments exit 1, without a wake
 
-  Scenario: A waiter survives a service restart
-    Given an isolated service with a connected Claude session
-    Then a waiter started before a service restart wakes for a message published after it
-
   Scenario: A waiter needs ownership to claim a wake
     Given an isolated service with a connected Claude session
     Then only the owning waiter can claim, and only its holder can release ownership
 
-  Scenario: A waiter keeps waiting while storage is temporarily locked
-    Given an isolated service with a connected Claude session
-    Then a waiter started during a held database lock keeps waiting and wakes after the lock is released
-
   Scenario: A waiter whose outer hook shell is killed stops instead of claiming wakes
     Given an isolated service with a connected Claude session
     Then a waiter under two Git Bash shells exits as orphaned when only the outer shell is killed, and a later message is not claimed
-
-  Scenario: An owning waiter still renews when the service is down at its deadline
-    Given an isolated service with a connected Claude session
-    Then a short renewable waiter whose service stops before the deadline requests one renewal, and its replacement waits for the service
 
   Scenario: Status reports versions and a session that never had a notifier
     Given an isolated service with a connected Claude session

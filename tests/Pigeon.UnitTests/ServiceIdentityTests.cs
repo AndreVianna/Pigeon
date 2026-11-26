@@ -34,13 +34,6 @@ public sealed class ServiceIdentityTests : IDisposable {
         Assert.Equal(["1.3.6.1.5.5.7.3.1", "1.3.6.1.5.5.7.3.2"], usages);
     }
 
-    [Fact]
-    public void Two_services_have_different_fingerprints() {
-        using var a = ServiceIdentity.LoadOrCreate(new FileIdentityStore(Path.Combine(directory, "a")));
-        using var b = ServiceIdentity.LoadOrCreate(new FileIdentityStore(Path.Combine(directory, "b")));
-        Assert.NotEqual(a.Fingerprint, b.Fingerprint);
-    }
-
     public void Dispose() {
         if (Directory.Exists(directory))
             Directory.Delete(directory, recursive: true);

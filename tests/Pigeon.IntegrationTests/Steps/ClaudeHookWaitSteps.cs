@@ -26,6 +26,8 @@ public sealed class ClaudeHookWaitSteps {
     private CancellationTokenSource heartbeat = null!;
     private Task heartbeats = null!;
     private int key;
+    // Added to the service's clock, so a test can let time pass without waiting for it.
+    private long skew;
 
     private async Task<JsonElement> Call(string operation, object args) {
         var result = await LocalHttpClient.ExecuteAsync(port, operation, args);
@@ -38,7 +40,7 @@ public sealed class ClaudeHookWaitSteps {
     private Task<JsonElement> WakeStatus() => Call("wake_status", new { sessionId = Reader });
 
     private async Task StartService() {
-        broker = new Broker(Path.Combine(directory, "messages.db"));
+        broker = new Broker(Path.Combine(directory, "messages.db"), () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + Interlocked.Read(ref skew));
         stop = new CancellationTokenSource();
         var host = new LocalHttpServer(port, broker);
         server = host.RunAsync(stop.Token);
@@ -89,6 +91,18 @@ public sealed class ClaudeHookWaitSteps {
         return bridges.EnumerateArray().First(b => b.GetProperty("sessionId").GetString() == Reader && b.GetProperty("mode").GetString() == "mcp").GetProperty("notifier");
     }
 
+    // The stand-in MCP bridge's heartbeat has reached the service.
+    private async Task WaitForBridge() {
+        for (var i = 0; i < 100; i++) {
+            var bridges = await Call("bridges", new { });
+            if (bridges.EnumerateArray().Any(b => b.GetProperty("sessionId").GetString() == Reader && b.GetProperty("mode").GetString() == "mcp"))
+                return;
+            await Task.Delay(50);
+        }
+
+        Assert.Fail("The stand-in MCP bridge never appeared.");
+    }
+
     private async Task WaitForOwner(string mode) {
         for (var i = 0; i < 30; i++) {
             if ((await Notifier()).GetProperty("active").GetString() == mode)
@@ -120,7 +134,7 @@ public sealed class ClaudeHookWaitSteps {
                 catch (OperationCanceledException) { }
             }
         });
-        await Task.Delay(1500);
+        await WaitForBridge();
     }
 
     [Then("a waiter for an unknown session exits 0 at once without output")]
@@ -187,21 +201,6 @@ public sealed class ClaudeHookWaitSteps {
         Assert.Equal(2, await Exit(third));
     }
 
-    [Then("a waiter with a short timeout exits 0 without output and status reports that it expired")]
-    public async Task Expired() {
-        var waiter = await StartWaiter("reader-session", "--timeout", "10");
-        Assert.Equal(0, await Exit(waiter, 25));
-        Assert.Equal("", await waiter.Errors);
-        Assert.Equal("", await waiter.Output);
-        var notifier = await Notifier();
-        Assert.Equal(JsonValueKind.Null, notifier.GetProperty("active").ValueKind);
-        Assert.Equal("expired", notifier.GetProperty("lastRelease").GetProperty("reason").GetString());
-        var status = Pigeon("status");
-        var text = await status.StandardOutput.ReadToEndAsync();
-        await status.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Contains("notification: none (last claude-hook expired at ", text);
-    }
-
     [Then("a short renewable waiter requests one renewal and its replacement wakes for a message")]
     public async Task Renewal() {
         var waiter = await StartWaiter("reader-session", "--timeout", "10", "--renew");
@@ -232,7 +231,7 @@ public sealed class ClaudeHookWaitSteps {
         Assert.Equal(0, await Exit(replacement, 25));
         Assert.Equal("", await replacement.Errors);
         await StartService();
-        await Task.Delay(1500); // Let the stand-in MCP bridge heartbeat reach the restarted service.
+        await WaitForBridge();
         var next = await StartWaiter("reader-session", "--timeout", "10", "--renew");
         await WaitForOwner("claude-hook");
         await Publish("after outage");
@@ -252,14 +251,21 @@ public sealed class ClaudeHookWaitSteps {
         Assert.Contains("notification: none (no notifier seen since the service started", output);
     }
 
-    [Then("a session in no topic and with nothing waiting expires without a renewal")]
+    [Then("a session in no topic and with nothing waiting expires without a renewal or output, and status reports that it expired")]
     public async Task UnsubscribedRenewal() {
         var waiter = await StartWaiter("reader-session", "--timeout", "10", "--renew");
         await WaitForOwner("claude-hook");
         await Call("leave", new { sessionId = Reader, topic = "test" });
         Assert.Equal(0, await Exit(waiter, 25));
         Assert.Equal("", await waiter.Errors);
-        Assert.Equal("expired", (await Notifier()).GetProperty("lastRelease").GetProperty("reason").GetString());
+        Assert.Equal("", await waiter.Output);
+        var notifier = await Notifier();
+        Assert.Equal(JsonValueKind.Null, notifier.GetProperty("active").ValueKind);
+        Assert.Equal("expired", notifier.GetProperty("lastRelease").GetProperty("reason").GetString());
+        var status = Pigeon("status");
+        var text = await status.StandardOutput.ReadToEndAsync();
+        await status.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Contains("notification: none (last claude-hook expired at ", text);
     }
 
     [Then("the bridge lookup finds only the session's own ordinary MCP bridge")]
@@ -278,7 +284,9 @@ public sealed class ClaudeHookWaitSteps {
     public async Task LostOwner() {
         var holder = Guid.NewGuid().ToString("N");
         Assert.True((await Call("wake_owner", new { sessionId = Reader, holderId = holder, mode = "claude-hook" })).GetProperty("owner").GetBoolean());
-        await Task.Delay(TimeSpan.FromSeconds(16));
+        // Sixteen seconds pass on the service's clock; the bridge's own heartbeat keeps arriving.
+        _ = Interlocked.Add(ref skew, 16000);
+        await Call("bridge_heartbeat", new { id = bridgeId, mode = "mcp", sessionId = Reader });
         var notifier = await Notifier();
         Assert.Equal(JsonValueKind.Null, notifier.GetProperty("active").ValueKind);
         Assert.Equal("lost", notifier.GetProperty("lastRelease").GetProperty("reason").GetString());

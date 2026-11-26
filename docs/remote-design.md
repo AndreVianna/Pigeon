@@ -84,7 +84,7 @@ The fingerprint is already pinned, so a code would add nothing. The listing user
 
 ### How prompts are handled
 
-Measured in each host with a probe on 2026-11-04 ([results](../experiments/elicitation-probe/README.md)):
+Measured in each host with a probe on 2026-11-04 ([results](history/elicitation-probe.md)):
 
 - Every prompt has Pigeon's own time limit (10 minutes); no reply, `decline` and `cancel` (Esc, in every host) all mean Deny.
 - An answer counts only for a request that is still open. Hosts can deliver an answer after the moment has passed (Copilot) or replay an unanswered prompt in a later session (OpenCode); those are ignored.

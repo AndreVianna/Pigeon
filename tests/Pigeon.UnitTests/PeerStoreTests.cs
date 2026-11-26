@@ -122,22 +122,16 @@ public sealed class PeerStoreTests : IDisposable {
         Assert.Empty(bruno.Topics());
     }
 
-    [Fact]
-    public void Removing_a_machine_ends_its_topics_and_forgets_it() {
-        Link();
-        Assert.True(ana.RemovePeer("bruno-desktop"));
-        Assert.Empty(ana.Shares());
-        Assert.Null(ana.PeerByFingerprint(BrunoPrint));
-        Assert.Equal(["review"], ana.ListedTopics());
-        Assert.False(ana.RemovePeer("bruno-desktop"));
-    }
-
     // Found in the two-machine test on 2026-11-07: the removed side kept the topic and retried for a day.
     [Fact]
     public void Removing_a_machine_tells_it_so_it_ends_the_topic_and_forgets_this_machine_too() {
         Link();
         Assert.True(ana.RemovePeer("bruno-desktop"));
+        Assert.False(ana.RemovePeer("bruno-desktop"));
         Assert.Empty(ana.Peers());
+        Assert.Empty(ana.Shares());
+        Assert.Null(ana.PeerByFingerprint(BrunoPrint));
+        Assert.Equal(["review"], ana.ListedTopics());
         var farewell = Assert.Single(ana.Farewells());
         Assert.Equal((BrunoPrint, "10.0.0.2:29374"), (farewell.Fingerprint, farewell.Address));
         Assert.Equal(1, Relay(ana, AnaPrint, bruno, BrunoPrint));

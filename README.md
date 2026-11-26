@@ -165,7 +165,7 @@ dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
 
 Versions move in lockstep: the CLI (`<Version>` in `src/Pigeon.Cli/Pigeon.Cli.csproj`), the Claude, Codex, Antigravity, OpenCode and Copilot plugins always share one version, and a release bumps them all together even when a plugin is unchanged. A unit test fails if they differ.
 
-The design is described in [architecture](docs/architecture.md), [session recovery](docs/session-recovery.md) and [local trust boundaries](docs/security-design.md); planned work is in the [release plan](docs/release-plan.md). Dated research, plans and test reports are kept in [docs/history](docs/history) and may describe earlier behavior. Host-test fixtures are indexed in [experiments](experiments/README.md).
+The design is described in [architecture](docs/architecture.md), [session recovery](docs/session-recovery.md) and [local trust boundaries](docs/security-design.md); planned work is in the [release plan](docs/release-plan.md). Dated research, plans and test reports are kept in [docs/history](docs/history) and may describe earlier behavior. Host-test records and the write-ups of removed probes are indexed in [docs/history/experiments.md](docs/history/experiments.md).
 
 ## License
 

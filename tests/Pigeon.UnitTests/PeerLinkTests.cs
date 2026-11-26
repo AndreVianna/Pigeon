@@ -77,7 +77,9 @@ public sealed class PeerLinkTests : IAsyncLifetime {
             Assert.Equal(HttpStatusCode.Forbidden, listed.StatusCode);
         using var started = await stranger.PostAsJsonAsync(Url(PeerServer.JoinStartPath), new { Topic = "open", Name = "stranger", Tool = "codex", Port = 49999, Commitment = JoinCode.Commit(JoinCode.NewNonce()) }, TestContext.Current.CancellationToken);
         Assert.True(started.IsSuccessStatusCode);
-        Assert.Equal(0, ana.Execute("topics", JsonSerializer.SerializeToElement(new { sessionId = "ana-session" })) is { Ok: true } ? 0 : 1);
+        // Starting a join adds nobody to the topic.
+        var topics = ana.Execute("topics", JsonSerializer.SerializeToElement(new { sessionId = "ana-session" }));
+        Assert.Equal(1, JsonSerializer.SerializeToElement(topics.Value)[0].GetProperty("Members").GetArrayLength());
     }
 
     [Fact]

@@ -337,8 +337,8 @@ public sealed class McpSteps {
         using var response = JsonDocument.Parse((await codex.HandleAsync("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/list\"}"))!);
         var names = response.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray().Select(t => t.GetProperty("name").GetString()!).Order().ToArray();
         Assert.Equal(["pigeon_join", "pigeon_leave", "pigeon_receive", "pigeon_send", "pigeon_session_restore", "pigeon_topics", "pigeon_wake_complete"], names);
-        var removed = await codex.HandleAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 10, method = "tools/call", @params = new { name = "pigeon_register", arguments = new { agent = "old" } } }));
-        Assert.Contains("\"error\"", removed);
+        var unknown = await codex.HandleAsync(JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 10, method = "tools/call", @params = new { name = "pigeon_unknown", arguments = new { } } }));
+        Assert.Contains("\"error\"", unknown);
     }
 
     [Then("tools other than join ask for a join first, the first join binds the session, and joining as another session is refused")]
