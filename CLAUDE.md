@@ -65,5 +65,5 @@ One executable, `pigeon` (`src/Pigeon.Cli`, a trimmed, compressed single-file bu
 
 ## Working in this repository
 
-- **One PR per job:** while a PR or branch for the current work is open, add related changes to it instead of opening another PR. Don't open a PR for unfinished work.
+- **Pull requests:** don't open a PR for unfinished work.
 - **Live tests:** use disposable databases (`PIGEON_DATABASE`), free ports (`PIGEON_PORT`) and synthetic sessions. Never target the user's running service or real sessions.
