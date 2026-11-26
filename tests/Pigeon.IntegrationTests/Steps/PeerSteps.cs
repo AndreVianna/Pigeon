@@ -19,11 +19,9 @@ public sealed partial class PeerSteps {
         var info = new ProcessStartInfo(TestTools.Pigeon) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, CreateNoWindow = true };
         foreach (var argument in arguments)
             info.ArgumentList.Add(argument);
-        if (who != "nobody") {
-            info.Environment["PIGEON_PORT"] = services[who].Port;
-            info.Environment["PIGEON_DATABASE"] = Path.Combine(directory, who + ".db");
-            info.Environment["PIGEON_IDENTITY_DIR"] = Path.Combine(directory, who + "-identity");
-        }
+        info.Environment["PIGEON_PORT"] = services[who].Port;
+        info.Environment["PIGEON_DATABASE"] = Path.Combine(directory, who + ".db");
+        info.Environment["PIGEON_IDENTITY_DIR"] = Path.Combine(directory, who + "-identity");
 
         using var process = Process.Start(info)!;
         if (input is not null)
@@ -173,13 +171,6 @@ public sealed partial class PeerSteps {
         await Eventually(async () => !(await Ok("bruno", "requests")).Contains(brunoRequest!));
         Assert.DoesNotContain("review@", await Ok("bruno", "topics"));
         Assert.DoesNotContain("bruno", await Ok("ana", "peer", "list"));
-    }
-
-    [Then("invalid peer, request and join commands exit with a usage error")]
-    public async Task Usage() {
-        foreach (var arguments in new[] { new[] { "peer" }, ["peer", "dance"], ["peer", "remove"], ["requests", "--show"], ["allow"], ["deny"], ["deny", "a", "b"],
-            ["join", "x", "as", "s", "using", "t", "--bogus"], ["join", "x", "as", "s", "using", "t", "--remote", "--remote"], ["topics", "on"] })
-            Assert.Equal(2, (await Run("nobody", null, arguments)).ExitCode);
     }
 
     [AfterScenario]

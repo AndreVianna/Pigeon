@@ -45,6 +45,16 @@ Feature: Command line without a service
       | send from x to design                         |
       | receive x from design                         |
       | sidecar codex                                 |
+      | peer                                          |
+      | peer dance                                    |
+      | peer remove                                   |
+      | requests --show                               |
+      | allow                                         |
+      | deny                                          |
+      | deny a b                                      |
+      | join x as s using t --bogus                   |
+      | join x as s using t --remote --remote         |
+      | topics on                                     |
 
   Scenario Outline: Antigravity hooks always answer, even without a service
     When I run Pigeon with arguments "<arguments>"
@@ -69,7 +79,3 @@ Feature: Command line without a service
   Scenario: A command without a running service says how to start it
     When I run a conversation command without a running service
     Then it fails with exit code 1 and suggests starting the service
-
-  @peers
-  Scenario: The peer commands validate their arguments
-    Then invalid peer, request and join commands exit with a usage error
