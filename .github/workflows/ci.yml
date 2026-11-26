@@ -35,8 +35,33 @@ jobs:
       - name: Build
         run: dotnet build Pigeon.slnx --configuration Release
 
-      - name: Test
-        run: dotnet test --solution Pigeon.slnx --configuration Release --no-build
+      # Unit tests only: the integration suite runs before a release (release.yml).
+      - name: Unit tests
+        if: runner.os != 'Windows'
+        run: dotnet test --project tests/Pigeon.UnitTests/Pigeon.UnitTests.csproj --configuration Release --no-build
+
+      # Coverage counts unit tests only. The gate stops it from dropping below the recorded level.
+      - name: Unit tests with coverage
+        if: runner.os == 'Windows'
+        run: dotnet test --project tests/Pigeon.UnitTests/Pigeon.UnitTests.csproj --configuration Release --no-build --coverage --coverage-output-format cobertura --coverage-output "${{ github.workspace }}/coverage/unit.cobertura.xml"
+
+      - name: Coverage gate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          MIN_LINE_COVERAGE: '43'
+        run: |
+          [xml]$report = Get-Content -Raw coverage/unit.cobertura.xml
+          $rate = [math]::Round([double]$report.coverage.'line-rate' * 100, 1)
+          $minimum = [double]$env:MIN_LINE_COVERAGE
+          "Unit-test line coverage: $rate % (minimum $minimum %, target 95 %)" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          if ($rate -lt $minimum) { throw "Unit-test line coverage fell to $rate %, below the recorded $minimum %." }
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: unit-coverage
+          path: coverage/unit.cobertura.xml
 
       # The OpenCode plugin's wake logic is TypeScript; Node runs it with type stripping.
       - uses: actions/setup-node@v4
