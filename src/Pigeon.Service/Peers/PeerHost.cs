@@ -25,6 +25,11 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
     private CancellationToken lifetime;
     private PeerDelivery? delivery;
     private long lastStatusPoll;
+    private IPeerLink? link;
+    private HttpsPeerLink? https;
+
+    // Reaches other machines through another link than HTTPS (the unit tests do it in memory).
+    internal PeerHost(Broker broker, IIdentityStore store, IPeerLink link) : this(broker, store) => this.link = link;
 
     public async Task RunAsync(CancellationToken cancellation) {
         lifetime = cancellation;
@@ -32,20 +37,29 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
             await ApplyListenerSafelyAsync();
         while (!cancellation.IsCancellationRequested) {
             try {
-                await JoinsAsync(cancellation);
-                if (identity is { } current)
-                    _ = await (delivery ??= new PeerDelivery(broker, current, ListenPort)).TickAsync(cancellation);
+                await PassAsync(cancellation);
                 await Task.Delay(1000, cancellation);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         }
 
-        delivery?.Dispose();
+        https?.Dispose();
         await StopListenerAsync();
     }
 
+    // One pass of the requesting side of joins and of delivery, once other machines are used.
+    internal async Task PassAsync(CancellationToken cancellation) {
+        await JoinsAsync(cancellation);
+        if (identity is not null)
+            _ = await (delivery ??= new PeerDelivery(broker, Link())).TickAsync(cancellation);
+    }
+
     private ServiceIdentity Identity() => identity ??= ServiceIdentity.LoadOrCreate(store);
+    private IPeerLink Link() => link ??= https = new HttpsPeerLink(Identity, ListenPort);
     private int ListenPort() => endpoints.Length == 0 ? 0 : endpoints[0].Port;
+
+    // A listener serving with this machine's identity, which it loads.
+    internal PeerServer Server(params IPEndPoint[] endpoints) => new(broker, Identity(), endpoints);
 
     // The computer's host name, tidied, until a person names the service.
     public static string DefaultName() => Mailbox.TidyName(Environment.MachineName);
@@ -56,7 +70,7 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
     private async Task JoinsAsync(CancellationToken cancellation) {
         foreach (var request in broker.OutgoingDue("contact")) {
             try {
-                var contact = await JoinClient.StartAsync(Identity(), request.Target, request.Known ? request.Fingerprint : null, request.Offered, Name(), request.Tool, ListenPort(), request.Nonce, cancellation);
+                var contact = await JoinClient.StartAsync(Link(), Identity().Fingerprint, request.Target, request.Known ? request.Fingerprint : null, request.Offered, Name(), request.Tool, ListenPort(), request.Nonce, cancellation);
                 if (contact.Fingerprint == Identity().Fingerprint)
                     throw new InvalidOperationException("that address is this machine.");
                 broker.OutgoingContacted(request, contact.Fingerprint, contact.Name, contact.Request, contact.Code, contact.NeedsCode);
@@ -72,9 +86,9 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
         lastStatusPoll = broker.Now();
         foreach (var request in broker.OutgoingDue("waiting")) {
             try {
-                var (state, tool) = await JoinClient.StatusAsync(Identity(), request.Target, request.Fingerprint!, request.RemoteId!, ListenPort(), cancellation);
-                if (state is "allowed" or "denied")
-                    broker.OutgoingAnswered(request, state, tool);
+                var status = await Link().JoinStatusAsync(request.Target, request.Fingerprint!, new JoinStatusRequest(request.RemoteId!), cancellation);
+                if (status.State is "allowed" or "denied")
+                    broker.OutgoingAnswered(request, status.State, status.Tool);
             }
             catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException or IOException && !cancellation.IsCancellationRequested) { }
         }
@@ -155,7 +169,7 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
         await StopListenerAsync();
         if (setting is null)
             return;
-        var server = new PeerServer(broker, Identity(), wanted);
+        var server = Server(wanted);
         listenerStop = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
         listener = server.RunAsync(listenerStop.Token);
         if (await Task.WhenAny(listener, server.Ready) == listener)
@@ -251,7 +265,7 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
         if (peer.Address is null)
             throw new InvalidOperationException($"No address is known for {machine}.");
         try {
-            return new { machine, topics = await JoinClient.TopicsAsync(Identity(), peer.Address, peer.Fingerprint, ListenPort(), lifetime) };
+            return new { machine, topics = await Link().TopicsAsync(peer.Address, peer.Fingerprint, lifetime) };
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException) {
             throw new InvalidOperationException($"{machine} could not be reached at {peer.Address}.", e);
