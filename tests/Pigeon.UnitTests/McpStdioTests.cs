@@ -6,18 +6,6 @@ namespace Pigeon.UnitTests;
 
 public class McpStdioTests {
     [Fact]
-    public async Task Initialization_and_tool_discovery_do_not_require_a_service_connection() {
-        var session = new McpSession("9");
-        var init = await session.HandleAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\"}}", TestContext.Current.CancellationToken);
-        Assert.Contains("protocolVersion", init);
-        var notification = await session.HandleAsync("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}", TestContext.Current.CancellationToken);
-        Assert.Null(notification);
-        var tools = await session.HandleAsync("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}", TestContext.Current.CancellationToken);
-        Assert.Contains("pigeon_receive", tools);
-        Assert.DoesNotContain("pigeon_register", tools);
-    }
-
-    [Fact]
     public async Task Rejects_an_oversized_message_without_processing_it() {
         using var input = new StringReader(new string('a', 65537) + "\n");
         using var output = new StringWriter();

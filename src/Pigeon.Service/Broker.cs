@@ -4,6 +4,8 @@ using Pigeon.Core;
 using Pigeon.Service.Peers;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Pigeon.UnitTests")]
+// The peer TLS scenarios host the peer listener in-process and open its topics directly.
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Pigeon.IntegrationTests")]
 
 namespace Pigeon.Service;
 

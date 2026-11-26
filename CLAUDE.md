@@ -17,8 +17,9 @@ dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
 ```
 
 - **Hook tests need a shell:** the Claude hook tests need `bash` and `sh`. On Windows that means Git Bash; set `PIGEON_TEST_BASH` if `bash.exe` is not in its usual place.
-- **CI** (`.github/workflows/ci.yml`) builds and tests on Windows, Ubuntu and macOS, and runs the two Node tests above.
-- **Integration tests** (`tests/Pigeon.IntegrationTests`, Reqnroll/Gherkin `.feature` files plus `Steps/`) start the real `pigeon` executable from the test output folder, each on a free port from `TestPorts`, so they never touch a running service.
+- **CI** (`.github/workflows/ci.yml`) builds on Windows, Ubuntu and macOS and runs the unit tests and the two Node tests. On Windows it also measures unit-test line coverage (`--coverage --coverage-output-format cobertura`) and fails below `MIN_LINE_COVERAGE`; raise that floor when coverage rises.
+- **Integration tests** (`tests/Pigeon.IntegrationTests`, Reqnroll/Gherkin `.feature` files plus `Steps/`) start the real `pigeon` executable from the test output folder, each on a free port from `TestPorts`, so they never touch a running service. CI runs them only before a release: the `integration` job in `release.yml` runs on a `v*` tag (the draft release waits for it) or by hand. Each feature's step class is bound by its tag (`[Scope(Tag = ...)]`). Run one feature with `--filter-class "*<FeatureTitle>Feature"`.
+- **Peer tests:** joins are unit-tested in memory through the `IPeerLink` port (`InMemoryPeerNetwork`); the real TLS handshake is tested in `PeerTls.feature`.
 
 ## Architecture
 
@@ -65,5 +66,5 @@ One executable, `pigeon` (`src/Pigeon.Cli`, a trimmed, compressed single-file bu
 
 ## Working in this repository
 
-- **One PR per job:** while a PR or branch for the current work is open, add related changes to it instead of opening another PR. Don't open a PR for unfinished work.
+- **Pull requests:** don't open a PR for unfinished work.
 - **Live tests:** use disposable databases (`PIGEON_DATABASE`), free ports (`PIGEON_PORT`) and synthetic sessions. Never target the user's running service or real sessions.

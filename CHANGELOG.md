@@ -91,7 +91,7 @@ Connects agents on different machines on the same network, including other peopl
 ### Added
 - **Topics open to other machines.** A session opens a topic with `remote: true` (`pigeon join … --remote`); another machine joins `<topic>@<address>` the first time and `<topic>@<machine>` after that. Only open topics with a free seat are listed, and only to known machines (`pigeon_topics` with `machine`, `pigeon topics on <machine>`).
 - **Join codes.** The first join between two machines fixes a 6-digit code from random values both sides commit to in turn, and from both certificates. The requesting person confirms the contact and sees the code; the listing person enters it; then the machines pin each other's certificate. Joins from a known machine get Allow or Deny.
-- **Prompts outside the conversation.** Pigeon's MCP server asks the person by MCP elicitation as soon as a request arrives, outside any tool call, so no model turn is spent. The model never sees a code. Every prompt has a 10-minute limit; no reply, Decline and Esc all mean Deny, and late or replayed answers are ignored. Checked in Claude Code, Codex, Copilot CLI and OpenCode with a probe (`experiments/elicitation-probe`).
+- **Prompts outside the conversation.** Pigeon's MCP server asks the person by MCP elicitation as soon as a request arrives, outside any tool call, so no model turn is spent. The model never sees a code. Every prompt has a 10-minute limit; no reply, Decline and Esc all mean Deny, and late or replayed answers are ignored. Checked in Claude Code, Codex, Copilot CLI and OpenCode with a probe (`docs/history/elicitation-probe.md`).
 - **Terminal fallback:** `pigeon requests [--show <request>]`, `pigeon allow <request> [<code>]` and `pigeon deny <request>`.
 - **Opt-in approval for local topics** (`approval: true`, `--approval`): a local joiner gives a code in the same way. Pigeon tells the waiting session who joined.
 - **Disconnecting:** leaving a remote topic ends it on both machines, and the other side is told.
@@ -115,7 +115,7 @@ Connects Pigeon services on different machines on the same network, including ot
 
 ## 0.6.0-alpha.2 (unreleased)
 
-Adds three hosts: the Antigravity App, host-tested in the Antigravity App 2.28 on Windows (A1–A8 in `experiments/host-test`), OpenCode 2, host-tested with OpenCode 2.2.5 on Windows (O1–O6), and GitHub Copilot, host-tested in VS Code 1.145 and the GitHub Copilot app on Windows (C1–C6).
+Adds three hosts: the Antigravity App, host-tested in the Antigravity App 2.28 on Windows (A1–A8 in `docs/history/host-tests.md`), OpenCode 2, host-tested with OpenCode 2.2.5 on Windows (O1–O6), and GitHub Copilot, host-tested in VS Code 1.145 and the GitHub Copilot app on Windows (C1–C6).
 
 ### Added
 - An Antigravity plugin (`integrations/antigravity-plugin`) with the MCP server, a `connect` skill, hooks and a **Pigeon wake** sidecar.
@@ -145,7 +145,7 @@ First step toward 0.6.0: Pigeon runs on macOS and Linux. Not yet tried with Clau
 First stable release. It contains the changes of 0.5.0-beta.1 and 0.5.0-beta.2 below, with no further code changes. Coming from 0.1.0-alpha.19 or the 0.4/0.3 plugins, read "Changed" under beta.1: topics are now private conversations between two sessions, and the commands and agent tools are new.
 
 ### Tested
-- On 2026-11-03 the end-to-end host tests passed on beta.2 in Claude Desktop and Codex: a message wakes an idle Claude conversation; Claude and Codex exchange three rounds with no typing; a renewal after idle time re-arms the waiter; a killed hook shell orphans no waiter; one wake delivers messages from two topics; a third session is refused from a full topic. The 12-hour renewal, Codex recovery after close and restart, and Claude Desktop reopen were reported as passed by the repository owner. See the [host-test runbook](experiments/host-test/README.md).
+- On 2026-11-03 the end-to-end host tests passed on beta.2 in Claude Desktop and Codex: a message wakes an idle Claude conversation; Claude and Codex exchange three rounds with no typing; a renewal after idle time re-arms the waiter; a killed hook shell orphans no waiter; one wake delivers messages from two topics; a third session is refused from a full topic. The 12-hour renewal, Codex recovery after close and restart, and Claude Desktop reopen were reported as passed by the repository owner. See the [host-test runbook](docs/history/host-tests.md).
 
 ### Known limits
 - No application-level authentication; a session ID is a routing claim.

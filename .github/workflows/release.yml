@@ -208,9 +208,38 @@ jobs:
             artifacts/out/*.rpm
             artifacts/out/*.tar.gz
 
+  # The full integration suite runs before a release: on a v* tag, or by hand before tagging.
+  integration:
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # The Claude hook tests run under Git Bash on Windows and the system bash and sh elsewhere.
+      - name: Check Git Bash
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
+          if (-not (Test-Path $bash)) { throw "Git Bash not found at $bash" }
+          & $bash -c 'sh --version | head -1'
+
+      - name: Build
+        run: dotnet build Pigeon.slnx --configuration Release
+
+      - name: Integration tests
+        run: dotnet test --project tests/Pigeon.IntegrationTests/Pigeon.IntegrationTests.csproj --configuration Release --no-build
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, macos, linux]
+    needs: [windows, macos, linux, integration]
     runs-on: ubuntu-latest
     permissions:
       contents: write

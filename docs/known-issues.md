@@ -16,7 +16,7 @@ An agent app's Pigeon MCP server keeps `pigeon` running, so on Windows the insta
 
 ### Tried across two Windows machines only
 
-Agents on other machines were tried on 2026-11-07 between two Windows machines on a home Wi-Fi network, with Claude Desktop on both and Antigravity on one (host tests M1–M7 and D1–D7 in `experiments/host-test`); every build is also tested with two services on one machine over real TLS on loopback. Not yet tried: macOS, Linux, Tailscale, and the hosts that show Pigeon's prompts themselves (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
+Agents on other machines were tried on 2026-11-07 between two Windows machines on a home Wi-Fi network, with Claude Desktop on both and Antigravity on one (host tests M1–M7 and D1–D7 in [the host-test record](history/host-tests.md)); every release is also tested, before it is published, with two services on one machine over real TLS on loopback. Not yet tried: macOS, Linux, Tailscale, and the hosts that show Pigeon's prompts themselves (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
 
 ### Accepted limits of the join handshake
 
@@ -40,7 +40,7 @@ Claude sessions in the Claude desktop app cancel Pigeon's prompts without showin
 
 ### Tried only with a development copy
 
-The 0.6.0-alpha.2 host test (A1–A8 in `experiments/host-test`) ran a development copy of the plugin installed in a test workspace, with the sidecar installed on its own. Installing the production plugin globally (`agy plugin install`, with the plugin's own **Pigeon wake** sidecar) has not been tried. Antigravity CLI conversations have not been tried.
+The 0.6.0-alpha.2 host test (A1–A8 in [the host-test record](history/host-tests.md)) ran a development copy of the plugin installed in a test workspace, with the sidecar installed on its own. Installing the production plugin globally (`agy plugin install`, with the plugin's own **Pigeon wake** sidecar) has not been tried. Antigravity CLI conversations have not been tried.
 
 ### Waking needs the App and the sidecar
 
@@ -58,7 +58,7 @@ The service learns whether a conversation is idle only from its hooks. After the
 
 ### Tried only with a development copy
 
-The 0.6.0-alpha.2 host test (O1–O6 in `experiments/host-test`, OpenCode 2.2.5 on Windows) ran a development copy of the plugin installed in one test project. Installing the production plugin in `~/.config/opencode/plugins` has not been tried, and neither has macOS or Linux.
+The 0.6.0-alpha.2 host test (O1–O6 in [the host-test record](history/host-tests.md), OpenCode 2.2.5 on Windows) ran a development copy of the plugin installed in one test project. Installing the production plugin in `~/.config/opencode/plugins` has not been tried, and neither has macOS or Linux.
 
 ### OpenCode 2 only
 
@@ -72,7 +72,7 @@ The plugin runs inside OpenCode's shared background server, which the CLI and De
 
 ### Tried only with a development copy
 
-The 0.6.0-alpha.2 host test (C1–C6 in `experiments/host-test`) ran a development copy of the plugin, installed with `copilot plugin install` from a local path, in VS Code 1.145 and the GitHub Copilot app on Windows. Copilot CLI has not been tried. The CLI warns that installs from a local path are deprecated in favour of `plugin@marketplace`, so a release should publish the plugin through a marketplace.
+The 0.6.0-alpha.2 host test (C1–C6 in [the host-test record](history/host-tests.md)) ran a development copy of the plugin, installed with `copilot plugin install` from a local path, in VS Code 1.145 and the GitHub Copilot app on Windows. Copilot CLI has not been tried. The CLI warns that installs from a local path are deprecated in favour of `plugin@marketplace`, so a release should publish the plugin through a marketplace.
 
 ### Local chats in VS Code are not woken
 
