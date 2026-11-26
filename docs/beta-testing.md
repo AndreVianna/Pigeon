@@ -1,6 +1,6 @@
 # Help test Pigeon on macOS and Linux
 
-Pigeon 0.7.0-beta.2 is an exploratory beta. We especially need **macOS and Linux** testers: Pigeon has been tried with agents only on Windows so far. Try the steps your setup allows and [report what happened](https://github.com/AndreVianna/Pigeon/issues/new?template=beta-report.yml), including partial results and failures.
+Pigeon 0.7.0-beta.3 is an exploratory beta. We especially need **macOS and Linux** testers: Pigeon has been tried with agents only on Windows so far. Try the steps your setup allows and [report what happened](https://github.com/AndreVianna/Pigeon/issues/new?template=beta-report.yml), including partial results and failures.
 
 Use new test conversations and made-up messages, not real work or secrets. The local service has no authentication: another process on the machine can use a session ID to access messages. Test network sharing only on a trusted private network and a single-user machine. See [known issues](known-issues.md).
 
@@ -24,9 +24,9 @@ The release also includes `SHA256SUMS.txt`. If you verify downloads, compare you
 - **Fedora, RHEL or openSUSE:** `sudo dnf install ./pigeon-<version>.x86_64.rpm` (or `zypper install`).
 - **Other Linux:** unpack the `.tar.gz` and put `pigeon` in a folder on your `PATH`.
 
-**Updating:** from 0.7.0-beta.2 on, run `pigeon update --allow-pre-release` to install the next beta. Close your agent apps first, as above; on Linux and macOS it asks for your password through `sudo`. Version 0.7.0-beta.1 has no `update` command, so install beta.2 with its installer once.
+**Updating:** from 0.7.0-beta.2 on, run `pigeon update --allow-pre-release` to install the next beta. Close your agent apps first, as above; on Linux and macOS it asks for your password through `sudo`. Version 0.7.0-beta.1 has no `update` command, so install the current beta with its installer once.
 
-Then check it: `pigeon --version` should print `0.7.0-beta.2`. In a new terminal run `pigeon start` and `pigeon status`; the service and CLI versions should match. If `pigeon` is not found, report both the installer and the app or terminal that cannot find it. Desktop apps launched from the macOS Dock or a Linux launcher may see a different `PATH` from your shell.
+Then check it: `pigeon --version` should print `0.7.0-beta.3`. In a new terminal run `pigeon start` and `pigeon status`; the service and CLI versions should match. If `pigeon` is not found, report both the installer and the app or terminal that cannot find it. Desktop apps launched from the macOS Dock or a Linux launcher may see a different `PATH` from your shell.
 
 ## 2. Tests on one machine
 

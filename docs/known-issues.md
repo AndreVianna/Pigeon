@@ -1,6 +1,6 @@
 # Known issues and technical debt
 
-This list reflects 0.7.0-beta.2. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+This list reflects 0.7.0-beta.3. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
 
 ## Installers
 
