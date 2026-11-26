@@ -1,6 +1,9 @@
 @cli
-Feature: Command line
-  People run Pigeon with short sentence-like commands; help works without a service.
+Feature: Command line without a service
+  People run Pigeon with short sentence-like commands; help, usage errors and the Antigravity hooks work without a service.
+
+  Background:
+    Given no Pigeon service is running
 
   Scenario Outline: Root help is available through standard entry points
     When I run Pigeon with arguments "<arguments>"
@@ -63,14 +66,10 @@ Feature: Command line
   Scenario: The Antigravity sidecar stops when the process that started it exits
     Then a sidecar under two Git Bash shells exits when only the outer shell is killed
 
-  Scenario: A conversation through the command line survives a service restart and refuses a third session
-    Given an isolated background service
-    When two sessions join a topic and one sends a message
-    And the service is restarted
-    Then the topic still has both members and the other session receives the message once
-    And a third join, a send from a non-member and a receive from a non-member each fail with exit code 1 and a clear message
-    And the last session to leave deletes the topic
-
   Scenario: A command without a running service says how to start it
     When I run a conversation command without a running service
     Then it fails with exit code 1 and suggests starting the service
+
+  @peers
+  Scenario: The peer commands validate their arguments
+    Then invalid peer, request and join commands exit with a usage error

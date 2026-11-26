@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 
 using Reqnroll;
 
@@ -159,6 +161,22 @@ public sealed class CliSteps {
         Assert.Equal("", stdout);
         Assert.Contains("Error:", stderr);
         Assert.Contains("--help", stderr);
+    }
+
+    // A refused connection to 127.0.0.1 takes about 2 seconds on Windows, so this binds the port
+    // instead: it succeeds at once only when nothing is listening there.
+    [Given("no Pigeon service is running")]
+    public void NoService() {
+        var listener = new TcpListener(IPAddress.Loopback, int.Parse(port));
+        try {
+            listener.Start();
+        }
+        catch (SocketException e) {
+            Assert.Fail($"Something is already listening on 127.0.0.1:{port}: {e.Message}");
+        }
+        finally {
+            listener.Stop();
+        }
     }
 
     [Given("an isolated background service")]
