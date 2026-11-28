@@ -255,6 +255,12 @@ jobs:
       - name: Record installer hashes
         run: |
           cd installers
+          # GitHub replaces "~" with "." in uploaded asset names, so give the files the names it
+          # will publish and the checksum file lists what people download.
+          for f in *~*; do
+            [ -e "$f" ] || continue
+            mv "$f" "${f//\~/.}"
+          done
           sha256sum *.msi *.pkg *.deb *.rpm *.tar.gz > SHA256SUMS.txt
           sha256sum --check SHA256SUMS.txt
 
