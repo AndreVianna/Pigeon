@@ -1,6 +1,6 @@
 # Known issues and technical debt
 
-This list reflects 0.7.0-beta.3. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
+This list reflects 0.7.0-beta.4. A topic is a private conversation between two sessions, and a session ID is a routing claim, not an authenticated identity.
 
 ## Installers
 
@@ -16,7 +16,7 @@ An agent app's Pigeon MCP server keeps `pigeon` running, so on Windows the insta
 
 ### Tried across two Windows machines only
 
-Agents on other machines were tried on 2026-11-07 between two Windows machines on a home Wi-Fi network, with Claude Desktop on both and Antigravity on one (host tests M1–M7 and D1–D7 in [the host-test record](history/host-tests.md)); every release is also tested, before it is published, with two services on one machine over real TLS on loopback. Not yet tried: macOS, Linux, Tailscale, and the hosts that show Pigeon's prompts themselves (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
+Agents on other machines were tried on 2026-11-07 between two Windows machines on a home Wi-Fi network, with Claude Desktop on both and Antigravity on one (host tests M1–M7 and D1–D7 in [the host-test record](history/host-tests.md)); every release is also tested, before it is published, with two services on one machine over real TLS on loopback. On 2026-11-27, 0.7.0-beta.3 was also tried between a Windows machine and an Ubuntu 24.04 machine over a VPN, from the command line and with a Claude Code session on the Linux side. Not yet tried: macOS, Tailscale, and the hosts that show Pigeon's prompts themselves (Claude Code in a terminal, Codex, Copilot, OpenCode) across machines.
 
 ### Accepted limits of the join handshake
 
@@ -84,9 +84,9 @@ The wake depends on Copilot extensions, which the documentation calls experiment
 
 ## macOS and Linux
 
-### Not yet tried with Claude or Codex
+### Tried with Claude Code on Linux only
 
-0.6.0-alpha.1 runs on macOS and Linux and passes the automated tests there (CI on Ubuntu and macOS), including the hook waiter's parent watching and the hook wrapper under dash. It has not yet run with Claude Code or Codex on either system. In particular, desktop apps started from the macOS Dock or a Linux launcher may not see the `PATH` set in a shell profile, so they may not find `pigeon` in `~/.dotnet/tools`.
+0.7.0-beta.3 was tried on 2026-11-26 and 2026-11-27 with Claude Code 2.1.332 on Ubuntu 24.04 (x64, no display), in one-shot runs (`claude -p`) and interactively in tmux: the plugin connected, two sessions exchanged messages, and a wake took about 5 to 6 seconds from sending to the reply. The same test found the problems fixed in 0.7.0-beta.4 (see the changelog). Those fixes pass the automated tests, but 0.7.0-beta.4 itself has not yet run with a real agent on Linux, and its handling of the signals Claude Code sends there is covered by a scenario that runs only in the release workflow. Not yet tried: macOS with any agent, Codex or the desktop apps on Linux, and Pigeon's own windows on Linux. The automated tests pass on Ubuntu and macOS, including the hook waiter's parent watching and the hook wrapper under dash. In particular, desktop apps started from the macOS Dock or a Linux launcher may not see the `PATH` set in a shell profile, so they may not find `pigeon` in `~/.dotnet/tools`.
 
 ### Background service
 
@@ -99,6 +99,10 @@ The wake depends on Copilot extensions, which the documentation calls experiment
 The plugin requests a renewal turn after 12 idle hours and depends on Claude Desktop accepting the long hook timeout, delivering the turn, and running the Stop hook to arm a replacement. The short (3-minute) renewal passed host tests H2 and E3, and the user reported the 12-hour run (H4) as passed on 2026-11-03. Each renewal uses the session's model; an otherwise idle session can use up to two renewal turns per day.
 
 If the service is unavailable when renewal is due, a waiter that owned the session when it last reached the service still requests one renewal, so the next Stop hook re-arms a waiter that waits for the service to return. Messages remain queued, subject to their normal expiry and retry limits.
+
+### One-shot Claude Code runs and the waiter
+
+From 0.7.0-beta.4 the waiter of a Claude Code session leaves about 3 seconds after its MCP server closes, so a one-shot run (`claude -p`) no longer waits for Claude Code to kill the hook 30 seconds later. Limits: a one-shot run during a service outage still ends about 30 seconds late, because the close cannot be reported to a service that is down; a close is acted on only for 30 seconds, so a session resumed within that time can be left without a waiter until its next turn; and if a host restarts the MCP server and it takes longer than 3 seconds to report, the session is woken only after its next turn. During a service outage each turn adds one waiter until the service returns, the host exits or 12 hours pass; they collapse to one when the service is back.
 
 ### Waiter lifetime follows its launcher chain, within limits
 

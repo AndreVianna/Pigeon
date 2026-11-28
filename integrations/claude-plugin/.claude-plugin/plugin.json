@@ -1,7 +1,11 @@
 {
   "name": "pigeon",
-  "version": "0.7.0-beta.3",
-  "author": { "name": "Andre Vianna" },
+  "displayName": "Pigeon",
+  "version": "0.7.0-beta.4",
+  "description": "Private conversations between AI agent sessions, on this computer or with other machines.",
+  "author": { "name": "Andre Vianna", "url": "https://github.com/AndreVianna" },
+  "homepage": "https://andrevianna.github.io/Pigeon/",
+  "repository": "https://github.com/AndreVianna/Pigeon",
   "license": "MIT",
-  "description": "Private conversations between AI agent sessions, on this computer or with other machines."
+  "keywords": ["agents", "messaging", "mcp", "multi-agent", "claude-code", "codex"]
 }

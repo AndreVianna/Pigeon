@@ -2,6 +2,28 @@
 
 The CLI and the Claude, Codex, Antigravity, OpenCode and Copilot plugins share one version (see the README's developer section).
 
+## 0.7.0-beta.4 (2026-11-28)
+
+Fixes from the first tests with Claude Code on Linux (Ubuntu 24.04) and between a Windows machine and a Linux machine on a private network. In every case found, Pigeon had refused correctly where trust was at stake; what was wrong or missing was what it told the person or the agent.
+
+### Fixed
+- **Claude Code one-shot runs no longer end 30 seconds late.** Once its session was in a topic, `claude -p` exited about 30 seconds after its turn, because the hook waiter did not know the session had ended. Pigeon's MCP server now tells the service when it closes, also when the host ends it with a signal, as Claude Code does on Linux and macOS, and the waiter leaves about 3 seconds later.
+- **A wake that arrives just as a one-shot run ends is offered again** when the session reconnects, instead of two minutes later.
+- **The waiter leaves when there is nothing to watch**: after its session left its last topic, with nothing waiting and no join request of its own open.
+- **A join prompt answered in a terminal is withdrawn from the agent app** instead of staying on screen, and a late answer to it is dropped.
+- **A machine whose identity changed is reported everywhere it is used.** `pigeon requests` now shows the warning that a machine uses the name of one you know with another identity. When a known machine's address answers with another identity, `pigeon topics on`, `pigeon peer list`, `pigeon status` and the join outcome say so, and what to do, instead of "could not be reached". Nothing is sent to it, as before.
+- **`pigeon requests` shows how your requests ended** in the last 10 minutes: refused, wrong codes, not reachable, or joined. Before, a failed request just disappeared.
+- **`pigeon allow` and `pigeon deny` on a request that has ended** now fail with exit code 1 instead of printing "Ignored" with exit code 0.
+- **Join requests waiting when the service stops are not lost silently**: after the restart each waiting session is told to join again. Join codes are still never written to disk.
+
+### Changed
+- **Claude Code agents join with only the topic.** `pigeon_join` no longer needs the session ID from a shell command: Pigeon uses the session Claude Code named. The connect skill needs no shell, so it works in sessions where only Pigeon's tools are allowed. A session ID given explicitly still wins, and it remains a routing label, not authentication.
+- **Tool calls with wrong parameters get that tool's parameter list** in the answer, before anything reaches the service. Unknown parameter names are refused, not ignored.
+- **With the service not running, the tools say how to start it**: `pigeon start`, with the `PIGEON_PORT` to use when it is not the default. Nothing starts the service automatically.
+- **Sending to a remote topic by its short name** suggests the full one: `did you mean "d1@office-pc"?`
+- **`pigeon update` explains a refused request**: GitHub's anonymous rate limit, a refused `GITHUB_TOKEN`, or releases that cannot be read. The token is sent only to GitHub's API, never with a download.
+- **`SHA256SUMS.txt` lists the `.deb` files under the names GitHub publishes** (`pigeon_0.7.0.beta.4_amd64.deb`), so `sha256sum --check` works on downloaded files. Earlier releases list them with `~`.
+
 ## 0.7.0-beta.3 (2026-11-26)
 
 ### Changed
