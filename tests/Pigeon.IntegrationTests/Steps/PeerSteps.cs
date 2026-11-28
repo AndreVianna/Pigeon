@@ -160,10 +160,24 @@ public sealed partial class PeerSteps {
         Assert.Contains("Known machines: 0", await Ok("ana", "peer", "list"));
     }
 
+    // Seen in the beta.3 test: `pigeon allow` on an ended request printed "Ignored" and exited 0, and
+    // the asking side's `pigeon requests` said only "No requests are waiting."
+    [Then("allowing the request after it ended fails, and the asking side shows how it ended")]
+    public async Task AllowAfterEnd() {
+        var (exit, output, error) = await Run("ana", null, "allow", deniedRequest!, code!);
+        Assert.Equal(1, exit);
+        Assert.Contains($"Request {deniedRequest} has ended; see pigeon requests.", error + output);
+        var requests = await Ok("bruno", "requests");
+        Assert.Contains("Ended in the last 10 minutes:", requests);
+        Assert.Contains("The person at ana-laptop did not allow joining review.", requests);
+    }
+
+    private string? deniedRequest;
+
     [Then("a wrong code is refused and a denied request joins nothing")]
     public async Task Refusals() {
         await AskByAddress("review");
-        var id = await RequestId("ana", "wants to join review");
+        var id = deniedRequest = await RequestId("ana", "wants to join review");
         var (exit, output, _) = await Run("ana", null, "allow", id, code == "000000" ? "111111" : "000000");
         Assert.Equal(1, exit);
         Assert.Contains("does not match", output);

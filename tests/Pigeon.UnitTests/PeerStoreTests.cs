@@ -171,6 +171,15 @@ public sealed class PeerStoreTests : IDisposable {
         Assert.Empty(bruno.Take("bruno-session", "review@ana-laptop"));
     }
 
+    // Seen in the beta.3 test: after joining d1@vm-test, sending to d1 gave no hint of the full name.
+    [Fact]
+    public void A_missing_membership_points_to_the_remote_topic_of_the_same_name() {
+        Link();
+        Assert.Equal("Session bruno-session is not in topic \"review\"; did you mean \"review@ana-laptop\"?",
+            Assert.Throws<InvalidOperationException>(() => bruno.Send("bruno-session", "review", "hi", "k1", Expires)).Message);
+        Assert.Equal("Session bruno-session is not in topic \"other\".", Assert.Throws<InvalidOperationException>(() => bruno.Take("bruno-session", "other")).Message);
+    }
+
     public void Dispose() {
         ana.Dispose();
         bruno.Dispose();

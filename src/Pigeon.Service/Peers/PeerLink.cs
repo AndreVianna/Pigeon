@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Security;
+using System.Runtime.CompilerServices;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -19,7 +20,8 @@ internal sealed record JoinStartRequest(string Topic, string Name, string? Tool,
 internal sealed record JoinStartResponse(string Request, string Nonce, string Name, bool NeedsCode);
 internal sealed record JoinRevealRequest(string Request, string Nonce);
 internal sealed record JoinStatusRequest(string Request);
-internal sealed record JoinStatusResponse(string State, string? Tool);
+// Reason, from the listing machine, only selects between fixed texts ("wrong-codes"); it is never shown as received.
+internal sealed record JoinStatusResponse(string State, string? Tool, string? Reason = null);
 internal sealed record TopicsResponse(string[] Topics);
 
 // The peer listener (see docs/remote-design.md): a separate HTTPS endpoint, off until a person turns
@@ -150,8 +152,8 @@ public sealed class PeerServer(Broker broker, ServiceIdentity identity, IPEndPoi
         => reveal is not null && broker.JoinReveal(identity.Fingerprint, fingerprint, reveal.Request, Convert.FromBase64String(reveal.Nonce));
 
     internal JoinStatusResponse JoinStatus(string fingerprint, JoinStatusRequest? status) {
-        var (state, tool) = status is null ? ("denied", null) : broker.JoinStatus(fingerprint, status.Request);
-        return new JoinStatusResponse(state, tool);
+        var (state, tool, reason) = status is null ? ("denied", null, null) : broker.JoinStatus(fingerprint, status.Request);
+        return new JoinStatusResponse(state, tool, reason);
     }
 
     internal TopicsResponse Topics() => new(broker.ListedTopics());
@@ -186,7 +188,8 @@ internal sealed class PeerRateLimit {
 
 // What this machine asks of another one, in the peer protocol's terms. HttpsPeerLink is the real
 // one; the unit tests connect two services in memory. A machine that cannot be reached, fails the
-// handshake or fails a request throws HttpRequestException.
+// handshake or fails a request throws HttpRequestException; one that answers at the address with
+// another identity than the pinned one throws PeerIdentityException.
 internal interface IPeerLink {
     // The first request of a join. With no expected fingerprint (a first contact) any machine may
     // answer; the result names the machine that did, also when it is not the expected one.
@@ -197,6 +200,12 @@ internal interface IPeerLink {
     Task<string[]> TopicsAsync(string address, string fingerprint, CancellationToken cancellation);
     // The outcome of each item, or null when the machine gave none.
     Task<string[]?> DeliverAsync(string address, string fingerprint, PeerItem[] items, CancellationToken cancellation);
+}
+
+// The machine at a known machine's address presented another identity than the pinned one: it was
+// reinstalled, or another machine answers there. Nothing was sent to it.
+internal sealed class PeerIdentityException(string presented) : HttpRequestException("The machine answered with another identity than the pinned one.") {
+    public string Presented { get; } = presented;
 }
 
 // Which machine answered the start of a join (null if none presented itself), and how: Refused, for
@@ -230,8 +239,19 @@ internal sealed class HttpsPeerLink(Func<ServiceIdentity> identity, Func<int> li
         return client;
     }
 
-    // Delivery keeps a client per machine; the other requests use one each.
-    private readonly Dictionary<string, HttpClient> clients = new(StringComparer.Ordinal);
+    // Delivery keeps a client per machine, with the identity its last handshake presented; the other
+    // requests use one each.
+    private readonly Dictionary<string, (HttpClient Client, StrongBox<string?> Presented)> clients = new(StringComparer.Ordinal);
+
+    // A failed handshake in which the machine presented another identity than the pinned one.
+    private static async Task<T> PinnedAsync<T>(string fingerprint, Func<string?> presented, Func<Task<T>> request) {
+        try {
+            return await request();
+        }
+        catch (HttpRequestException e) when (e is not PeerIdentityException && presented() is { } other && other != fingerprint) {
+            throw new PeerIdentityException(other);
+        }
+    }
 
     public async Task<JoinStarted> StartJoinAsync(string address, string? expectedFingerprint, JoinStartRequest start, CancellationToken cancellation) {
         string? presented = null;
@@ -251,34 +271,49 @@ internal sealed class HttpsPeerLink(Func<ServiceIdentity> identity, Func<int> li
     }
 
     public async Task<bool> RevealJoinAsync(string address, string fingerprint, JoinRevealRequest reveal, CancellationToken cancellation) {
-        using var pinned = ClientFor(identity(), fingerprint, port: listenPort());
-        using var revealed = await pinned.PostAsJsonAsync($"https://{address}{PeerServer.JoinRevealPath}", reveal, cancellation);
-        return revealed.IsSuccessStatusCode;
+        string? presented = null;
+        using var pinned = ClientFor(identity(), fingerprint, f => presented = f, listenPort());
+        return await PinnedAsync(fingerprint, () => presented, async () => {
+            using var revealed = await pinned.PostAsJsonAsync($"https://{address}{PeerServer.JoinRevealPath}", reveal, cancellation);
+            return revealed.IsSuccessStatusCode;
+        });
     }
 
     public async Task<JoinStatusResponse> JoinStatusAsync(string address, string fingerprint, JoinStatusRequest status, CancellationToken cancellation) {
-        using var client = ClientFor(identity(), fingerprint, port: listenPort());
-        using var response = await client.PostAsJsonAsync($"https://{address}{PeerServer.JoinStatusPath}", status, cancellation);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<JoinStatusResponse>(cancellation) ?? throw new JsonException();
+        string? presented = null;
+        using var client = ClientFor(identity(), fingerprint, f => presented = f, listenPort());
+        return await PinnedAsync(fingerprint, () => presented, async () => {
+            using var response = await client.PostAsJsonAsync($"https://{address}{PeerServer.JoinStatusPath}", status, cancellation);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<JoinStatusResponse>(cancellation) ?? throw new JsonException();
+        });
     }
 
     public async Task<string[]> TopicsAsync(string address, string fingerprint, CancellationToken cancellation) {
-        using var client = ClientFor(identity(), fingerprint, port: listenPort());
-        using var response = await client.PostAsJsonAsync($"https://{address}{PeerServer.TopicsPath}", new { }, cancellation);
-        response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadFromJsonAsync<TopicsResponse>(cancellation))?.Topics ?? [];
+        string? presented = null;
+        using var client = ClientFor(identity(), fingerprint, f => presented = f, listenPort());
+        return await PinnedAsync(fingerprint, () => presented, async () => {
+            using var response = await client.PostAsJsonAsync($"https://{address}{PeerServer.TopicsPath}", new { }, cancellation);
+            response.EnsureSuccessStatusCode();
+            return (await response.Content.ReadFromJsonAsync<TopicsResponse>(cancellation))?.Topics ?? [];
+        });
     }
 
     public async Task<string[]?> DeliverAsync(string address, string fingerprint, PeerItem[] items, CancellationToken cancellation) {
-        if (!clients.TryGetValue(fingerprint, out var client))
-            clients[fingerprint] = client = ClientFor(identity(), fingerprint, port: listenPort());
-        using var response = await client.PostAsJsonAsync($"https://{address}{PeerServer.DeliverPath}", new DeliverRequest(items), cancellation);
-        return response.IsSuccessStatusCode ? (await response.Content.ReadFromJsonAsync<DeliverResponse>(cancellation))?.Results : null;
+        if (!clients.TryGetValue(fingerprint, out var pinned)) {
+            var box = new StrongBox<string?>();
+            clients[fingerprint] = pinned = (ClientFor(identity(), fingerprint, f => box.Value = f, listenPort()), box);
+        }
+
+        pinned.Presented.Value = null;
+        return await PinnedAsync(fingerprint, () => pinned.Presented.Value, async () => {
+            using var response = await pinned.Client.PostAsJsonAsync($"https://{address}{PeerServer.DeliverPath}", new DeliverRequest(items), cancellation);
+            return response.IsSuccessStatusCode ? (await response.Content.ReadFromJsonAsync<DeliverResponse>(cancellation))?.Results : null;
+        });
     }
 
     public void Dispose() {
-        foreach (var client in clients.Values)
+        foreach (var (client, _) in clients.Values)
             client.Dispose();
     }
 }
@@ -294,6 +329,10 @@ internal sealed class PeerDelivery(Broker broker, IPeerLink link) {
                 var now = broker.Now();
                 var payload = items.Select(i => new PeerItem(i.Kind, i.Offered, i.MessageId, i.SenderTool, i.Body, Math.Max(0, i.ExpiresUnixMs - now))).ToArray();
                 results = await link.DeliverAsync(peer.Address!, peer.Fingerprint, payload, cancellation);
+                broker.PeerAnswered(peer.Fingerprint);
+            }
+            catch (PeerIdentityException e) {
+                _ = broker.PeerIdentityChanged(peer.Fingerprint, e.Presented);
             }
             catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException or IOException && !cancellation.IsCancellationRequested) { }
 
@@ -318,12 +357,12 @@ internal static class JoinClient {
         try {
             started = await link.StartJoinAsync(address, expectedFingerprint, new JoinStartRequest(topic, myName, tool, myPort, JoinCode.Commit(nonce)), cancellation);
         }
-        catch (HttpRequestException e) {
+        catch (HttpRequestException e) when (e is not PeerIdentityException) {
             throw new InvalidOperationException($"{address} could not be reached, or no Pigeon there accepts requests (it may have no topic open to other machines, or run an older Pigeon).", e);
         }
 
         if (expectedFingerprint is not null && started.Fingerprint is { } other && other != expectedFingerprint)
-            throw new InvalidOperationException($"the machine at {address} has a different identity than the one you joined before. If it was reinstalled, remove it with pigeon peer remove <name> and join it again by address.");
+            throw new PeerIdentityException(other);
         if (started.Refused || started.Fingerprint is not { } presented)
             throw new InvalidOperationException(started.Busy ? $"{address} is receiving too many requests; try again in a minute." : $"{address} refused the request.");
         var start = started.Answer ?? throw new InvalidOperationException($"{address} sent no answer.");

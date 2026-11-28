@@ -343,6 +343,8 @@ internal static class ServiceCommands {
                 foreach (var peer in paired) {
                     var contact = peer.GetProperty("LastContactUnixMs");
                     Console.WriteLine($"  {peer.GetProperty("Name").GetString()} | last contact: {(contact.ValueKind == JsonValueKind.Number ? DateTimeOffset.FromUnixTimeMilliseconds(contact.GetInt64()).ToString("u") : "never")} | waiting to send: {peer.GetProperty("outbox").GetInt32()}");
+                    if (PeerCommands.Identity(peer) is { } identity)
+                        Console.WriteLine("    " + identity);
                 }
             }
         }

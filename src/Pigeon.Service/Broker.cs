@@ -46,6 +46,7 @@ public sealed partial class Broker : IDisposable {
         mailbox = new Mailbox(databasePath, clock, maxAttempts, maxMessagesPerHour, maxWakeAttempts, wakeRetryMilliseconds, leaseMilliseconds);
         try {
             mailbox.TouchAll();
+            EndRequestsOfLastRun();
         }
         catch {
             mailbox.Dispose();
@@ -330,14 +331,44 @@ public sealed partial class Broker : IDisposable {
     }
 
     internal bool RemovePeer(string name) {
-        lock (gate)
+        lock (gate) {
+            if (mailbox.PeerByName(name) is { } peer)
+                _ = changedIdentities.Remove(peer.Fingerprint);
             return mailbox.RemovePeer(name);
+        }
     }
 
     internal void SetPeerAddress(string name, string address) {
-        lock (gate)
+        lock (gate) {
             mailbox.SetPeerAddress(name, address);
+            if (mailbox.PeerByName(name) is { } peer)
+                _ = changedIdentities.Remove(peer.Fingerprint);
+        }
     }
+
+    // Known machines whose address answered with another identity than the pinned one (see
+    // PeerIdentityException), with the identity that answered. Kept only in memory; a new address or
+    // any answer from the pinned identity clears it.
+    private readonly Dictionary<string, string> changedIdentities = new(StringComparer.Ordinal);
+
+    // The text for a known machine whose identity changed; null for a machine that is not known.
+    internal string? PeerIdentityChanged(string fingerprint, string presented) {
+        lock (gate) {
+            if (mailbox.PeerByFingerprint(fingerprint) is not { } peer)
+                return null;
+            changedIdentities[fingerprint] = presented;
+            return IdentityProblem(peer);
+        }
+    }
+
+    internal void PeerAnswered(string fingerprint) {
+        lock (gate)
+            _ = changedIdentities.Remove(fingerprint);
+    }
+
+    private string? IdentityProblem(PeerInfo peer) => !changedIdentities.TryGetValue(peer.Fingerprint, out var presented) ? null
+        : mailbox.PeerByFingerprint(presented) is { } other && other.Fingerprint != peer.Fingerprint ? Phrases.AddressMoved(peer.Name, other.Name)
+        : Phrases.IdentityChanged(peer.Name);
 
     // What `pigeon peer list` and `pigeon status` show.
     internal object PeerOverview(string? fingerprint, string[] addresses) {
@@ -348,7 +379,7 @@ public sealed partial class Broker : IDisposable {
                 listen = mailbox.Setting("listen"),
                 addresses,
                 fingerprint,
-                peers = mailbox.Peers().Select(p => new { p.Name, p.Address, p.Fingerprint, p.LastContactUnixMs, outbox = mailbox.OutboxCount(p.Fingerprint) }).ToArray(),
+                peers = mailbox.Peers().Select(p => new { p.Name, p.Address, p.Fingerprint, p.LastContactUnixMs, outbox = mailbox.OutboxCount(p.Fingerprint), identity = IdentityProblem(p) }).ToArray(),
                 listed = mailbox.ListedTopics(),
                 shares = mailbox.Shares(),
                 requests = incoming.Values.Count(r => r.State == "open") + outgoing.Values.Count(r => r.State is "confirm" or "contact" or "waiting") + localJoins.Values.Count(r => r.State == "open")
@@ -441,4 +472,13 @@ public static class Phrases {
         "queued-for-peer" => "On its way to the other machine: Pigeon delivers it within seconds while that machine is reachable, and keeps trying for up to 24 hours if it is not.",
         _ => $"The recipient is unavailable: nobody else is in {topic}. Your message is held until someone joins (up to 24 hours)."
     };
+
+    // A machine asking to join under the name of a known machine, with another identity.
+    public static string ChangedName(string name) => $"It calls itself {name}, the name of a machine you know, but its identity is different: it was reinstalled, or it is another machine. If it was reinstalled, remove the old one first: pigeon peer remove {name}.";
+
+    // A known machine's address answered with another identity than the pinned one.
+    public static string IdentityChanged(string name) => $"{name}'s identity changed: it was reinstalled, or another machine answers at its address. Nothing is sent to it. If it was reinstalled, remove it with pigeon peer remove {name} and join again by address.";
+
+    // ... and the identity that answered is another known machine's.
+    public static string AddressMoved(string name, string other) => $"{name}'s address now answers as {other}, another machine you know: the addresses moved. Nothing is sent to {name}. Set its new address with pigeon peer address {name} <address>.";
 }
