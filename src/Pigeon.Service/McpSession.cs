@@ -8,7 +8,10 @@ namespace Pigeon.Service;
 // it never opens a database or starts a service of its own. The connection binds to one
 // session the first time it joins or restores, and cannot change it afterwards.
 public sealed class McpSession {
+    // The service's local API, a port so tests can stand in for it.
+    public delegate Task<JsonElement> ServiceCall(string operation, object args, bool slow, CancellationToken cancellation);
     private readonly string port;
+    private readonly ServiceCall service;
     private readonly string? runtime;
     private readonly object identityGate = new();
     private string? sessionId;
@@ -59,8 +62,9 @@ public sealed class McpSession {
 
     // runtime is the tool name configured by the plugin (PIGEON_RUNTIME). With a session ID from
     // the host, the connection restores a previously joined session automatically.
-    public McpSession(string port, string? runtime = null, string? autoRestoreSession = null, bool hostShowsPrompts = true, Func<DialogRequest, CancellationToken, Task<DialogOutcome>>? dialogs = null) {
+    public McpSession(string port, string? runtime = null, string? autoRestoreSession = null, bool hostShowsPrompts = true, Func<DialogRequest, CancellationToken, Task<DialogOutcome>>? dialogs = null, ServiceCall? service = null) {
         this.port = port;
+        this.service = service ?? ((operation, args, slow, cancellation) => LocalHttpClient.ExecuteAsync(port, operation, args, slow, cancellation));
         this.runtime = runtime;
         this.hostShowsPrompts = hostShowsPrompts;
         this.dialogs = dialogs;
@@ -79,8 +83,8 @@ public sealed class McpSession {
 
     private static bool Valid(string? value) => !string.IsNullOrWhiteSpace(value) && value.Length <= 256 && !value.Any(char.IsControl);
 
-    public Task<JsonElement> BridgeAsync(string operation, object args, CancellationToken cancellation) => LocalHttpClient.ExecuteAsync(port, operation, args, cancellation);
-    private Task<JsonElement> SlowBridgeAsync(string operation, object args, CancellationToken cancellation) => LocalHttpClient.ExecuteAsync(port, operation, args, slow: true, cancellation);
+    public Task<JsonElement> BridgeAsync(string operation, object args, CancellationToken cancellation) => service(operation, args, false, cancellation);
+    private Task<JsonElement> SlowBridgeAsync(string operation, object args, CancellationToken cancellation) => service(operation, args, true, cancellation);
 
     // The sessions whose prompts this connection may show.
     public string[] ServedSessions() {
@@ -123,7 +127,7 @@ public sealed class McpSession {
         var intent = Volatile.Read(ref pendingRestore);
         if (intent is null || SessionId is not null)
             return;
-        var response = await LocalHttpClient.ExecuteAsync(port, "session_restore", new { tool = intent.Tool, sessionId = intent.SessionId }, cancellation);
+        var response = await BridgeAsync("session_restore", new { tool = intent.Tool, sessionId = intent.SessionId }, cancellation);
         lock (identityGate) {
             if (sessionId is not null || pendingRestore != intent)
                 return;

@@ -301,6 +301,13 @@ public sealed partial class Broker {
         };
     }
 
+    // Whether a session here is waiting for the outcome of its own request to join.
+    private bool AsksToJoin(string session) {
+        ExpireRequests();
+        return outgoing.Values.Any(r => r.Session == session && r.State is "confirm" or "contact" or "waiting")
+            || localJoins.Values.Any(r => r.Session == session && r.State == "open");
+    }
+
     // `pigeon requests --show <id>`: the requesting side's code, for a person at a terminal.
     private object RequestCode(string id) {
         ExpireRequests();

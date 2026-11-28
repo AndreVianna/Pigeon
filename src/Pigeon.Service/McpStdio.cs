@@ -4,7 +4,9 @@ public sealed record McpOutboundNotification(string Json, Func<CancellationToken
 
 // The stdio bridge has no database path and never starts a private service.
 public static class McpStdio {
-    public static async Task RunAsync(TextReader input, TextWriter output, McpSession session, CancellationToken cancellation = default, Func<CancellationToken, Task<McpOutboundNotification?>>? nextNotification = null, string notificationMode = "codex-queue") {
+    public static async Task RunAsync(TextReader input, TextWriter output, McpSession session, CancellationToken cancellation = default, Func<CancellationToken, Task<McpOutboundNotification?>>? nextNotification = null, string notificationMode = "codex-queue", Func<TimeSpan, CancellationToken, Task>? delay = null) {
+        // The pause between polls; tests pass a shorter one.
+        delay ??= Task.Delay;
         using var stopped = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         using var writeGate = new SemaphoreSlim(1, 1);
         async Task WriteAsync(string line, CancellationToken token) {
@@ -20,7 +22,7 @@ public static class McpStdio {
 
         async Task NotificationsAsync() {
             while (!stopped.IsCancellationRequested) {
-                await Task.Delay(500, stopped.Token);
+                await delay(TimeSpan.FromMilliseconds(500), stopped.Token);
                 if (!session.IsReady || nextNotification is null)
                     continue;
                 McpOutboundNotification? notification;
@@ -64,7 +66,7 @@ public static class McpStdio {
                     catch (OperationCanceledException) when (!stopped.IsCancellationRequested) { }
                 }
 
-                await Task.Delay(3000, stopped.Token);
+                await delay(TimeSpan.FromSeconds(3), stopped.Token);
             }
         }
 
@@ -114,7 +116,7 @@ public static class McpStdio {
 
         async Task PromptsAsync() {
             while (!stopped.IsCancellationRequested) {
-                await Task.Delay(1000, stopped.Token);
+                await delay(TimeSpan.FromSeconds(1), stopped.Token);
                 if (!session.IsReady || !session.ShowsPrompts || session.ServedSessions() is not { Length: > 0 } sessions)
                     continue;
                 try {
@@ -169,6 +171,8 @@ public static class McpStdio {
                     await WriteAsync(reply, stopped.Token);
             }
         }
+        // Stopped by the host's signal: the cleanup below still reports the close.
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         finally {
             stopped.Cancel();
             try {
@@ -194,23 +198,28 @@ public static class McpStdio {
 
             try {
                 using var disconnectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-                _ = await session.BridgeAsync("bridge_disconnect", new { id = bridgeId }, disconnectTimeout.Token);
+                // Naming the session lets its Claude hook waiter leave once no server replaces this one.
+                _ = await session.BridgeAsync("bridge_disconnect", new { id = bridgeId, sessionId = session.SessionId }, disconnectTimeout.Token);
             }
             catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Text.Json.JsonException or OperationCanceledException) { }
         }
     }
 
-    private static async Task<string?> ReadLineAsync(TextReader input, CancellationToken cancellation) {
+    // The console's read blocks its thread and ignores cancellation, so the line is read on a pool
+    // thread and only the wait for it is cancelled; a stopped server leaves that read behind.
+    private static Task<string?> ReadLineAsync(TextReader input, CancellationToken cancellation)
+        => Task.Run(() => ReadLine(input), CancellationToken.None).WaitAsync(cancellation);
+
+    private static string? ReadLine(TextReader input) {
         const int limit = 65536;
         var text = new System.Text.StringBuilder();
-        var character = new char[1];
         while (true) {
-            var count = await input.ReadAsync(character.AsMemory(), cancellation);
-            if (count == 0) {
+            var next = input.Read();
+            if (next == -1) {
                 return text.Length == 0 ? null : throw new InvalidDataException("Incomplete MCP message.");
             }
 
-            if (character[0] == '\n') {
+            if (next == '\n') {
                 if (text.Length > 0 && text[^1] == '\r')
                     text.Length--;
                 return text.ToString();
@@ -218,7 +227,7 @@ public static class McpStdio {
 
             if (text.Length >= limit)
                 throw new InvalidDataException("MCP message exceeds the size limit.");
-            _ = text.Append(character[0]);
+            _ = text.Append((char)next);
         }
     }
 }

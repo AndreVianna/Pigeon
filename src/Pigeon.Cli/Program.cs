@@ -195,7 +195,20 @@ internal static class ServiceCommands {
             var desktopClaude = runtime == "claude-code" && Environment.GetEnvironmentVariable("CLAUDE_CODE_ENTRYPOINT") == "claude-desktop";
             var session = new McpSession(port, runtime, autoSession, hostShowsPrompts: !desktopClaude, dialogs: NativeDialog.ForThisMachine());
             var codexQueue = args.Length == 2 ? new CodexQueueNotifier(port, () => session.SessionId) : null;
-            await McpStdio.RunAsync(Console.In, Console.Out, session, nextNotification: codexQueue is null ? null : codexQueue.TickAsync);
+            // Claude Code on Linux and macOS ends its server with SIGINT, then SIGTERM about 100 ms
+            // later. Each signal stops the run instead of the process, so the server can still tell
+            // the service it closed; a second signal finds it already stopping.
+            using var closed = new CancellationTokenSource();
+            void Close(PosixSignalContext context) {
+                context.Cancel = true;
+                closed.Cancel();
+            }
+
+            using var interrupt = PosixSignalRegistration.Create(PosixSignal.SIGINT, Close);
+            using var terminate = PosixSignalRegistration.Create(PosixSignal.SIGTERM, Close);
+            using var hangUp = PosixSignalRegistration.Create(PosixSignal.SIGHUP, Close);
+            using var quit = PosixSignalRegistration.Create(PosixSignal.SIGQUIT, Close);
+            await McpStdio.RunAsync(Console.In, Console.Out, session, closed.Token, nextNotification: codexQueue is null ? null : codexQueue.TickAsync);
             return 0;
         }
 
