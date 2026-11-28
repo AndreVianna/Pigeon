@@ -268,6 +268,75 @@ public sealed class ClaudeHookWaitSteps {
         Assert.Contains("notification: none (last claude-hook expired at ", text);
     }
 
+    // Found in the 0.7.0-beta.3 test: `claude -p` closed its MCP server and killed the still running
+    // Stop hook 30 s later, so the run ended 30 s late.
+    [Then("a waiter leaves without output a few seconds after the session's MCP server reports it closed")]
+    public async Task ServerClosed() {
+        var waiter = await StartWaiter();
+        await WaitForOwner("claude-hook");
+        heartbeat.Cancel();
+        await heartbeats;
+        await Call("bridge_disconnect", new { id = bridgeId, sessionId = Reader });
+        var timer = Stopwatch.StartNew();
+        Assert.Equal(0, await Exit(waiter, 15));
+        Assert.True(timer.Elapsed >= TimeSpan.FromSeconds(2), timer.Elapsed.ToString());
+        Assert.Equal("", await waiter.Errors);
+        Assert.Equal("", await waiter.Output);
+    }
+
+    // Found in the 0.7.0-beta.3 test: after the agent left its only topic, the waiter kept running.
+    [Then("a waiter with hours left exits quietly right after its session leaves its only topic")]
+    public async Task LeftLastTopic() {
+        var waiter = await StartWaiter("reader-session", "--timeout", "43200", "--renew");
+        await WaitForOwner("claude-hook");
+        await Call("leave", new { sessionId = Reader, topic = "test" });
+        Assert.Equal(0, await Exit(waiter, 10));
+        Assert.Equal("", await waiter.Errors);
+        Assert.Equal("expired", (await Notifier()).GetProperty("lastRelease").GetProperty("reason").GetString());
+    }
+
+    // The first version of the fix stopped this waiter, so the session never heard the outcome.
+    [Then("a waiter for a session in no topic but asking to join one keeps waiting, and wakes the session with the outcome")]
+    public async Task PendingJoin() {
+        await Call("join", new { tool = "codex", sessionId = "opener-session", topic = "guarded", approval = true });
+        await Call("leave", new { sessionId = Reader, topic = "test" });
+        var pending = await Call("join", new { tool = "claude-code", sessionId = Reader, topic = "guarded" });
+        Assert.True(pending.GetProperty("pending").GetBoolean());
+        var waiter = await StartWaiter("reader-session", "--timeout", "43200", "--renew");
+        await WaitForOwner("claude-hook");
+        await Task.Delay(3000);
+        Assert.False(waiter.Process.HasExited);
+        await Call("request_deny", new { id = pending.GetProperty("request").GetString() });
+        Assert.Equal(2, await Exit(waiter, 15));
+        Assert.StartsWith("Pigeon wake generation ", await waiter.Errors);
+    }
+
+    [Then("one owner and three waiters started while the service is down collapse to one waiter when it returns, which wakes for a message")]
+    public async Task OutagePileUp() {
+        var waiters = new List<Waiter> { await StartWaiter() };
+        await WaitForOwner("claude-hook");
+        await StopService();
+        for (var i = 0; i < 3; i++)
+            waiters.Add(await StartWaiter());
+        await Task.Delay(1500);
+        Assert.All(waiters, w => Assert.False(w.Process.HasExited));
+        await StartService();
+        await WaitForBridge();
+        for (var i = 0; i < 60 && waiters.Count(w => !w.Process.HasExited) > 1; i++)
+            await Task.Delay(300);
+        await Task.Delay(2000);
+        var left = waiters.Where(w => w.Process.HasExited).ToArray();
+        var survivor = Assert.Single(waiters, w => !w.Process.HasExited);
+        foreach (var gone in left) {
+            Assert.Equal(0, gone.Process.ExitCode);
+            Assert.Equal("", await gone.Errors);
+        }
+
+        await Publish("after the outage");
+        Assert.Equal(2, await Exit(survivor, 15));
+        Assert.StartsWith("Pigeon wake generation ", await survivor.Errors);
+    }
+
     [Then("the bridge lookup finds only the session's own ordinary MCP bridge")]
     public async Task SessionBridgeLookup() {
         Assert.True((await Call("claude_session_bridges", new { sessionId = Reader })).GetBoolean());

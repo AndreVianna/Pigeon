@@ -10,7 +10,7 @@ namespace Pigeon.IntegrationTests.Steps;
 
 [Binding]
 [Scope(Tag = "mcp")]
-public sealed class McpSteps {
+public sealed class McpSteps(Reqnroll.UnitTestProvider.IUnitTestRuntimeProvider tests) {
     private readonly string directory = Path.Combine(Path.GetTempPath(), "pigeon-mcp-" + Guid.NewGuid().ToString("N"));
     private readonly string port = TestPorts.FreePort();
     private Broker? broker;
@@ -423,6 +423,56 @@ public sealed class McpSteps {
         _ = await Call(resumed, "pigeon_session_restore", new { tool = "claude-code", sessionId = hookSession });
         joined = await Ok(resumed, "pigeon_join", new { topic = "design" });
         Assert.Equal(hookSession, joined.GetProperty("Members")[0].GetProperty("SessionId").GetString());
+    }
+
+    // Found in the 0.7.0-beta.3 test on Ubuntu: without a handler the runtime ended the process at the
+    // first signal, so bridge_disconnect was never sent and `claude -p` exited 30 s late.
+    [Then("a pigeon mcp process for a joined Claude session that gets SIGINT and then SIGTERM exits, and the service reports the session's server closed")]
+    public async Task Signals() {
+        if (OperatingSystem.IsWindows())
+            tests.TestIgnore("POSIX signals exist only on Linux and macOS.");
+        _ = await Ok(claude, "pigeon_join", new { topic = "review", sessionId = ClaudeSession });
+        var start = new System.Diagnostics.ProcessStartInfo(TestTools.Pigeon) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        start.ArgumentList.Add("mcp");
+        start.Environment["PIGEON_PORT"] = port;
+        start.Environment["PIGEON_RUNTIME"] = "claude-code";
+        start.Environment["CLAUDE_CODE_SESSION_ID"] = ClaudeSession;
+        using var server = System.Diagnostics.Process.Start(start)!;
+        try {
+            _ = server.StandardOutput.ReadToEndAsync();
+            _ = server.StandardError.ReadToEndAsync();
+            await server.StandardInput.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\"}}");
+            await server.StandardInput.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+            await server.StandardInput.FlushAsync();
+            var connected = false;
+            for (var i = 0; i < 40 && !connected; i++) {
+                await Task.Delay(250);
+                connected = (await LocalHttpClient.ExecuteAsync(port, "claude_session_bridges", new { sessionId = ClaudeSession })).GetProperty("Value").GetBoolean();
+            }
+
+            Assert.True(connected, "The pigeon mcp process never connected for its session.");
+            // The process stays blocked reading its open input, as under Claude Code.
+            async Task Signal(string name) {
+                using var kill = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("kill") { ArgumentList = { "-" + name, server.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) }, UseShellExecute = false, CreateNoWindow = true })!;
+                await kill.WaitForExitAsync();
+            }
+
+            await Signal("INT");
+            await Task.Delay(100);
+            await Signal("TERM");
+            await server.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            var closed = false;
+            for (var i = 0; i < 40 && !closed; i++) {
+                await Task.Delay(250);
+                closed = (await LocalHttpClient.ExecuteAsync(port, "claude_session_closed", new { sessionId = ClaudeSession })).GetProperty("Value").GetBoolean();
+            }
+
+            Assert.True(closed, "The service never reported the session's server closed.");
+        }
+        finally {
+            if (!server.HasExited)
+                server.Kill();
+        }
     }
 
     [Then("the HTTP endpoint rejects browser origins and non-loopback hostnames")]

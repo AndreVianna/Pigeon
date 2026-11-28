@@ -30,5 +30,14 @@ Feature: Claude hook waiter
   Scenario: A waiter whose outer hook shell is killed stops instead of claiming wakes
     Then a waiter under two Git Bash shells exits as orphaned when only the outer shell is killed, and a later message is not claimed
 
+  Scenario: A waiter leaves once its session's MCP server closed and none replaced it
+    Then a waiter leaves without output a few seconds after the session's MCP server reports it closed
+
+  Scenario: A waiter leaves as soon as its session leaves its last topic
+    Then a waiter with hours left exits quietly right after its session leaves its only topic
+
+  Scenario: A waiter stays while its session waits for its own join request
+    Then a waiter for a session in no topic but asking to join one keeps waiting, and wakes the session with the outcome
+
   Scenario: Status reports versions and a session that never had a notifier
     Then status names the service and CLI versions and flags that no notifier was seen for the session
