@@ -114,6 +114,33 @@ public static class McpStdio {
             }
         }
 
+        // Prompts sent to the host and not yet answered, and those withdrawn because their request
+        // ended elsewhere (in a terminal, another window, or by expiring), whose late replies are dropped.
+        var asked = new HashSet<string>(StringComparer.Ordinal);
+        var withdrawn = new HashSet<string>(StringComparer.Ordinal);
+        async Task WithdrawEndedPromptsAsync() {
+            string[] showing;
+            lock (asked)
+                showing = [.. asked];
+            if (showing.Length == 0)
+                return;
+            var open = await session.BridgeAsync("prompts_open", new { ids = showing }, stopped.Token);
+            if (!open.GetProperty("Ok").GetBoolean())
+                return;
+            var still = open.GetProperty("Value").EnumerateArray().Select(e => e.GetString()).ToHashSet(StringComparer.Ordinal);
+            foreach (var id in showing.Where(id => !still.Contains(id))) {
+                lock (asked) {
+                    if (!asked.Remove(id))
+                        continue;
+                    if (withdrawn.Count >= 256)
+                        withdrawn.Clear();
+                    _ = withdrawn.Add(id);
+                }
+
+                await WriteAsync(McpSession.PromptWithdrawal(id), stopped.Token);
+            }
+        }
+
         async Task PromptsAsync() {
             while (!stopped.IsCancellationRequested) {
                 await delay(TimeSpan.FromSeconds(1), stopped.Token);
@@ -122,6 +149,8 @@ public static class McpStdio {
                 try {
                     if (session.UsesDialogs)
                         await CloseEndedWindowsAsync();
+                    else
+                        await WithdrawEndedPromptsAsync();
                     var next = await session.BridgeAsync("prompts_next", new { bridgeId, sessions }, stopped.Token);
                     if (!next.GetProperty("Ok").GetBoolean())
                         continue;
@@ -130,6 +159,11 @@ public static class McpStdio {
                         var message = prompt.GetProperty("message").GetString()!;
                         var codeField = prompt.GetProperty("code").GetBoolean();
                         if (!session.UsesDialogs) {
+                            lock (asked) {
+                                _ = asked.Add(id);
+                                _ = withdrawn.Remove(id);
+                            }
+
                             await WriteAsync(McpSession.PromptRequest(id, message, codeField), stopped.Token);
                             continue;
                         }
@@ -159,6 +193,14 @@ public static class McpStdio {
                 if (line is null)
                     return;
                 if (McpSession.PromptReply(line) is { } answer) {
+                    bool late;
+                    lock (asked) {
+                        _ = asked.Remove(answer.Id);
+                        late = withdrawn.Remove(answer.Id);
+                    }
+
+                    if (late)
+                        continue;
                     try {
                         _ = await session.BridgeAsync("prompt_answer", new { id = answer.Id, action = answer.Action, code = answer.Code }, stopped.Token);
                     }

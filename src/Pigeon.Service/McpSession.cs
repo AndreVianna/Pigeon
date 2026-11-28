@@ -108,6 +108,13 @@ public sealed class McpSession {
         }
     });
 
+    // Takes back a prompt whose request ended elsewhere: MCP's cancellation of a request this server sent.
+    public static string PromptWithdrawal(string id) => JsonSerializer.Serialize(new {
+        jsonrpc = "2.0",
+        method = "notifications/cancelled",
+        @params = new { requestId = PromptPrefix + id, reason = "The request was answered or ended elsewhere." }
+    });
+
     // The person's answer to a prompt, or null when the line is anything else.
     public static (string Id, string Action, string? Code)? PromptReply(string line) {
         try {
