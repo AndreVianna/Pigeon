@@ -75,6 +75,9 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
                     throw new InvalidOperationException("that address is this machine.");
                 broker.OutgoingContacted(request, contact.Fingerprint, contact.Name, contact.Request, contact.Code, contact.NeedsCode);
             }
+            catch (PeerIdentityException e) when (request.Known) {
+                broker.OutgoingIdentityChanged(request, e.Presented);
+            }
             catch (Exception e) when (e is InvalidOperationException or HttpRequestException or TaskCanceledException or JsonException or IOException or FormatException && !cancellation.IsCancellationRequested) {
                 broker.OutgoingFailed(request, e is InvalidOperationException ? e.Message : $"{request.Target} could not be reached.");
             }
@@ -87,8 +90,12 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
         foreach (var request in broker.OutgoingDue("waiting")) {
             try {
                 var status = await Link().JoinStatusAsync(request.Target, request.Fingerprint!, new JoinStatusRequest(request.RemoteId!), cancellation);
+                broker.PeerAnswered(request.Fingerprint!);
                 if (status.State is "allowed" or "denied")
-                    broker.OutgoingAnswered(request, status.State, status.Tool);
+                    broker.OutgoingAnswered(request, status.State, status.Tool, status.Reason);
+            }
+            catch (PeerIdentityException e) when (request.Known) {
+                broker.OutgoingIdentityChanged(request, e.Presented);
             }
             catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException or IOException && !cancellation.IsCancellationRequested) { }
         }
@@ -265,7 +272,12 @@ public sealed partial class PeerHost(Broker broker, IIdentityStore store) : IDis
         if (peer.Address is null)
             throw new InvalidOperationException($"No address is known for {machine}.");
         try {
-            return new { machine, topics = await Link().TopicsAsync(peer.Address, peer.Fingerprint, lifetime) };
+            var topics = await Link().TopicsAsync(peer.Address, peer.Fingerprint, lifetime);
+            broker.PeerAnswered(peer.Fingerprint);
+            return new { machine, topics };
+        }
+        catch (PeerIdentityException e) {
+            throw new InvalidOperationException(broker.PeerIdentityChanged(peer.Fingerprint, e.Presented) ?? Phrases.IdentityChanged(machine), e);
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException) {
             throw new InvalidOperationException($"{machine} could not be reached at {peer.Address}.", e);

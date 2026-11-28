@@ -20,12 +20,14 @@ internal sealed class InMemoryPeerNetwork {
     private sealed class Link(InMemoryPeerNetwork network, IPEndPoint from) : IPeerLink {
         private string Me => network.listeners[from.ToString()].Fingerprint;
 
-        // As the handshake: nothing listening there, another identity than the pinned one, or a
-        // listener that does not admit this machine, and the connection fails.
+        // As the handshake: nothing listening there, another identity than the pinned one (which the
+        // real link reports as PeerIdentityException), or a listener that does not admit this machine.
         private PeerServer Reach(string address, string? expectedFingerprint) {
             if (!network.listeners.TryGetValue(address, out var server))
                 throw new HttpRequestException($"Nothing listens at {address}.");
-            if (expectedFingerprint is not null && server.Fingerprint != expectedFingerprint || !server.Admits(Me))
+            if (expectedFingerprint is not null && server.Fingerprint != expectedFingerprint)
+                throw new PeerIdentityException(server.Fingerprint);
+            if (!server.Admits(Me))
                 throw new HttpRequestException($"The handshake with {address} failed.");
             return server;
         }

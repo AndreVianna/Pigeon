@@ -24,10 +24,12 @@ public sealed class PeerTlsSteps {
     private readonly CancellationTokenSource stop = new();
     private readonly List<HttpStatusCode> answers = [];
     private Task server = Task.CompletedTask;
-    private Broker? ana;
+    private Broker? ana, bruno;
+    private PeerHost? brunoHost;
     private ServiceIdentity? anaId, strangerId;
     private int anaPort;
     private Exception? failure;
+    private string? brunoError;
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
     private string Url(string path) => $"https://127.0.0.1:{anaPort}{path}";
@@ -98,6 +100,44 @@ public sealed class PeerTlsSteps {
         answers.Add(await Post(stranger, PeerServer.JoinStartPath, new { Topic = "open", Name = "stranger", Tool = "codex", Port = 49999, Commitment = JoinCode.Commit(JoinCode.NewNonce()) }));
     }
 
+    // Bruno's service pinned the stranger's fingerprint for "ana-laptop" at Ana's address, as if Ana's
+    // machine had been reinstalled since, and shares a topic with it.
+    [Given("Bruno knows a machine at Ana's address under another identity than hers")]
+    public async Task BrunoPinnedAnother() {
+        var database = Path.Combine(directory, "bruno.db");
+        using (var store = new Pigeon.Core.Mailbox(database)) {
+            _ = store.AddPeer(Stranger.Fingerprint, "ana-laptop", $"127.0.0.1:{anaPort}");
+            _ = store.LinkJoin(Stranger.Fingerprint, "open", "claude-code", "bruno-session", "codex");
+        }
+
+        bruno = new Broker(database);
+        brunoHost = new PeerHost(bruno, new FileIdentityStore(Path.Combine(directory, "bruno")));
+        // Loads Bruno's identity, which the delivery loop waits for.
+        Assert.True((await brunoHost.ExecuteAsync("peer_status", JsonSerializer.SerializeToElement(new { }))).Ok);
+    }
+
+    [When("Bruno asks for that machine's topics")]
+    public async Task BrunoListsTopics() => brunoError = (await brunoHost!.ExecuteAsync("peer_topics", JsonSerializer.SerializeToElement(new { machine = "ana-laptop" }))).Error;
+
+    [When("Bruno sends a message to that machine")]
+    public async Task BrunoSends() {
+        var sent = bruno!.Execute("send", JsonSerializer.SerializeToElement(new { sessionId = "bruno-session", topic = "open@ana-laptop", message = "hello" }));
+        Assert.True(sent.Ok, sent.Error);
+        await brunoHost!.PassAsync(Cancellation);
+    }
+
+    [Then("Bruno is told the machine's identity changed")]
+    public void IdentityChanged() => Assert.Equal(Phrases.IdentityChanged("ana-laptop"), brunoError);
+
+    [Then("the message waits to be sent and Bruno's list of machines says the identity changed")]
+    public async Task ListedAsChanged() {
+        var status = await brunoHost!.ExecuteAsync("peer_status", JsonSerializer.SerializeToElement(new { }));
+        Assert.True(status.Ok, status.Error);
+        var peer = Assert.Single(JsonSerializer.SerializeToElement(status.Value).GetProperty("peers").EnumerateArray());
+        Assert.Equal(1, peer.GetProperty("outbox").GetInt32());
+        Assert.Equal(Phrases.IdentityChanged("ana-laptop"), peer.GetProperty("identity").GetString());
+    }
+
     [Then("the handshake fails")]
     public void HandshakeFails() => Assert.IsAssignableFrom<HttpRequestException>(failure);
 
@@ -120,6 +160,8 @@ public sealed class PeerTlsSteps {
     public async Task Cleanup() {
         await stop.CancelAsync();
         await server;
+        brunoHost?.Dispose();
+        bruno?.Dispose();
         ana?.Dispose();
         anaId?.Dispose();
         strangerId?.Dispose();

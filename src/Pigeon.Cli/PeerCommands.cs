@@ -21,6 +21,9 @@ internal static class PeerCommands {
             var span => $"{(int)span.TotalDays} days ago"
         };
 
+    // Why a known machine is not used, when its address answers with another identity.
+    public static string? Identity(JsonElement peer) => peer.TryGetProperty("identity", out var identity) && identity.ValueKind == JsonValueKind.String ? identity.GetString() : null;
+
     private static string Left(JsonElement unixMs) {
         var minutes = (int)Math.Ceiling((DateTimeOffset.FromUnixTimeMilliseconds(unixMs.GetInt64()) - DateTimeOffset.UtcNow).TotalMinutes);
         return minutes <= 1 ? "under a minute left" : $"{minutes} min left";
@@ -38,11 +41,16 @@ internal static class PeerCommands {
                 var incoming = requests.GetProperty("incoming").EnumerateArray().ToArray();
                 var outgoing = requests.GetProperty("outgoing").EnumerateArray().ToArray();
                 var local = requests.GetProperty("local").EnumerateArray().ToArray();
+                // Older services do not report how requests ended.
+                var ended = requests.TryGetProperty("ended", out var e) ? e.EnumerateArray().ToArray() : [];
                 if (incoming.Length + outgoing.Length + local.Length == 0)
                     Console.WriteLine("No requests are waiting.");
-                foreach (var r in incoming)
-                    Console.WriteLine($"{r.GetProperty("id").GetString()}  {r.GetProperty("from").GetString()} ({r.GetProperty("address").GetString()}) wants to join {r.GetProperty("topic").GetString()} with {r.GetProperty("tool").GetString()} | {Left(r.GetProperty("expires"))}\n" +
-                        (r.GetProperty("needsCode").GetBoolean() ? $"    A new machine: allow with the code its person gives you: pigeon allow {r.GetProperty("id").GetString()} <code>" : $"    pigeon allow {r.GetProperty("id").GetString()}") + $"   or   pigeon deny {r.GetProperty("id").GetString()}");
+                foreach (var r in incoming) {
+                    Console.WriteLine($"{r.GetProperty("id").GetString()}  {r.GetProperty("from").GetString()} ({r.GetProperty("address").GetString()}) wants to join {r.GetProperty("topic").GetString()} with {r.GetProperty("tool").GetString()} | {Left(r.GetProperty("expires"))}");
+                    if (r.TryGetProperty("changedName", out var changed) && changed.GetString() is { } name)
+                        Console.WriteLine("    Warning: " + Phrases.ChangedName(name));
+                    Console.WriteLine((r.GetProperty("needsCode").GetBoolean() ? $"    A new machine: allow with the code its person gives you: pigeon allow {r.GetProperty("id").GetString()} <code>" : $"    pigeon allow {r.GetProperty("id").GetString()}") + $"   or   pigeon deny {r.GetProperty("id").GetString()}");
+                }
                 foreach (var r in local)
                     Console.WriteLine($"{r.GetProperty("id").GetString()}  {r.GetProperty("from").GetString()} wants to join {r.GetProperty("topic").GetString()}, which requires approval | {Left(r.GetProperty("expires"))}\n    pigeon allow {r.GetProperty("id").GetString()} <code>   or   pigeon deny {r.GetProperty("id").GetString()}   (the joiner's code: pigeon requests --show {r.GetProperty("id").GetString()})");
                 foreach (var r in outgoing) {
@@ -54,6 +62,10 @@ internal static class PeerCommands {
                     } + $" | {Left(r.GetProperty("expires"))}");
                 }
 
+                if (ended.Length != 0)
+                    Console.WriteLine("Ended in the last 10 minutes:");
+                foreach (var r in ended)
+                    Console.WriteLine($"  {r.GetProperty("text").GetString()}");
                 return 0;
             }
             case "allow" or "deny": {
@@ -103,8 +115,11 @@ internal static class PeerCommands {
                     Console.WriteLine($"Fingerprint: {fingerprint}");
                 var peers = status.GetProperty("peers").EnumerateArray().ToArray();
                 Console.WriteLine($"Known machines: {peers.Length}");
-                foreach (var p in peers)
+                foreach (var p in peers) {
                     Console.WriteLine($"  {p.GetProperty("Name").GetString()} at {p.GetProperty("Address").GetString() ?? "(no address)"} | last contact: {Ago(p.GetProperty("LastContactUnixMs"))} | waiting to send: {p.GetProperty("outbox").GetInt32()}");
+                    if (Identity(p) is { } identity)
+                        Console.WriteLine("    " + identity);
+                }
                 foreach (var topic in status.GetProperty("listed").EnumerateArray())
                     Console.WriteLine($"  open to other machines: {topic.GetString()}");
                 foreach (var s in status.GetProperty("shares").EnumerateArray())

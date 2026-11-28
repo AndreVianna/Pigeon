@@ -7,3 +7,4 @@ Feature: Refusals between machines
 
   Scenario: Nothing is reachable without a person's answer
     Then a wrong code is refused and a denied request joins nothing
+    And allowing the request after it ended fails, and the asking side shows how it ended

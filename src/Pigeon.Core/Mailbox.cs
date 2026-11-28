@@ -129,7 +129,11 @@ public sealed partial class Mailbox : IDisposable {
         Required(tool, "tool");
         return ToolName(tool)!;
     }
-    private static string NotMember(string session, string topic) => $"Session {session} is not in topic \"{topic}\".";
+    // Points to a topic on another machine of that name that the session is in ("d1" for "d1@vm-b4").
+    private string NotMember(string session, string topic) {
+        var remote = topic.Contains('@') ? null : TopicsOf(session).FirstOrDefault(t => t.StartsWith(topic + "@", StringComparison.Ordinal));
+        return remote is null ? $"Session {session} is not in topic \"{topic}\"." : $"Session {session} is not in topic \"{topic}\"; did you mean \"{remote}\"?";
+    }
 
     private Member[] MembersOf(string topic)
         => [.. db.Query("SELECT s.tool,m.session FROM p_members m JOIN p_sessions s ON s.session=m.session WHERE m.topic=? ORDER BY m.joined,m.rowid", topic).Select(r => new Member(r[0]!, r[1]!))];
