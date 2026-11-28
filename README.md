@@ -32,7 +32,7 @@ If you installed Pigeon earlier as a .NET tool, remove it first (`pigeon stop`, 
 
 ```shell
 dotnet pack src/Pigeon.Cli/Pigeon.Cli.csproj --output artifacts
-dotnet tool install --global Pigeon.Cli --version 0.7.0-beta.3 --source ./artifacts
+dotnet tool install --global Pigeon.Cli --version 0.7.0-beta.4 --source ./artifacts
 ```
 
 The agent tools start `pigeon` by name, so it must be on the `PATH` they see. To update an installed Pigeon, run `pigeon update` (add `--allow-pre-release` to include betas): it downloads the newest release's installer for your system, checks it against `SHA256SUMS.txt`, installs it the way you installed Pigeon and restarts a running service. The `.pkg`, `.deb` and `.rpm` ask for your password through `sudo`. A .NET tool updates with `dotnet tool update --global Pigeon.Cli`; then run `pigeon stop` and `pigeon start` so the service runs it.

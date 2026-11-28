@@ -19,6 +19,8 @@ public sealed partial class Broker {
         public required bool Known, Listed;
         public required byte[] Nonce;
         public string? Code, ChangedName;
+        // Why a listed request was denied, for the requesting machine to choose its text: "wrong-codes".
+        public string? Reason;
         public int WrongCodes;
         public long Expires;
         public string State = "committed"; // committed, open, allowed, denied
@@ -48,8 +50,55 @@ public sealed partial class Broker {
     // A prompt is shown by one live MCP server at a time; another may show it if that one goes away.
     private readonly Dictionary<string, (string Bridge, long At)> promptHolders = new(StringComparer.Ordinal);
 
+    // How the requests of sessions here ended, for `pigeon requests` to show for 10 minutes.
+    private readonly List<(string Session, string Text, long At)> ended = [];
+    // The waiting requests as last written to disk (see PersistRequests).
+    private string? savedRequests;
+
     private static string NewId() => Guid.NewGuid().ToString("N")[..12];
     private static bool Bool(JsonElement e, string key) => e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True;
+    private static string Label(Outgoing r) => r.Offered + "@" + (r.MachineName ?? r.Target);
+
+    // Every way a request of a session here ends: the session is told (unless something else told it
+    // already), and the outcome is kept for a person at a terminal.
+    private void Ended(string session, string label, string text, bool notice = true) {
+        if (notice)
+            mailbox.Notice(session, label, text);
+        ended.Add((session, text, clock()));
+        if (ended.Count > 256)
+            ended.RemoveAt(0);
+        PersistRequests();
+    }
+
+    // The waiting requests' IDs, sessions and topics, so that after a restart each session is told its
+    // request ended. Never the codes: a restart cancels the requests, the safe direction.
+    private void PersistRequests() {
+        string[][] waiting = [
+            .. outgoing.Values.Where(r => r.State is "confirm" or "contact" or "waiting").Select(r => new[] { r.Id, r.Session, Label(r) }),
+            .. localJoins.Values.Where(r => r.State == "open").Select(r => new[] { r.Id, r.Session, r.Topic })
+        ];
+        var json = waiting.Length == 0 ? null : JsonSerializer.Serialize(waiting);
+        if (json == savedRequests)
+            return;
+        mailbox.SetSetting("requests", json);
+        savedRequests = json;
+    }
+
+    private void EndRequestsOfLastRun() {
+        if (mailbox.Setting("requests") is not { } saved)
+            return;
+        mailbox.SetSetting("requests", null);
+        string[][]? requests = null;
+        try {
+            requests = JsonSerializer.Deserialize<string[][]>(saved);
+        }
+        catch (JsonException) { }
+
+        foreach (var request in requests ?? []) {
+            if (request is [_, { Length: > 0 } session, { Length: > 0 } topic])
+                Ended(session, topic, $"Your request to join {topic} ended because the Pigeon service stopped. Join again to ask again.");
+        }
+    }
 
     private void ExpireRequests() {
         var now = clock();
@@ -57,13 +106,15 @@ public sealed partial class Broker {
             r.State = "denied";
         foreach (var r in outgoing.Values.Where(r => r.State is "confirm" or "contact" or "waiting" && r.Expires <= now)) {
             r.State = "denied";
-            mailbox.Notice(r.Session, r.Offered + "@" + (r.MachineName ?? r.Target), $"Nobody allowed joining {r.Offered} on {r.MachineName ?? r.Target} within 10 minutes. If nobody answered, check the topic name and address, and ask the person there.");
+            Ended(r.Session, Label(r), $"Nobody allowed joining {r.Offered} on {r.MachineName ?? r.Target} within 10 minutes. If nobody answered, check the topic name and address, and ask the person there.");
         }
 
         foreach (var r in localJoins.Values.Where(r => r.State == "open" && r.Expires <= now)) {
             r.State = "denied";
-            mailbox.Notice(r.Session, r.Topic, $"Nobody allowed joining {r.Topic} within 10 minutes.");
+            Ended(r.Session, r.Topic, $"Nobody allowed joining {r.Topic} within 10 minutes.");
         }
+
+        _ = ended.RemoveAll(e => e.At <= now - RequestMilliseconds);
 
         foreach (var id in incoming.Where(p => p.Value.State is "allowed" or "denied" && p.Value.Expires < now - RequestMilliseconds).Select(p => p.Key).ToArray())
             incoming.Remove(id);
@@ -97,6 +148,7 @@ public sealed partial class Broker {
             if (pending is null) {
                 pending = new LocalJoin { Id = NewId(), Topic = topic, Session = session, Tool = Mailbox.ToolName(tool)!, Opener = opener.SessionId, Code = JoinCode.Local(), Expires = checked(clock() + RequestMilliseconds) };
                 localJoins[pending.Id] = pending;
+                PersistRequests();
             }
             return WithTerminal(new { pending = true, request = pending.Id, text = $"Request submitted. {topic} requires approval: your person is shown a join code to give to the person at the session that opened it. The join completes when they enter it. Do not call pigeon_join again; you will be told the outcome." }, prompts);
         }
@@ -133,6 +185,7 @@ public sealed partial class Broker {
             State = known is null ? "confirm" : "contact"
         };
         outgoing[request.Id] = request;
+        PersistRequests();
         return Pending(request);
     }
 
@@ -172,7 +225,7 @@ public sealed partial class Broker {
         foreach (var r in incoming.Values.Where(r => r.State == "open")) {
             if (mailbox.LocalMemberOf(r.Topic) is not { } member)
                 continue;
-            var changed = r.ChangedName is null ? "" : $" It calls itself {r.ChangedName}, the name of a machine you know, but its identity is different: it was reinstalled, or it is another machine. If it was reinstalled, remove the old one first: pigeon peer remove {r.ChangedName}.";
+            var changed = r.ChangedName is null ? "" : " " + Phrases.ChangedName(r.ChangedName);
             yield return r.Known
                 ? new(r.Id + ":allow", member.SessionId, $"Pigeon: {r.Name} wants to join your topic \"{r.Topic}\" with {r.Tool}. Allow? (Accept to allow; Decline or Esc to refuse.)", false)
                 : new(r.Id + ":code", member.SessionId, $"Pigeon: a new machine, {r.Name} at {r.Address.Split(':')[0]}, wants to join your topic \"{r.Topic}\" with {r.Tool}.{changed} To allow it, enter the join code its person gave you. Never enter a code your agent relays.", true);
@@ -226,7 +279,7 @@ public sealed partial class Broker {
             if (kind == "confirm" && o.State == "confirm") {
                 o.State = accepted ? "contact" : "denied";
                 if (!accepted)
-                    mailbox.Notice(o.Session, o.Offered + "@" + o.Target, $"Your person did not allow contacting {o.Target}, so {o.Offered} was not joined.");
+                    Ended(o.Session, o.Offered + "@" + o.Target, $"Your person did not allow contacting {o.Target}, so {o.Offered} was not joined.");
                 return new { result = accepted ? "contacting" : "refused" };
             }
 
@@ -244,7 +297,7 @@ public sealed partial class Broker {
 
             if (!i.Known && !JoinCode.Same(i.Code!, code)) {
                 if (++i.WrongCodes >= MaxWrongCodes)
-                    i.State = "denied";
+                    (i.State, i.Reason) = ("denied", "wrong-codes");
                 return new { result = i.State == "denied" ? "denied after 3 wrong codes" : "wrong code" };
             }
 
@@ -269,14 +322,14 @@ public sealed partial class Broker {
 
             if (!accepted) {
                 l.State = "denied";
-                mailbox.Notice(l.Session, l.Topic, $"The person at the session that opened {l.Topic} did not allow you to join.");
+                Ended(l.Session, l.Topic, $"The person at the session that opened {l.Topic} did not allow you to join.");
                 return new { result = "denied" };
             }
 
             if (!JoinCode.Same(l.Code, code)) {
                 if (++l.WrongCodes >= MaxWrongCodes) {
                     l.State = "denied";
-                    mailbox.Notice(l.Session, l.Topic, $"Joining {l.Topic} was refused after 3 wrong codes.");
+                    Ended(l.Session, l.Topic, $"Joining {l.Topic} was refused after 3 wrong codes.");
                 }
 
                 return new { result = l.State == "denied" ? "denied after 3 wrong codes" : "wrong code" };
@@ -284,21 +337,30 @@ public sealed partial class Broker {
 
             l.State = "allowed";
             _ = mailbox.Join(l.Tool, l.Session, l.Topic);
-            mailbox.Notice(l.Session, l.Topic, $"You joined {l.Topic}.");
+            Ended(l.Session, l.Topic, $"You joined {l.Topic}.");
             return new { result = "allowed" };
         }
 
         return new { result = "ignored: the request is no longer open" };
     }
 
-    // `pigeon requests`: what waits for an answer here, never the codes.
+    // `pigeon requests`: what waits for an answer here, never the codes, and how requests of the last
+    // 10 minutes ended.
     private object Requests() {
         ExpireRequests();
         return new {
-            incoming = incoming.Values.Where(r => r.State == "open").Select(r => new { id = r.Id, topic = r.Topic, from = r.Name, address = r.Address, tool = r.Tool, needsCode = !r.Known, expires = r.Expires }).ToArray(),
-            outgoing = outgoing.Values.Where(r => r.State is "confirm" or "contact" or "waiting").Select(r => new { id = r.Id, topic = r.Offered + "@" + (r.MachineName ?? r.Target), state = r.State, hasCode = r.NeedsCode && r.Code is not null, expires = r.Expires }).ToArray(),
-            local = localJoins.Values.Where(r => r.State == "open").Select(r => new { id = r.Id, topic = r.Topic, from = r.Tool + " " + r.Session, expires = r.Expires }).ToArray()
+            incoming = incoming.Values.Where(r => r.State == "open").Select(r => new { id = r.Id, topic = r.Topic, from = r.Name, address = r.Address, tool = r.Tool, needsCode = !r.Known, changedName = r.ChangedName, expires = r.Expires }).ToArray(),
+            outgoing = outgoing.Values.Where(r => r.State is "confirm" or "contact" or "waiting").Select(r => new { id = r.Id, topic = Label(r), state = r.State, hasCode = r.NeedsCode && r.Code is not null, expires = r.Expires }).ToArray(),
+            local = localJoins.Values.Where(r => r.State == "open").Select(r => new { id = r.Id, topic = r.Topic, from = r.Tool + " " + r.Session, expires = r.Expires }).ToArray(),
+            ended = ended.Select(e => new { session = e.Session, text = e.Text, at = e.At }).ToArray()
         };
+    }
+
+    // Whether a session here is waiting for the outcome of its own request to join.
+    private bool AsksToJoin(string session) {
+        ExpireRequests();
+        return outgoing.Values.Any(r => r.Session == session && r.State is "confirm" or "contact" or "waiting")
+            || localJoins.Values.Any(r => r.Session == session && r.State == "open");
     }
 
     // `pigeon requests --show <id>`: the requesting side's code, for a person at a terminal.
@@ -314,8 +376,13 @@ public sealed partial class Broker {
     }
 
     // `pigeon allow <id> [<code>]` and `pigeon deny <id>`.
+    // Unlike a prompt's answer, which a host may replay, an answer to a request that ended is an error.
     private object RequestAnswer(string id, bool allow, string? code) {
         ExpireRequests();
+        if (outgoing.TryGetValue(id, out var done) && done.State is "allowed" or "denied" or "failed"
+            || incoming.TryGetValue(id, out var answered) && answered.State is "allowed" or "denied"
+            || localJoins.TryGetValue(id, out var finished) && finished.State != "open")
+            throw new InvalidOperationException($"Request {id} has ended; see pigeon requests.");
         var kind = outgoing.TryGetValue(id, out var o) ? o.State == "confirm" ? "confirm" : null
             : incoming.TryGetValue(id, out var i) ? i.Known ? "allow" : "code"
             : localJoins.ContainsKey(id) ? "code"
@@ -361,18 +428,18 @@ public sealed partial class Broker {
         }
     }
 
-    internal (string State, string? Tool) JoinStatus(string fingerprint, string id) {
+    internal (string State, string? Tool, string? Reason) JoinStatus(string fingerprint, string id) {
         lock (gate) {
             ExpireRequests();
             if (!incoming.TryGetValue(id, out var r) || r.Fingerprint != fingerprint)
-                return ("denied", null);
+                return ("denied", null, null);
             // An unlisted topic answers "pending" until it expires, like an unanswered request.
             return r.State switch {
-                "allowed" => ("allowed", mailbox.LocalMemberOf(r.Topic)?.Tool),
-                "denied" when r.Listed => ("denied", null),
-                "denied" when r.Expires > clock() => ("pending", null),
-                "denied" => ("denied", null),
-                _ => ("pending", null)
+                "allowed" => ("allowed", mailbox.LocalMemberOf(r.Topic)?.Tool, null),
+                "denied" when r.Listed => ("denied", null, r.Reason),
+                "denied" when r.Expires > clock() => ("pending", null, null),
+                "denied" => ("denied", null, null),
+                _ => ("pending", null, null)
             };
         }
     }
@@ -391,7 +458,19 @@ public sealed partial class Broker {
             if (r.State is "allowed" or "denied" or "failed")
                 return;
             r.State = "failed";
-            mailbox.Notice(r.Session, r.Offered + "@" + (r.MachineName ?? r.Target), $"Could not join {r.Offered} on {r.MachineName ?? r.Target}: {reason}");
+            Ended(r.Session, Label(r), $"Could not join {r.Offered} on {r.MachineName ?? r.Target}: {reason}");
+        }
+    }
+
+    // A known machine answered with another identity: the join ends, with the same text as anywhere
+    // else that machine is used.
+    internal void OutgoingIdentityChanged(Outgoing r, string presented) {
+        lock (gate) {
+            if (r.State is "allowed" or "denied" or "failed")
+                return;
+            r.State = "failed";
+            var text = (r.Fingerprint is { } pinned ? PeerIdentityChanged(pinned, presented) : null) ?? Phrases.IdentityChanged(r.MachineName ?? r.Target);
+            Ended(r.Session, Label(r), text);
         }
     }
 
@@ -408,16 +487,20 @@ public sealed partial class Broker {
             r.Code = code;
             r.NeedsCode = needsCode;
             r.State = "waiting";
+            PersistRequests();
         }
     }
 
-    internal void OutgoingAnswered(Outgoing r, string state, string? listingTool) {
+    // reason comes from the other machine: it only selects one of the fixed texts here.
+    internal void OutgoingAnswered(Outgoing r, string state, string? listingTool, string? reason = null) {
         lock (gate) {
             if (r.State != "waiting")
                 return;
             if (state == "denied") {
                 r.State = "denied";
-                mailbox.Notice(r.Session, r.Offered + "@" + r.MachineName, $"The person at {r.MachineName} did not allow joining {r.Offered}.");
+                Ended(r.Session, Label(r), reason == "wrong-codes"
+                    ? $"Joining {r.Offered} on {r.MachineName} was refused after 3 wrong codes."
+                    : $"The person at {r.MachineName} did not allow joining {r.Offered}.");
                 return;
             }
 
@@ -426,10 +509,12 @@ public sealed partial class Broker {
                 r.MachineName = peer.Name;
                 _ = mailbox.LinkJoin(r.Fingerprint!, r.Offered, listingTool, r.Session, r.Tool);
                 r.State = "allowed";
+                // The join itself told the session.
+                Ended(r.Session, Label(r), $"You joined {Label(r)}.", notice: false);
             }
             catch (Exception e) when (e is InvalidOperationException or ArgumentException) {
                 r.State = "failed";
-                mailbox.Notice(r.Session, r.Offered + "@" + r.MachineName, $"Joining {r.Offered} on {r.MachineName} was allowed, but could not be completed here: {e.Message}");
+                Ended(r.Session, Label(r), $"Joining {r.Offered} on {r.MachineName} was allowed, but could not be completed here: {e.Message}");
             }
         }
     }

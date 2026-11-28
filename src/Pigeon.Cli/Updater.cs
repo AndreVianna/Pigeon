@@ -38,7 +38,7 @@ internal static class Updater {
         install.CleanUpOldCopies();
 
         using var http = Client(handler);
-        var releases = await FetchReleasesAsync(http);
+        var releases = await FetchReleasesAsync(http, Environment.GetEnvironmentVariable("GITHUB_TOKEN"));
         var choice = ReleaseChoice.Choose(releases, current, allowPreRelease);
         if (choice.Newest is null) {
             Console.WriteLine(UpToDate(current, choice, allowPreRelease));
@@ -116,18 +116,23 @@ internal static class Updater {
         return http;
     }
 
-    internal static async Task<IReadOnlyList<Release>> FetchReleasesAsync(HttpClient http) {
+    internal static async Task<IReadOnlyList<Release>> FetchReleasesAsync(HttpClient http, string? token = null) {
         using var request = new HttpRequestMessage(HttpMethod.Get, ReleasesUrl);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
         // Optional, for machines that share an address with many others (CI): unauthenticated
         // calls are limited to 60 an hour. The token goes to api.github.com only.
-        var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        if (!string.IsNullOrWhiteSpace(token))
+        // The asset downloads never carry it, so it cannot follow their redirect to the storage host.
+        var hasToken = !string.IsNullOrWhiteSpace(token);
+        if (hasToken)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var response = await SendAsync(http, request);
-        if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
-            throw new CommandException("GitHub refused the request, most likely because this network made too many unauthenticated requests in the last hour. Try again later.");
+        if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests or HttpStatusCode.Unauthorized)
+            throw new CommandException(hasToken
+                ? "GitHub refused the GITHUB_TOKEN this command sent with the request. Check that the token is valid and can read the repository's releases, or remove it to try without one."
+                : "GitHub refused the request, most likely because this network made too many unauthenticated requests in the last hour. Try again later, or set GITHUB_TOKEN to a GitHub token to raise the limit.");
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new CommandException($"GitHub could not find the releases of {Repository}. If the repository is not public, set GITHUB_TOKEN to a token that can read it and run the command again.");
         if (!response.IsSuccessStatusCode)
             throw new CommandException($"GitHub answered {(int)response.StatusCode} when asked for Pigeon's releases.");
         await using var body = await response.Content.ReadAsStreamAsync();

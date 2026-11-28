@@ -49,7 +49,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          MIN_LINE_COVERAGE: '43'
+          MIN_LINE_COVERAGE: '52'
         run: |
           [xml]$report = Get-Content -Raw coverage/unit.cobertura.xml
           $rate = [math]::Round([double]$report.coverage.'line-rate' * 100, 1)

@@ -114,6 +114,7 @@ public class UpdaterTests {
             """;
         Assert.Equal("6837443a95edc457c82f04c3f199a1ff464c2822aab344e54da74a2822336a7b", Checksums.Find(sums, "Pigeon-0.7.0-beta.1-win-x64.msi"));
         Assert.Equal("7a33c74d4691866a5ceb9589664460e1668e9620a67cbcc142e9137595d6ef59", Checksums.Find(sums, "pigeon_0.7.0.beta.1_amd64.deb"));
+        Assert.Equal("7a33c74d4691866a5ceb9589664460e1668e9620a67cbcc142e9137595d6ef59", Checksums.Find(sums, "pigeon_0.7.0~beta.1_amd64.deb"));
         Assert.Null(Checksums.Find(sums, "pigeon-0.7.0-beta.1-linux-x64.tar.gz"));
     }
 
@@ -169,6 +170,42 @@ public class UpdaterTests {
         using var http = new HttpClient(server);
         var error = await Assert.ThrowsAsync<CommandException>(() => Updater.FetchReleasesAsync(http));
         Assert.Contains("too many", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, null, "too many", "GITHUB_TOKEN")]
+    [InlineData(HttpStatusCode.Forbidden, "t0ken", "refused the GITHUB_TOKEN", "valid")]
+    [InlineData(HttpStatusCode.Unauthorized, "t0ken", "refused the GITHUB_TOKEN", "valid")]
+    [InlineData(HttpStatusCode.NotFound, null, "could not find the releases", "set GITHUB_TOKEN")]
+    public async Task Says_what_a_refused_releases_request_most_likely_means(HttpStatusCode status, string? token, string first, string second) {
+        using var server = new Server(_ => new HttpResponseMessage(status));
+        using var http = new HttpClient(server);
+        var error = await Assert.ThrowsAsync<CommandException>(() => Updater.FetchReleasesAsync(http, token));
+        Assert.Contains(first, error.Message, StringComparison.Ordinal);
+        Assert.Contains(second, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Sends_the_token_to_the_releases_API_only_and_never_with_a_download() {
+        var body = Encoding.UTF8.GetBytes("installer bytes");
+        using var server = new Server(request => request.RequestUri?.Host == "api.github.com"
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(ReleasesJson) }
+            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) });
+        using var http = new HttpClient(server);
+        _ = await Updater.FetchReleasesAsync(http, "t0ken");
+        var asset = new ReleaseAsset("pigeon.tar.gz", Updater.DownloadPrefix + "v0.7.0/pigeon.tar.gz", body.Length);
+        var path = Path.Combine(Path.GetTempPath(), "pigeon-token-test-" + Guid.NewGuid().ToString("N"));
+        try {
+            await Updater.DownloadAsync(http, asset, path, Convert.ToHexStringLower(SHA256.HashData(body)));
+        }
+        finally {
+            File.Delete(path);
+        }
+
+        Assert.Equal("Bearer", server.Requests[0].Headers.Authorization?.Scheme);
+        Assert.Equal("t0ken", server.Requests[0].Headers.Authorization?.Parameter);
+        Assert.Equal("github.com", server.Requests[1].RequestUri?.Host);
+        Assert.Null(server.Requests[1].Headers.Authorization);
     }
 
     [Fact]

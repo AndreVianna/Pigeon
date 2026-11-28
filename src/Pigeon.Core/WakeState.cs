@@ -97,6 +97,15 @@ public sealed partial class Mailbox {
         });
     }
 
+    // A wake sent to a host that ended before starting its turn, offered again at once to the
+    // host's new MCP server instead of after the retry time. The generation and the attempt count
+    // stay, so the budget still bounds the retries; a wake being handled, finished or given up on
+    // is left alone.
+    public bool ReofferWake(string session) {
+        Required(session, "session ID");
+        return db.Transaction(() => db.Exec("UPDATE p_wake_state SET next_at=?,updated=? WHERE session=? AND state IN ('dispatching','sent','failed') AND next_at>?", Time(), Time(), session, Time()) > 0);
+    }
+
     public bool RecordWakeResult(string session, string generation, int attempt, string outcome) {
         Required(session, "session ID");
         Required(generation, "generation");

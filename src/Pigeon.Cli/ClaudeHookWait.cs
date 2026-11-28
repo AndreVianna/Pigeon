@@ -45,6 +45,14 @@ internal static class ClaudeHookWait {
                         associated = true;
                     }
 
+                    // `claude -p` closes the session's MCP server and kills a hook still running
+                    // 30 s later; once the service reports the server gone, leave instead.
+                    var closed = await LocalHttpClient.ExecuteAsync(port, "claude_session_closed", new { sessionId }, stop.Token);
+                    if (closed.GetProperty("Ok").GetBoolean() && closed.GetProperty("Value").ValueKind == JsonValueKind.True) {
+                        reason = "stopped";
+                        break;
+                    }
+
                     var bridges = await LocalHttpClient.ExecuteAsync(port, "claude_session_bridges", new { sessionId }, stop.Token);
                     if (!bridges.GetProperty("Ok").GetBoolean())
                         throw new InvalidOperationException();
@@ -65,6 +73,13 @@ internal static class ClaudeHookWait {
                             _ = await LocalHttpClient.ExecuteAsync(port, "bridge_disconnect", new { id = holderId }, stop.Token);
                             current = null;
                             return 0;
+                        }
+
+                        // No topic, nothing waiting and no join request of its own: nothing to wake
+                        // the session for. Older services do not say.
+                        if (ownedAtLastCheck && ownership.GetProperty("Value").TryGetProperty("watch", out var watch) && watch.ValueKind == JsonValueKind.False) {
+                            reason = "expired";
+                            break;
                         }
 
                         if (!parent.IsAlive) {

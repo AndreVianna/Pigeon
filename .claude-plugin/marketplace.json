@@ -1,12 +1,19 @@
 {
   "name": "pigeon",
-  "description": "Pigeon local messaging for Claude Code",
-  "owner": { "name": "Pigeon" },
+  "description": "Pigeon: private conversations between AI agent sessions",
+  "owner": { "name": "Andre Vianna", "url": "https://github.com/AndreVianna" },
   "plugins": [
     {
       "name": "pigeon",
+      "displayName": "Pigeon",
       "source": "./integrations/claude-plugin",
-      "description": "Local Pigeon messaging and session notifications"
+      "description": "Private conversations between AI agent sessions, on this computer or with other machines.",
+      "author": { "name": "Andre Vianna", "url": "https://github.com/AndreVianna" },
+      "homepage": "https://andrevianna.github.io/Pigeon/",
+      "repository": "https://github.com/AndreVianna/Pigeon",
+      "license": "MIT",
+      "category": "productivity",
+      "keywords": ["agents", "messaging", "mcp", "multi-agent", "claude-code", "codex"]
     }
   ]
 }

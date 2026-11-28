@@ -18,6 +18,13 @@ public sealed partial class Broker : IDisposable {
     private readonly Func<long> clock;
     private readonly object gate = new();
     private readonly Dictionary<string, (string? Session, string Mode, string? Restoration, long Seen)> bridges = new(StringComparer.Ordinal);
+    // When each session's MCP server last closed with no server after it. `claude -p` closes its
+    // server while the Stop hook's waiter runs; the waiter leaves once the close is reported.
+    private readonly Dictionary<string, long> closedServers = new(StringComparer.Ordinal);
+    // A host may restart its server, so a close counts after a grace with no replacement. It is
+    // reported only within Claude Code's 30 s wait for its hooks, so a waiter of a session opened
+    // again later is not sent away before the session's new server reports.
+    public const long ClosedGraceMilliseconds = 3000, ClosedReportMilliseconds = 30000;
     // One Claude notifier owns a session's wakes at a time. Ownership is a routing safeguard
     // kept only in memory; holders renew it every tick and reacquire it after a restart.
     private readonly Dictionary<string, (string Holder, string Mode, long Seen)> owners = new(StringComparer.Ordinal);
@@ -46,6 +53,7 @@ public sealed partial class Broker : IDisposable {
         mailbox = new Mailbox(databasePath, clock, maxAttempts, maxMessagesPerHour, maxWakeAttempts, wakeRetryMilliseconds, leaseMilliseconds);
         try {
             mailbox.TouchAll();
+            EndRequestsOfLastRun();
         }
         catch {
             mailbox.Dispose();
@@ -77,9 +85,10 @@ public sealed partial class Broker : IDisposable {
                     "session" => mailbox.Session(Str(args, "sessionId")),
                     "session_restore" => mailbox.Restore(Str(args, "tool"), Str(args, "sessionId")),
                     "bridge_heartbeat" => BridgeHeartbeat(args),
-                    "bridge_disconnect" => new { removed = bridges.Remove(Str(args, "id")) },
+                    "bridge_disconnect" => BridgeDisconnect(args),
                     "bridges" => ActiveBridges(),
                     "claude_session_bridges" => ClaudeSessionBridges(Str(args, "sessionId")),
+                    "claude_session_closed" => ClaudeSessionClosed(Str(args, "sessionId")),
                     "wake_owner" => WakeOwner(args),
                     "wake_owner_check" => WakeOwnerCheck(args),
                     "wake_owner_release" => WakeOwnerRelease(args),
@@ -153,6 +162,10 @@ public sealed partial class Broker : IDisposable {
         if (!bridges.ContainsKey(id) && bridges.Count >= 1024)
             throw new InvalidOperationException("Too many connected bridges.");
         bridges[id] = (session, mode, restoration, now);
+        // A server that follows a recorded close is the host back for this session: a wake sent as
+        // the old one closed is offered again now rather than after its retry time.
+        if (session is not null && mode is "mcp" or "codex-queue" && closedServers.Remove(session))
+            _ = mailbox.ReofferWake(session);
         // Record that the session is alive, at most once a minute.
         if (session is not null && now - lastTouch.GetValueOrDefault(session, long.MinValue / 2) >= 60000) {
             mailbox.Touch(session);
@@ -160,6 +173,23 @@ public sealed partial class Broker : IDisposable {
         }
 
         return new { recorded = true };
+    }
+
+    // An MCP server names its session when it closes; a hook waiter's own bridge names none.
+    private object BridgeDisconnect(JsonElement args) {
+        var removed = bridges.Remove(Str(args, "id"));
+        if (Optional(args, "sessionId") is { } session) {
+            if (!closedServers.ContainsKey(session) && closedServers.Count >= 1024)
+                _ = closedServers.Remove(closedServers.MinBy(pair => pair.Value).Key);
+            closedServers[session] = clock();
+        }
+
+        return new { removed };
+    }
+
+    private bool ClaudeSessionClosed(string session) {
+        var since = closedServers.TryGetValue(session, out var at) ? clock() - at : -1;
+        return since is >= ClosedGraceMilliseconds and <= ClosedReportMilliseconds;
     }
 
     private object ActiveBridges() {
@@ -221,7 +251,14 @@ public sealed partial class Broker : IDisposable {
             throw new InvalidOperationException("Too many notifiers.");
         _ = superseded.Remove(holder);
         owners[session] = (holder, mode, now);
-        return new { owner = true, active = mode };
+        return new { owner = true, active = mode, watch = HasSomethingToWatch(session) };
+    }
+
+    // A session in no topic, with nothing waiting and no join request of its own open has nothing
+    // to be woken for; a pending join must keep its waiter, or the session misses the outcome.
+    private bool HasSomethingToWatch(string session) {
+        var status = mailbox.GetWakeStatus(session);
+        return mailbox.Session(session)?.Topics.Length > 0 || status.Queued + status.Leased > 0 || AsksToJoin(session);
     }
 
     private object WakeOwnerCheck(JsonElement args) {
@@ -230,9 +267,7 @@ public sealed partial class Broker : IDisposable {
         PruneOwners(clock());
         if (!owners.TryGetValue(session, out var owner) || owner.Holder != holder)
             return new { owner = false };
-        // A session in no topic and with nothing waiting has nothing to watch.
-        var status = mailbox.GetWakeStatus(session);
-        return new { owner = mailbox.Session(session)?.Topics.Length > 0 || status.Queued + status.Leased > 0 };
+        return new { owner = HasSomethingToWatch(session) };
     }
 
     private object WakeOwnerRelease(JsonElement args) {
@@ -330,14 +365,44 @@ public sealed partial class Broker : IDisposable {
     }
 
     internal bool RemovePeer(string name) {
-        lock (gate)
+        lock (gate) {
+            if (mailbox.PeerByName(name) is { } peer)
+                _ = changedIdentities.Remove(peer.Fingerprint);
             return mailbox.RemovePeer(name);
+        }
     }
 
     internal void SetPeerAddress(string name, string address) {
-        lock (gate)
+        lock (gate) {
             mailbox.SetPeerAddress(name, address);
+            if (mailbox.PeerByName(name) is { } peer)
+                _ = changedIdentities.Remove(peer.Fingerprint);
+        }
     }
+
+    // Known machines whose address answered with another identity than the pinned one (see
+    // PeerIdentityException), with the identity that answered. Kept only in memory; a new address or
+    // any answer from the pinned identity clears it.
+    private readonly Dictionary<string, string> changedIdentities = new(StringComparer.Ordinal);
+
+    // The text for a known machine whose identity changed; null for a machine that is not known.
+    internal string? PeerIdentityChanged(string fingerprint, string presented) {
+        lock (gate) {
+            if (mailbox.PeerByFingerprint(fingerprint) is not { } peer)
+                return null;
+            changedIdentities[fingerprint] = presented;
+            return IdentityProblem(peer);
+        }
+    }
+
+    internal void PeerAnswered(string fingerprint) {
+        lock (gate)
+            _ = changedIdentities.Remove(fingerprint);
+    }
+
+    private string? IdentityProblem(PeerInfo peer) => !changedIdentities.TryGetValue(peer.Fingerprint, out var presented) ? null
+        : mailbox.PeerByFingerprint(presented) is { } other && other.Fingerprint != peer.Fingerprint ? Phrases.AddressMoved(peer.Name, other.Name)
+        : Phrases.IdentityChanged(peer.Name);
 
     // What `pigeon peer list` and `pigeon status` show.
     internal object PeerOverview(string? fingerprint, string[] addresses) {
@@ -348,7 +413,7 @@ public sealed partial class Broker : IDisposable {
                 listen = mailbox.Setting("listen"),
                 addresses,
                 fingerprint,
-                peers = mailbox.Peers().Select(p => new { p.Name, p.Address, p.Fingerprint, p.LastContactUnixMs, outbox = mailbox.OutboxCount(p.Fingerprint) }).ToArray(),
+                peers = mailbox.Peers().Select(p => new { p.Name, p.Address, p.Fingerprint, p.LastContactUnixMs, outbox = mailbox.OutboxCount(p.Fingerprint), identity = IdentityProblem(p) }).ToArray(),
                 listed = mailbox.ListedTopics(),
                 shares = mailbox.Shares(),
                 requests = incoming.Values.Count(r => r.State == "open") + outgoing.Values.Count(r => r.State is "confirm" or "contact" or "waiting") + localJoins.Values.Count(r => r.State == "open")
@@ -441,4 +506,13 @@ public static class Phrases {
         "queued-for-peer" => "On its way to the other machine: Pigeon delivers it within seconds while that machine is reachable, and keeps trying for up to 24 hours if it is not.",
         _ => $"The recipient is unavailable: nobody else is in {topic}. Your message is held until someone joins (up to 24 hours)."
     };
+
+    // A machine asking to join under the name of a known machine, with another identity.
+    public static string ChangedName(string name) => $"It calls itself {name}, the name of a machine you know, but its identity is different: it was reinstalled, or it is another machine. If it was reinstalled, remove the old one first: pigeon peer remove {name}.";
+
+    // A known machine's address answered with another identity than the pinned one.
+    public static string IdentityChanged(string name) => $"{name}'s identity changed: it was reinstalled, or another machine answers at its address. Nothing is sent to it. If it was reinstalled, remove it with pigeon peer remove {name} and join again by address.";
+
+    // ... and the identity that answered is another known machine's.
+    public static string AddressMoved(string name, string other) => $"{name}'s address now answers as {other}, another machine you know: the addresses moved. Nothing is sent to {name}. Set its new address with pigeon peer address {name} <address>.";
 }

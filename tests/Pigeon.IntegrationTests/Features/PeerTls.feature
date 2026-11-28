@@ -22,6 +22,18 @@ Feature: Peer TLS boundary
     When the stranger asks to start a join, expecting another identity than Ana's
     Then the handshake fails
 
+  # Seen in the beta.3 test: after a reinstall, the machine that pinned the old identity said only
+  # "could not be reached", and a message waited with no reason.
+  Scenario: A known machine whose address answers with another identity is reported as changed
+    Given Bruno knows a machine at Ana's address under another identity than hers
+    When Bruno asks for that machine's topics
+    Then Bruno is told the machine's identity changed
+
+  Scenario: A message to a machine whose identity changed waits, and the machine is listed as changed
+    Given Bruno knows a machine at Ana's address under another identity than hers
+    When Bruno sends a message to that machine
+    Then the message waits to be sent and Bruno's list of machines says the identity changed
+
   Scenario: While a topic is open an unknown machine reaches only the join paths
     Given Ana has a topic open to other machines
     When the stranger delivers a message and asks for Ana's topics
