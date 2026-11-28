@@ -424,11 +424,11 @@ public sealed class McpSteps {
         }
     }
 
-    [Then("a tool call reports that the Pigeon service is unavailable")]
+    [Then("a tool call reports that the Pigeon service is not running and how to start it")]
     public async Task Unavailable() {
         var (error, text) = await Call(codex, "pigeon_join", new { topic = "review", sessionId = CodexSession });
         Assert.True(error);
-        Assert.Equal("The Pigeon service is unavailable.", text);
+        Assert.Equal($"The Pigeon service is not running on 127.0.0.1:{port}. Start it with 'pigeon start' in a terminal with PIGEON_PORT set to {port}, then try again.", text);
     }
 
     [AfterScenario]

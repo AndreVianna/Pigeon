@@ -233,10 +233,17 @@ public sealed class McpSession {
                 return await CallAsync(id, name.GetString()!, args, cancellation);
             }
             catch (Exception e) when (e is IOException or TimeoutException or UnauthorizedAccessException or System.Net.Sockets.SocketException or JsonException or OperationCanceledException) {
-                return Text(id, "The Pigeon service is unavailable.", true);
+                return Text(id, Unavailable(e), true);
             }
         }
     }
+
+    // Nothing starts the service on its own, so the agent's person is told how. Anything else that
+    // fails is the service answering too slowly, or its storage held by another process.
+    private string Unavailable(Exception e) => e is IOException { InnerException: HttpRequestException { HttpRequestError: HttpRequestError.ConnectionError } } or System.Net.Sockets.SocketException
+        ? $"The Pigeon service is not running on 127.0.0.1:{port}. Start it with 'pigeon start' in a terminal{(port == DefaultPort ? "" : $" with PIGEON_PORT set to {port}")}, then try again."
+        : "The Pigeon service did not answer in time: it may be busy, or its storage locked for a moment. Try again shortly.";
+    private const string DefaultPort = "29372";
 
     private async Task<string> CallAsync(JsonElement id, string tool, JsonElement args, CancellationToken cancellation) {
         string? Arg(string key) => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
