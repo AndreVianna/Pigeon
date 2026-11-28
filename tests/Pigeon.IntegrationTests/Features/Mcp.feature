@@ -20,6 +20,9 @@ Feature: Agent tools
   Scenario: A Claude connection restores its joined session when it starts
     Then a new connection configured for claude-code with a joined session ID is bound without calling join
 
+  Scenario: A Claude connection joins with only the topic
+    Then a claude-code connection given its session ID by Claude Code joins with only the topic, as the session the prompt hook named last
+
   Scenario: An Antigravity connection acts for the conversation named in each call
     Then an Antigravity connection joins without a session ID, acts for each calling conversation, restores a joined one, and refuses a call that names none
 

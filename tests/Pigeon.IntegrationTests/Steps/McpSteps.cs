@@ -96,8 +96,11 @@ public sealed class McpSteps {
         var (error, text) = await CallAs(antigravity, null, "pigeon_join", new { topic = "review" });
         Assert.True(error);
         Assert.Contains("did not identify this conversation", text);
-        // A session ID passed by the agent is ignored in favor of the one Antigravity names.
-        var joined = await OkAs(antigravity, FirstConversation, "pigeon_join", new { topic = "review", sessionId = "guessed" });
+        // A session ID passed by the agent is refused with the tool's own parameters; Antigravity names the session.
+        (error, text) = await CallAs(antigravity, FirstConversation, "pigeon_join", new { topic = "review", sessionId = "guessed" });
+        Assert.True(error);
+        Assert.StartsWith("pigeon_join does not take sessionId. Its parameters: topic (required, ", text);
+        var joined = await OkAs(antigravity, FirstConversation, "pigeon_join", new { topic = "review" });
         Assert.Equal(("antigravity", FirstConversation), (joined.GetProperty("Members")[0].GetProperty("Tool").GetString(), joined.GetProperty("Members")[0].GetProperty("SessionId").GetString()));
         _ = await OkAs(antigravity, SecondConversation, "pigeon_join", new { topic = "design" });
         Assert.Equal(["design"], (await OkAs(antigravity, SecondConversation, "pigeon_topics", new { })).EnumerateArray().Select(t => t.GetProperty("Topic").GetString()));
@@ -406,6 +409,20 @@ public sealed class McpSteps {
         await unknown.TryRestoreAsync(CancellationToken.None);
         Assert.Equal("not-configured", unknown.RestoreState);
         Assert.Null(unknown.SessionId);
+    }
+
+    // Found in the 0.7.0-beta.3 test: a session allowed only Pigeon's tools could not read its ID from a shell.
+    [Then("a claude-code connection given its session ID by Claude Code joins with only the topic, as the session the prompt hook named last")]
+    public async Task JoinWithOnlyTheTopic() {
+        const string hookSession = "5b0e2c1a-7f3d-4e8a-9c6b-1d2e3f4a5b6c";
+        var fromEnvironment = await Connect("claude-code", ClaudeSession);
+        var joined = await Ok(fromEnvironment, "pigeon_join", new { topic = "review" });
+        Assert.Equal(("claude-code", ClaudeSession), (joined.GetProperty("Members")[0].GetProperty("Tool").GetString(), joined.GetProperty("Members")[0].GetProperty("SessionId").GetString()));
+        // The prompt hook names the session the conversation runs as now; it comes before the environment's.
+        var resumed = await Connect("claude-code", ClaudeSession);
+        _ = await Call(resumed, "pigeon_session_restore", new { tool = "claude-code", sessionId = hookSession });
+        joined = await Ok(resumed, "pigeon_join", new { topic = "design" });
+        Assert.Equal(hookSession, joined.GetProperty("Members")[0].GetProperty("SessionId").GetString());
     }
 
     [Then("the HTTP endpoint rejects browser origins and non-loopback hostnames")]

@@ -3,7 +3,7 @@ name: connect
 description: Connect this Claude session to a Pigeon topic, a private conversation with one other agent session.
 ---
 
-A Pigeon topic is a private conversation between two sessions. Ask the user for the topic name if it was not supplied. Obtain this session's actual `CLAUDE_CODE_SESSION_ID` from a shell tool and call `pigeon_join` with the topic and that session ID. Do not guess or reuse another session ID; the ID is a routing claim, not authentication.
+A Pigeon topic is a private conversation between two sessions. Ask the user for the topic name if it was not supplied. Call `pigeon_join` with only the topic: Pigeon joins as this session, the one Claude Code names to it. Do not pass a session ID, and do not guess or reuse another one; the ID is a routing claim, not authentication. If the result says it needs a session ID (an older Claude Code that does not name the session), it is in the `CLAUDE_CODE_SESSION_ID` environment variable.
 
 The first session to join creates the topic and waits for a partner; the second completes it; a third is refused. Report who the partner is, or that the topic is waiting for one. If the topic is full, tell the user which sessions are in it.
 
