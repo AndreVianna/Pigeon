@@ -169,6 +169,52 @@ public sealed class WakeSteps {
         Assert.Equal(1, store.GetWakeStatus(Claude).Attempts);
     }
 
+    // Found in the 0.7.0-beta.3 test: a wake written as `claude -p` ended came back only after two
+    // minutes, even when the session was opened again. Runs through the service, on its own store.
+    [Then("a wake written as the session's MCP server closed is offered again at once to its next server, and a plain service restart does not offer it early")]
+    public void OfferedAgain() {
+        var path = Path.Combine(directory, "service.db");
+        var broker = new Pigeon.Service.Broker(path, () => now, wakeRetryMilliseconds: 120000);
+        System.Text.Json.JsonElement Ok(string operation, object args) {
+            var result = broker.Execute(operation, System.Text.Json.JsonSerializer.SerializeToElement(args));
+            Assert.True(result.Ok, result.Error);
+            return System.Text.Json.JsonSerializer.SerializeToElement(result.Value);
+        }
+
+        string NewId() => Guid.NewGuid().ToString("N");
+        System.Text.Json.JsonElement Claim(string holder) {
+            _ = Ok("wake_owner", new { sessionId = Claude, holderId = holder, mode = "claude-hook" });
+            return Ok("wake_claim", new { sessionId = Claude, mode = "claude-hook", holderId = holder });
+        }
+
+        try {
+            _ = Ok("join", new { tool = "codex", sessionId = Codex, topic = "review" });
+            _ = Ok("join", new { tool = "claude-code", sessionId = Claude, topic = "review" });
+            var server = NewId();
+            _ = Ok("bridge_heartbeat", new { id = server, mode = "mcp", sessionId = Claude });
+            _ = Ok("send", new { sessionId = Codex, topic = "review", message = "as the run ends" });
+            var sent = Claim(NewId());
+            var generation = sent.GetProperty("Generation").GetString();
+            _ = Ok("wake_result", new { sessionId = Claude, generation, attempt = 1, outcome = "transport-written" });
+            _ = Ok("bridge_disconnect", new { id = server, sessionId = Claude });
+            now += 20000;
+            _ = Ok("bridge_heartbeat", new { id = NewId(), mode = "mcp", sessionId = Claude });
+            var again = Claim(NewId());
+            Assert.Equal((generation, 2), (again.GetProperty("Generation").GetString(), again.GetProperty("Attempt").GetInt32()));
+            _ = Ok("wake_result", new { sessionId = Claude, generation, attempt = 2, outcome = "transport-written" });
+
+            // A restarted service knows no close, so its servers' heartbeats change nothing.
+            broker.Dispose();
+            broker = new Pigeon.Service.Broker(path, () => now, wakeRetryMilliseconds: 120000);
+            _ = Ok("bridge_heartbeat", new { id = NewId(), mode = "mcp", sessionId = Claude });
+            Assert.Equal(System.Text.Json.JsonValueKind.Null, Claim(NewId()).ValueKind);
+            Assert.Equal(2, Ok("wake_status", new { sessionId = Claude }).GetProperty("Attempts").GetInt32());
+        }
+        finally {
+            broker.Dispose();
+        }
+    }
+
     [AfterScenario]
     public void Cleanup() {
         store?.Dispose();

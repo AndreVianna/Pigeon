@@ -35,5 +35,8 @@ Feature: Wakes
   Scenario: An unreported wake attempt is shown as unknown
     Then a claimed wake with no transport result is reported as failed with an unknown transport after its retry time
 
+  Scenario: A wake sent as the host ended is offered again when the session reconnects
+    Then a wake written as the session's MCP server closed is offered again at once to its next server, and a plain service restart does not offer it early
+
   Scenario: One wake covers all of a session's topics
     Then a Claude session in two topics receives both messages under one wake, each naming its topic

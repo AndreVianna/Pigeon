@@ -5,5 +5,5 @@ Feature: Agent tools without a service
   Background:
     Given a connection to a service that is not running
 
-  Scenario: An unavailable service is reported without failing the connection
-    Then a tool call reports that the Pigeon service is unavailable
+  Scenario: A service that is not running is reported with how to start it
+    Then a tool call reports that the Pigeon service is not running and how to start it

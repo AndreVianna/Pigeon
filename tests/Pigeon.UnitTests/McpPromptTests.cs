@@ -28,6 +28,38 @@ public sealed class McpPromptTests {
         Assert.Null(McpSession.PromptReply("not json"));
     }
 
+    // Found in the 0.7.0-beta.3 test: a join code entered with `pigeon allow` in a terminal completed
+    // the join, but the Claude prompt asking for it stayed on screen two wakes later.
+    [Fact]
+    public async Task A_prompt_whose_request_ended_elsewhere_is_withdrawn_and_a_late_reply_is_not_passed_on() {
+        const string session = "c1122145-145c-4af1-b02b-c2731e423fed";
+        var offered = 0;
+        var service = new FakeService()
+            .Answer("session_restore", _ => new { SessionId = session })
+            .Answer("prompts_next", _ => Interlocked.Increment(ref offered) == 1 ? new[] { new { id = "r1:code", message = "Pigeon: enter the join code.", code = true, show = (string?)null } } : [])
+            .Answer("prompts_open", _ => Array.Empty<string>());
+        using var input = new HostInput();
+        var output = new HostOutput();
+        var running = McpStdio.RunAsync(input, output, new McpSession("1", "claude-code", session, service: service.Call), TestContext.Current.CancellationToken, delay: McpHost.Quickly);
+        input.Send(McpHost.Initialize);
+        input.Send(McpHost.Initialized);
+
+        var prompt = output.Next(m => m.TryGetProperty("method", out var method) && method.GetString() == "elicitation/create");
+        Assert.Equal("pigeon-prompt:r1:code", prompt.GetProperty("id").GetString());
+        // The MCP notification for a request the server sent: it names the request, and has no ID of its own.
+        var withdrawn = output.Next(m => m.TryGetProperty("method", out var method) && method.GetString() == "notifications/cancelled");
+        Assert.Equal("pigeon-prompt:r1:code", withdrawn.GetProperty("params").GetProperty("requestId").GetString());
+        Assert.False(withdrawn.TryGetProperty("id", out _));
+
+        input.Send("{\"jsonrpc\":\"2.0\",\"id\":\"pigeon-prompt:r1:code\",\"result\":{\"action\":\"accept\",\"content\":{\"code\":\"123456\"}}}");
+        // Lines are handled in order, so the late reply has been handled once the ping is answered.
+        input.Send("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ping\"}");
+        _ = output.Next(m => m.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.GetInt32() == 5);
+        Assert.Empty(service.CallsTo("prompt_answer"));
+        input.End();
+        await running.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task A_host_is_asked_only_when_it_supports_elicitation_and_is_not_Antigravity() {
         static async Task<bool> CanPrompt(string? runtime, string capabilities, bool hostShowsPrompts = true) {

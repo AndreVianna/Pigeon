@@ -11,5 +11,8 @@ Feature: Claude hook waiter and outages
   Scenario: A waiter keeps waiting while storage is temporarily locked
     Then a waiter started during a held database lock keeps waiting and wakes after the lock is released
 
+  Scenario: Waiters started during an outage do not pile up
+    Then one owner and three waiters started while the service is down collapse to one waiter when it returns, which wakes for a message
+
   Scenario: An owning waiter still renews when the service is down at its deadline
     Then a short renewable waiter whose service stops before the deadline requests one renewal, and its replacement waits for the service
